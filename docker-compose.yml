@@ -1,0 +1,73 @@
+services:
+  uncord:
+    build: .
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      typesense:
+        condition: service_healthy
+    env_file: .env
+    volumes:
+      - media_data:/data/uncord/media
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: uncord
+      POSTGRES_USER: uncord
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U uncord"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  valkey:
+    image: valkey/valkey:9
+    command: valkey-server --save 60 1 --loglevel warning
+    volumes:
+      - valkey_data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  typesense:
+    image: typesense/typesense:latest
+    command: --data-dir /data --api-key=${TYPESENSE_API_KEY} --listen-port 8108
+    volumes:
+      - typesense_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8108/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Optional: Garage for S3 storage (uncomment when STORAGE_BACKEND=s3)
+  # garage:
+  #   image: dxflrs/garage:latest
+  #   volumes:
+  #     - garage_data:/var/lib/garage/data
+  #     - garage_meta:/var/lib/garage/meta
+  #   environment:
+  #     GARAGE_ALLOW_WORLD_READABLE_SECRETS: "true"
+
+volumes:
+  pg_data:
+  valkey_data:
+  typesense_data:
+  media_data:
+  # garage_data:
+  # garage_meta:

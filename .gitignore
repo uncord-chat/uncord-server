@@ -1,0 +1,27 @@
+# Build output
+bin/
+
+# Test output
+coverage.out
+*.test
+
+# Environment
+.env
+
+# IDEs
+# Only commit files that other developers may find useful!
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/usage.statistics.xml
+.idea/shelf/
+.vscode/settings.json
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker volumes
+media_data/
