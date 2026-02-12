@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 	"github.com/uncord-chat/uncord-protocol/permissions"
 
 	"github.com/uncord-chat/uncord-server/internal/auth"
@@ -42,7 +42,7 @@ func IsFirstRun(ctx context.Context, db *pgxpool.Pool) (bool, error) {
 
 // RunFirstInit seeds the database with the owner account, default roles, channels, and onboarding config inside a
 // single transaction.
-func RunFirstInit(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) error {
+func RunFirstInit(ctx context.Context, db *pgxpool.Pool, cfg *config.Config, logger zerolog.Logger) error {
 	if cfg.InitOwnerEmail == "" || cfg.InitOwnerPassword == "" {
 		return fmt.Errorf("INIT_OWNER_EMAIL and INIT_OWNER_PASSWORD must be set for first-run initialization")
 	}
@@ -80,7 +80,7 @@ func RunFirstInit(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) err
 	}
 	defer func() {
 		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-			log.Warn().Err(err).Msg("tx rollback failed")
+			logger.Warn().Err(err).Msg("tx rollback failed")
 		}
 	}()
 

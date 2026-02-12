@@ -18,18 +18,18 @@ func RequireAuth(secret, issuer string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		header := c.Get("Authorization")
 		if header == "" {
-			return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorized, "Missing authorization header")
+			return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing authorization header")
 		}
 
 		const prefix = "Bearer "
 		if len(header) <= len(prefix) || header[:len(prefix)] != prefix {
-			return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorized, "Invalid authorization format")
+			return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Invalid authorization format")
 		}
 		tokenStr := header[len(prefix):]
 
 		claims, err := ValidateAccessToken(tokenStr, secret, issuer)
 		if err != nil {
-			code := apierrors.Unauthorized
+			code := apierrors.Unauthorised
 			message := "Invalid token"
 
 			if errors.Is(err, jwt.ErrTokenExpired) {
@@ -42,7 +42,7 @@ func RequireAuth(secret, issuer string) fiber.Handler {
 
 		userID, err := uuid.Parse(claims.Subject)
 		if err != nil {
-			return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorized, "Invalid token subject")
+			return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Invalid token subject")
 		}
 
 		c.Locals("userID", userID)

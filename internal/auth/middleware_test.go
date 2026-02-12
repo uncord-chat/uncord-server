@@ -26,14 +26,15 @@ func TestRequireAuthNoHeader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != fiber.StatusUnauthorized {
 		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusUnauthorized)
 	}
 
 	body := readErrorCode(t, resp)
-	if body != string(apierrors.Unauthorized) {
-		t.Errorf("error code = %q, want %q", body, apierrors.Unauthorized)
+	if body != string(apierrors.Unauthorised) {
+		t.Errorf("error code = %q, want %q", body, apierrors.Unauthorised)
 	}
 }
 
@@ -51,6 +52,7 @@ func TestRequireAuthBadFormat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != fiber.StatusUnauthorized {
 		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusUnauthorized)
@@ -78,6 +80,7 @@ func TestRequireAuthExpiredToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != fiber.StatusUnauthorized {
 		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusUnauthorized)
@@ -115,6 +118,7 @@ func TestRequireAuthValid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != fiber.StatusOK {
 		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusOK)
@@ -142,6 +146,7 @@ func TestRequireAuthWrongSignature(t *testing.T) {
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != fiber.StatusUnauthorized {
 		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusUnauthorized)

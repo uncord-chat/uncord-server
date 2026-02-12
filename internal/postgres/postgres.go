@@ -6,20 +6,22 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	_ "github.com/jackc/pgx/v5/stdlib"
+	_ "github.com/jackc/pgx/v5/stdlib" // register pgx as database/sql driver for goose migrations
 	"github.com/pressly/goose/v3"
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 
 	"github.com/uncord-chat/uncord-server/internal/postgres/migrations"
 )
 
 // gooseLogger adapts zerolog to the goose.Logger interface.
-type gooseLogger struct{}
+type gooseLogger struct {
+	log zerolog.Logger
+}
 
 // Fatalf is intentionally downgraded to Error because the error from goose.Up is handled by the caller. Calling
 // log.Fatal here would bypass the structured error return in Migrate.
-func (gooseLogger) Fatalf(format string, v ...any) { log.Error().Msgf(format, v...) }
-func (gooseLogger) Printf(format string, v ...any) { log.Info().Msgf(format, v...) }
+func (l gooseLogger) Fatalf(format string, v ...any) { l.log.Error().Msgf(format, v...) }
+func (l gooseLogger) Printf(format string, v ...any) { l.log.Info().Msgf(format, v...) }
 
 // Connect creates a pgxpool.Pool from the given DSN with the specified connection limits.
 func Connect(ctx context.Context, dsn string, maxConns, minConns int) (*pgxpool.Pool, error) {
@@ -44,7 +46,7 @@ func Connect(ctx context.Context, dsn string, maxConns, minConns int) (*pgxpool.
 }
 
 // Migrate runs all pending goose migrations using the embedded SQL files.
-func Migrate(dsn string) error {
+func Migrate(dsn string, logger zerolog.Logger) error {
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return fmt.Errorf("open sql connection for migrations: %w", err)
@@ -52,7 +54,7 @@ func Migrate(dsn string) error {
 	defer db.Close()
 
 	goose.SetBaseFS(migrations.FS)
-	goose.SetLogger(gooseLogger{})
+	goose.SetLogger(gooseLogger{log: logger})
 
 	if err := goose.SetDialect("postgres"); err != nil {
 		return fmt.Errorf("set goose dialect: %w", err)

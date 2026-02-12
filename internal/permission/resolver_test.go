@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 	"github.com/uncord-chat/uncord-protocol/permissions"
 )
 
@@ -92,7 +93,7 @@ func TestOwnerBypass(t *testing.T) {
 	t.Parallel()
 	store := &fakeStore{isOwner: true}
 	cache := newFakeCache()
-	r := NewResolver(store, cache)
+	r := NewResolver(store, cache, zerolog.Nop())
 
 	perm, err := r.Resolve(context.Background(), uuid.New(), uuid.New())
 	if err != nil {
@@ -112,7 +113,7 @@ func TestManageServerRoleGivesAll(t *testing.T) {
 		chanInfo:    ChannelInfo{ID: channelID},
 	}
 	cache := newFakeCache()
-	r := NewResolver(store, cache)
+	r := NewResolver(store, cache, zerolog.Nop())
 
 	perm, err := r.Resolve(context.Background(), uuid.New(), channelID)
 	if err != nil {
@@ -136,7 +137,7 @@ func TestRoleUnionOR(t *testing.T) {
 		chanInfo: ChannelInfo{ID: channelID},
 	}
 	cache := newFakeCache()
-	r := NewResolver(store, cache)
+	r := NewResolver(store, cache, zerolog.Nop())
 
 	perm, err := r.Resolve(context.Background(), uuid.New(), channelID)
 	if err != nil {
@@ -168,7 +169,7 @@ func TestCategoryDenyOverridesRoleAllow(t *testing.T) {
 		},
 	}
 	cache := newFakeCache()
-	r := NewResolver(store, cache)
+	r := NewResolver(store, cache, zerolog.Nop())
 
 	perm, err := r.Resolve(context.Background(), userID, channelID)
 	if err != nil {
@@ -205,7 +206,7 @@ func TestChannelOverrideOverridesCategory(t *testing.T) {
 		},
 	}
 	cache := newFakeCache()
-	r := NewResolver(store, cache)
+	r := NewResolver(store, cache, zerolog.Nop())
 
 	perm, err := r.Resolve(context.Background(), userID, channelID)
 	if err != nil {
@@ -236,7 +237,7 @@ func TestUserOverrideBeatRoleOverride(t *testing.T) {
 		},
 	}
 	cache := newFakeCache()
-	r := NewResolver(store, cache)
+	r := NewResolver(store, cache, zerolog.Nop())
 
 	perm, err := r.Resolve(context.Background(), userID, channelID)
 	if err != nil {
@@ -269,7 +270,7 @@ func TestDenyWinsAtSameLevel(t *testing.T) {
 		},
 	}
 	cache := newFakeCache()
-	r := NewResolver(store, cache)
+	r := NewResolver(store, cache, zerolog.Nop())
 
 	perm, err := r.Resolve(context.Background(), userID, channelID)
 	if err != nil {
@@ -293,7 +294,7 @@ func TestEveryoneRoleIncluded(t *testing.T) {
 		chanInfo: ChannelInfo{ID: channelID},
 	}
 	cache := newFakeCache()
-	r := NewResolver(store, cache)
+	r := NewResolver(store, cache, zerolog.Nop())
 
 	perm, err := r.Resolve(context.Background(), uuid.New(), channelID)
 	if err != nil {
@@ -324,7 +325,7 @@ func TestNoCategoryOnlyChannelOverrides(t *testing.T) {
 		},
 	}
 	cache := newFakeCache()
-	r := NewResolver(store, cache)
+	r := NewResolver(store, cache, zerolog.Nop())
 
 	perm, err := r.Resolve(context.Background(), userID, channelID)
 	if err != nil {
@@ -349,7 +350,7 @@ func TestCacheHitReturnsCachedValue(t *testing.T) {
 	// Pre-populate cache
 	cache.data[userID.String()+":"+channelID.String()] = permissions.ViewChannels | permissions.SendMessages
 
-	r := NewResolver(store, cache)
+	r := NewResolver(store, cache, zerolog.Nop())
 
 	perm, err := r.Resolve(context.Background(), userID, channelID)
 	if err != nil {
@@ -381,7 +382,7 @@ func TestCacheMissComputesAndCaches(t *testing.T) {
 		chanInfo: ChannelInfo{ID: channelID},
 	}
 	cache := newFakeCache()
-	r := NewResolver(store, cache)
+	r := NewResolver(store, cache, zerolog.Nop())
 
 	userID := uuid.New()
 	perm, err := r.Resolve(context.Background(), userID, channelID)
@@ -411,7 +412,7 @@ func TestCacheGetErrorDegradesToDB(t *testing.T) {
 	}
 	cache := newFakeCache()
 	cache.getErr = fmt.Errorf("cache unavailable")
-	r := NewResolver(store, cache)
+	r := NewResolver(store, cache, zerolog.Nop())
 
 	perm, err := r.Resolve(context.Background(), uuid.New(), channelID)
 	if err != nil {
@@ -426,7 +427,7 @@ func TestStoreErrorPropagated(t *testing.T) {
 	t.Parallel()
 	store := &fakeStore{isOwnerErr: fmt.Errorf("db connection lost")}
 	cache := newFakeCache()
-	r := NewResolver(store, cache)
+	r := NewResolver(store, cache, zerolog.Nop())
 
 	_, err := r.Resolve(context.Background(), uuid.New(), uuid.New())
 	if err == nil {
@@ -446,7 +447,7 @@ func TestEmptyOverridesLeaveBaseUnchanged(t *testing.T) {
 		overrides: map[string][]Override{},
 	}
 	cache := newFakeCache()
-	r := NewResolver(store, cache)
+	r := NewResolver(store, cache, zerolog.Nop())
 
 	perm, err := r.Resolve(context.Background(), uuid.New(), channelID)
 	if err != nil {
@@ -463,7 +464,7 @@ func TestRolePermissionsError(t *testing.T) {
 	t.Parallel()
 	store := &fakeStore{roleErr: fmt.Errorf("db error")}
 	cache := newFakeCache()
-	r := NewResolver(store, cache)
+	r := NewResolver(store, cache, zerolog.Nop())
 
 	_, err := r.Resolve(context.Background(), uuid.New(), uuid.New())
 	if err == nil {
@@ -480,7 +481,7 @@ func TestChannelInfoError(t *testing.T) {
 		chanInfoErr: fmt.Errorf("channel not found"),
 	}
 	cache := newFakeCache()
-	r := NewResolver(store, cache)
+	r := NewResolver(store, cache, zerolog.Nop())
 
 	_, err := r.Resolve(context.Background(), uuid.New(), uuid.New())
 	if err == nil {
@@ -499,7 +500,7 @@ func TestCategoryOverridesError(t *testing.T) {
 		overridesErr: fmt.Errorf("overrides query failed"),
 	}
 	cache := newFakeCache()
-	r := NewResolver(store, cache)
+	r := NewResolver(store, cache, zerolog.Nop())
 
 	_, err := r.Resolve(context.Background(), uuid.New(), uuid.New())
 	if err == nil {
@@ -520,7 +521,7 @@ func TestChannelOverridesError(t *testing.T) {
 	// Since we have no category, the first call is the channel override
 	store.overridesErr = fmt.Errorf("channel overrides failed")
 	cache := newFakeCache()
-	r := NewResolver(store, cache)
+	r := NewResolver(store, cache, zerolog.Nop())
 
 	_, err := r.Resolve(context.Background(), uuid.New(), channelID)
 	if err == nil {
@@ -540,7 +541,7 @@ func TestCacheSetError(t *testing.T) {
 	}
 	cache := newFakeCache()
 	cache.setErr = fmt.Errorf("cache write failed")
-	r := NewResolver(store, cache)
+	r := NewResolver(store, cache, zerolog.Nop())
 
 	// Should still succeed even if cache set fails
 	perm, err := r.Resolve(context.Background(), uuid.New(), channelID)
@@ -563,7 +564,7 @@ func TestHasPermission(t *testing.T) {
 		chanInfo: ChannelInfo{ID: channelID},
 	}
 	cache := newFakeCache()
-	r := NewResolver(store, cache)
+	r := NewResolver(store, cache, zerolog.Nop())
 	userID := uuid.New()
 
 	has, err := r.HasPermission(context.Background(), userID, channelID, permissions.ViewChannels)

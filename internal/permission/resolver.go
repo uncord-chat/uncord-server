@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 	"github.com/uncord-chat/uncord-protocol/permissions"
 )
 
@@ -13,11 +13,12 @@ import (
 type Resolver struct {
 	store Store
 	cache Cache
+	log   zerolog.Logger
 }
 
 // NewResolver creates a new permission resolver.
-func NewResolver(store Store, cache Cache) *Resolver {
-	return &Resolver{store: store, cache: cache}
+func NewResolver(store Store, cache Cache, logger zerolog.Logger) *Resolver {
+	return &Resolver{store: store, cache: cache, log: logger}
 }
 
 // Resolve returns the effective permissions for a user in a channel, using the cache when available.
@@ -26,7 +27,7 @@ func (r *Resolver) Resolve(ctx context.Context, userID, channelID uuid.UUID) (pe
 	perm, ok, err := r.cache.Get(ctx, userID, channelID)
 	if err != nil {
 		// Cache error is non-fatal; fall through to compute
-		log.Warn().Err(err).Msg("Permission cache get failed, falling through to compute")
+		r.log.Warn().Err(err).Msg("Permission cache get failed, falling through to compute")
 	}
 	if ok {
 		return perm, nil
@@ -39,7 +40,7 @@ func (r *Resolver) Resolve(ctx context.Context, userID, channelID uuid.UUID) (pe
 
 	// Cache the result (best-effort)
 	if cacheErr := r.cache.Set(ctx, userID, channelID, perm); cacheErr != nil {
-		log.Warn().Err(cacheErr).Msg("Permission cache set failed")
+		r.log.Warn().Err(cacheErr).Msg("Permission cache set failed")
 	}
 
 	return perm, nil

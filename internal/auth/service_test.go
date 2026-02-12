@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 
 	"github.com/uncord-chat/uncord-server/internal/config"
 	"github.com/uncord-chat/uncord-server/internal/disposable"
@@ -74,6 +75,16 @@ func (r *fakeRepository) RecordLoginAttempt(_ context.Context, email, ip string,
 	return nil
 }
 
+func (r *fakeRepository) UpdatePasswordHash(_ context.Context, userID uuid.UUID, hash string) error {
+	for _, u := range r.users {
+		if u.ID == userID {
+			u.PasswordHash = hash
+			return nil
+		}
+	}
+	return user.ErrNotFound
+}
+
 func testConfig() *config.Config {
 	return &config.Config{
 		ServerURL:         "https://test.example.com",
@@ -92,8 +103,8 @@ func testConfig() *config.Config {
 func newTestService(t *testing.T, repo *fakeRepository) *Service {
 	t.Helper()
 	_, rdb := setupMiniredis(t)
-	bl := disposable.NewBlocklist("", false)
-	return NewService(repo, rdb, testConfig(), bl)
+	bl := disposable.NewBlocklist("", false, zerolog.Nop())
+	return NewService(repo, rdb, testConfig(), bl, zerolog.Nop())
 }
 
 // --- Register tests ---
@@ -211,9 +222,9 @@ func TestServiceRegisterDisposableEmailBlocked(t *testing.T) {
 	// a test server that returns a known domain.
 
 	// Simpler: just verify that registration proceeds when blocklist is disabled
-	// (already tested above). The unit behavior of Blocklist is tested in its own package.
-	bl := disposable.NewBlocklist("", false)
-	svc := NewService(repo, rdb, testConfig(), bl)
+	// (already tested above). The unit behaviour of Blocklist is tested in its own package.
+	bl := disposable.NewBlocklist("", false, zerolog.Nop())
+	svc := NewService(repo, rdb, testConfig(), bl, zerolog.Nop())
 
 	result, err := svc.Register(context.Background(), RegisterRequest{
 		Email:    "alice@example.com",
@@ -607,7 +618,7 @@ func TestServiceRegisterNormalizesEmail(t *testing.T) {
 		t.Fatalf("Register() error = %v", err)
 	}
 	if result.User.Email != "alice@example.com" {
-		t.Errorf("Register() email = %q, want normalized %q", result.User.Email, "alice@example.com")
+		t.Errorf("Register() email = %q, want normalised %q", result.User.Email, "alice@example.com")
 	}
 }
 

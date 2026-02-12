@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 )
 
 // InvalidationMessage is published to trigger cache invalidation.
@@ -53,11 +53,12 @@ func (p *Publisher) publish(ctx context.Context, msg InvalidationMessage) error 
 type Subscriber struct {
 	cache  Cache
 	client *redis.Client
+	log    zerolog.Logger
 }
 
 // NewSubscriber creates a new invalidation subscriber.
-func NewSubscriber(cache Cache, client *redis.Client) *Subscriber {
-	return &Subscriber{cache: cache, client: client}
+func NewSubscriber(cache Cache, client *redis.Client, logger zerolog.Logger) *Subscriber {
+	return &Subscriber{cache: cache, client: client, log: logger}
 }
 
 // Run subscribes to the invalidation channel and processes messages until the context is cancelled. This method blocks
@@ -83,7 +84,7 @@ func (s *Subscriber) Run(ctx context.Context) error {
 func (s *Subscriber) handleMessage(ctx context.Context, payload string) {
 	var msg InvalidationMessage
 	if err := json.Unmarshal([]byte(payload), &msg); err != nil {
-		log.Warn().Err(err).Str("payload", payload).Msg("Invalid invalidation message")
+		s.log.Warn().Err(err).Str("payload", payload).Msg("Invalid invalidation message")
 		return
 	}
 
@@ -100,6 +101,6 @@ func (s *Subscriber) handleMessage(ctx context.Context, payload string) {
 	}
 
 	if err != nil {
-		log.Warn().Err(err).Msg("Cache invalidation failed")
+		s.log.Warn().Err(err).Msg("Cache invalidation failed")
 	}
 }

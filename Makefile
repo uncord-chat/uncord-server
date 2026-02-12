@@ -1,9 +1,14 @@
-.PHONY: build run test lint vet fmt fmt-check tidy docker-up docker-down docker-build migrate-up migrate-down clean
+.PHONY: build run test test-cover lint vet fmt fmt-check tidy docker-up docker-down docker-build docker-logs migrate-up migrate-down migrate-status clean
+
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+DATE    ?= $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
+LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)
 
 # Build
 
 build:
-	go build -o bin/uncord ./cmd/uncord
+	go build -ldflags="$(LDFLAGS)" -o bin/uncord ./cmd/uncord
 
 run: build
 	./bin/uncord

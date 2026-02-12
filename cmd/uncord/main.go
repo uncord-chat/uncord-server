@@ -35,6 +35,13 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/valkey"
 )
 
+// Build metadata injected via ldflags at compile time.
+var (
+	version = "dev"
+	commit  = "unknown"
+	date    = "unknown"
+)
+
 func main() {
 	log.Logger = zerolog.New(os.Stderr).With().Timestamp().Logger()
 
@@ -54,7 +61,12 @@ func run() error {
 			With().Timestamp().Logger()
 	}
 
-	log.Info().Str("env", cfg.ServerEnv).Msg("Starting Uncord Server")
+	log.Info().
+		Str("version", version).
+		Str("commit", commit).
+		Str("built", date).
+		Str("env", cfg.ServerEnv).
+		Msg("Starting Uncord Server")
 
 	if cfg.CORSAllowOrigins == "*" {
 		log.Warn().Msg("CORS_ALLOW_ORIGINS is set to a wildcard \"*\". This allows any origin to make requests to your server. Set an explicit origin (e.g. https://your-client.example.com) for production deployments.")
@@ -71,7 +83,7 @@ func run() error {
 	log.Info().Msg("PostgreSQL connected")
 
 	// Run migrations
-	if err := postgres.Migrate(cfg.DatabaseURL); err != nil {
+	if err := postgres.Migrate(cfg.DatabaseURL, log.Logger); err != nil {
 		return fmt.Errorf("run migrations: %w", err)
 	}
 	log.Info().Msg("Database migrations complete")
@@ -91,7 +103,7 @@ func run() error {
 	}
 	if firstRun {
 		log.Info().Msg("First run detected, running initialization")
-		if err := bootstrap.RunFirstInit(ctx, db, cfg); err != nil {
+		if err := bootstrap.RunFirstInit(ctx, db, cfg, log.Logger); err != nil {
 			return fmt.Errorf("first-run initialization: %w", err)
 		}
 		log.Info().Msg("First-run initialization complete")
@@ -107,21 +119,21 @@ func run() error {
 		log.Info().Msg("Typesense messages collection already exists")
 	}
 
-	// Initialize disposable email blocklist and prefetch asynchronously so the first registration request does not
+	// Initialise disposable email blocklist and prefetch asynchronously so the first registration request does not
 	// block on a network call.
-	blocklist := disposable.NewBlocklist(cfg.DisposableEmailBlocklistURL, cfg.DisposableEmailBlocklistEnabled)
+	blocklist := disposable.NewBlocklist(cfg.DisposableEmailBlocklistURL, cfg.DisposableEmailBlocklistEnabled, log.Logger)
 	go blocklist.Prefetch(ctx)
 
-	// Initialize permission engine
+	// Initialise permission engine
 	permStore := permission.NewPGStore(db)
 	permCache := permission.NewValkeyCache(rdb)
-	permResolver := permission.NewResolver(permStore, permCache)
+	permResolver := permission.NewResolver(permStore, permCache, log.Logger)
 	permPublisher := permission.NewPublisher(rdb)
 
 	// Start permission cache invalidation subscriber with reconnection.
 	subCtx, subCancel := context.WithCancel(ctx)
 	defer subCancel()
-	permSub := permission.NewSubscriber(permCache, rdb)
+	permSub := permission.NewSubscriber(permCache, rdb, log.Logger)
 	go func() {
 		for {
 			if err := permSub.Run(subCtx); err != nil {
@@ -140,9 +152,9 @@ func run() error {
 		}
 	}()
 
-	// Initialize user repository and auth service
-	userRepo := user.NewPGRepository(db)
-	authService := auth.NewService(userRepo, rdb, cfg, blocklist)
+	// Initialise user repository and auth service
+	userRepo := user.NewPGRepository(db, log.Logger)
+	authService := auth.NewService(userRepo, rdb, cfg, blocklist, log.Logger)
 
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
@@ -203,7 +215,11 @@ func run() error {
 		<-quit
 		log.Info().Msg("Shutting down server")
 		subCancel()
-		_ = app.Shutdown()
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer shutdownCancel()
+		if err := app.ShutdownWithContext(shutdownCtx); err != nil {
+			log.Error().Err(err).Msg("Server shutdown error")
+		}
 	}()
 
 	// Listen
@@ -256,20 +272,21 @@ func (p redisPinger) Ping(ctx context.Context) error { return p.client.Ping(ctx)
 // fiberStatusToAPICode maps an HTTP status code from Fiber's built-in errors (404, 405, etc.) to the closest protocol
 // error code.
 func fiberStatusToAPICode(status int) apierrors.Code {
-	switch {
-	case status == fiber.StatusNotFound:
+	switch status {
+	case fiber.StatusNotFound:
 		return apierrors.NotFound
-	case status == fiber.StatusMethodNotAllowed:
+	case fiber.StatusMethodNotAllowed:
 		return apierrors.ValidationError
-	case status == fiber.StatusTooManyRequests:
+	case fiber.StatusTooManyRequests:
 		return apierrors.RateLimited
-	case status == fiber.StatusRequestEntityTooLarge:
+	case fiber.StatusRequestEntityTooLarge:
 		return apierrors.PayloadTooLarge
-	case status == fiber.StatusServiceUnavailable:
+	case fiber.StatusServiceUnavailable:
 		return apierrors.ServiceUnavailable
-	case status >= 400 && status < 500:
-		return apierrors.ValidationError
 	default:
+		if status >= 400 && status < 500 {
+			return apierrors.ValidationError
+		}
 		return apierrors.InternalError
 	}
 }

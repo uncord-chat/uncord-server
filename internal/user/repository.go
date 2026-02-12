@@ -9,17 +9,18 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 )
 
 // PGRepository implements Repository using PostgreSQL.
 type PGRepository struct {
-	db *pgxpool.Pool
+	db  *pgxpool.Pool
+	log zerolog.Logger
 }
 
 // NewPGRepository creates a new PostgreSQL-backed user repository.
-func NewPGRepository(db *pgxpool.Pool) *PGRepository {
-	return &PGRepository{db: db}
+func NewPGRepository(db *pgxpool.Pool, logger zerolog.Logger) *PGRepository {
+	return &PGRepository{db: db, log: logger}
 }
 
 // Create inserts a new user and, when params.VerifyToken is non-empty, an email verification row, all inside a single
@@ -31,7 +32,7 @@ func (r *PGRepository) Create(ctx context.Context, params CreateParams) (uuid.UU
 	}
 	defer func() {
 		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-			log.Warn().Err(err).Msg("tx rollback failed")
+			r.log.Warn().Err(err).Msg("tx rollback failed")
 		}
 	}()
 
@@ -71,17 +72,16 @@ func (r *PGRepository) Create(ctx context.Context, params CreateParams) (uuid.UU
 func (r *PGRepository) GetByEmail(ctx context.Context, email string) (*User, error) {
 	var u User
 	err := r.db.QueryRow(ctx,
-		`SELECT id, password_hash, username, mfa_enabled, email_verified
+		`SELECT id, email, password_hash, username, mfa_enabled, email_verified
 		 FROM users WHERE email = $1`,
 		email,
-	).Scan(&u.ID, &u.PasswordHash, &u.Username, &u.MFAEnabled, &u.EmailVerified)
+	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Username, &u.MFAEnabled, &u.EmailVerified)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("query user by email: %w", err)
 	}
-	u.Email = email
 	return &u, nil
 }
 
@@ -93,7 +93,7 @@ func (r *PGRepository) VerifyEmail(ctx context.Context, token string) (uuid.UUID
 	}
 	defer func() {
 		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-			log.Warn().Err(err).Msg("tx rollback failed")
+			r.log.Warn().Err(err).Msg("tx rollback failed")
 		}
 	}()
 
@@ -135,6 +135,19 @@ func (r *PGRepository) RecordLoginAttempt(ctx context.Context, email, ipAddress 
 	)
 	if err != nil {
 		return fmt.Errorf("record login attempt: %w", err)
+	}
+	return nil
+}
+
+// UpdatePasswordHash updates the stored password hash for a user, used for lazy hash rotation when Argon2 parameters
+// change.
+func (r *PGRepository) UpdatePasswordHash(ctx context.Context, userID uuid.UUID, hash string) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE users SET password_hash = $1 WHERE id = $2`,
+		hash, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("update password hash: %w", err)
 	}
 	return nil
 }

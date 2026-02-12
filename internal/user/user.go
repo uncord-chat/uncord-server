@@ -41,4 +41,5 @@ type Repository interface {
 	GetByEmail(ctx context.Context, email string) (*User, error)
 	VerifyEmail(ctx context.Context, token string) (uuid.UUID, error)
 	RecordLoginAttempt(ctx context.Context, email, ipAddress string, success bool) error
+	UpdatePasswordHash(ctx context.Context, userID uuid.UUID, hash string) error
 }

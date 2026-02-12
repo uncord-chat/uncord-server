@@ -10,6 +10,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog"
 	"github.com/uncord-chat/uncord-protocol/permissions"
 )
 
@@ -49,7 +50,7 @@ func (c *spyCache) DeleteExact(_ context.Context, userID, channelID uuid.UUID) e
 func TestHandleMessageUserOnly(t *testing.T) {
 	t.Parallel()
 	cache := &spyCache{}
-	sub := &Subscriber{cache: cache}
+	sub := &Subscriber{cache: cache, log: zerolog.Nop()}
 	userID := uuid.New()
 
 	payload := `{"user_id":"` + userID.String() + `"}`
@@ -66,7 +67,7 @@ func TestHandleMessageUserOnly(t *testing.T) {
 func TestHandleMessageChannelOnly(t *testing.T) {
 	t.Parallel()
 	cache := &spyCache{}
-	sub := &Subscriber{cache: cache}
+	sub := &Subscriber{cache: cache, log: zerolog.Nop()}
 	channelID := uuid.New()
 
 	payload := `{"channel_id":"` + channelID.String() + `"}`
@@ -83,7 +84,7 @@ func TestHandleMessageChannelOnly(t *testing.T) {
 func TestHandleMessageBoth(t *testing.T) {
 	t.Parallel()
 	cache := &spyCache{}
-	sub := &Subscriber{cache: cache}
+	sub := &Subscriber{cache: cache, log: zerolog.Nop()}
 	userID := uuid.New()
 	channelID := uuid.New()
 
@@ -104,7 +105,7 @@ func TestHandleMessageBoth(t *testing.T) {
 func TestHandleMessageMalformedJSON(t *testing.T) {
 	t.Parallel()
 	cache := &spyCache{}
-	sub := &Subscriber{cache: cache}
+	sub := &Subscriber{cache: cache, log: zerolog.Nop()}
 
 	// Should not panic or call any cache method
 	sub.handleMessage(context.Background(), "not valid json")
@@ -117,7 +118,7 @@ func TestHandleMessageMalformedJSON(t *testing.T) {
 func TestHandleMessageEmptyJSON(t *testing.T) {
 	t.Parallel()
 	cache := &spyCache{}
-	sub := &Subscriber{cache: cache}
+	sub := &Subscriber{cache: cache, log: zerolog.Nop()}
 
 	sub.handleMessage(context.Background(), "{}")
 
@@ -274,7 +275,7 @@ func TestSubscriberRunContextCancel(t *testing.T) {
 	t.Parallel()
 	_, rdb := setupPubSub(t)
 	cache := &spyCache{}
-	sub := NewSubscriber(cache, rdb)
+	sub := NewSubscriber(cache, rdb, zerolog.Nop())
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -302,7 +303,7 @@ func TestSubscriberRunReceivesAndInvalidates(t *testing.T) {
 	t.Parallel()
 	_, rdb := setupPubSub(t)
 	cache := &syncSpyCache{}
-	sub := NewSubscriber(cache, rdb)
+	sub := NewSubscriber(cache, rdb, zerolog.Nop())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

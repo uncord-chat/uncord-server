@@ -10,6 +10,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 	"github.com/uncord-chat/uncord-protocol/permissions"
 )
@@ -27,7 +28,7 @@ func TestMiddlewareAllowed(t *testing.T) {
 		chanInfo: ChannelInfo{ID: channelID},
 	}
 	cache := newFakeCache()
-	resolver := NewResolver(store, cache)
+	resolver := NewResolver(store, cache, zerolog.Nop())
 
 	app := fiber.New()
 	app.Use(func(c *fiber.Ctx) error {
@@ -43,6 +44,7 @@ func TestMiddlewareAllowed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		t.Errorf("status = %d, want 200", resp.StatusCode)
 	}
@@ -61,7 +63,7 @@ func TestMiddlewareDenied(t *testing.T) {
 		chanInfo: ChannelInfo{ID: channelID},
 	}
 	cache := newFakeCache()
-	resolver := NewResolver(store, cache)
+	resolver := NewResolver(store, cache, zerolog.Nop())
 
 	app := fiber.New()
 	app.Use(func(c *fiber.Ctx) error {
@@ -77,6 +79,7 @@ func TestMiddlewareDenied(t *testing.T) {
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusForbidden {
 		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusForbidden)
 	}
@@ -90,7 +93,7 @@ func TestMiddlewareDenied(t *testing.T) {
 func TestMiddlewareNoAuth(t *testing.T) {
 	t.Parallel()
 	store := &fakeStore{chanInfo: ChannelInfo{ID: uuid.New()}}
-	resolver := NewResolver(store, newFakeCache())
+	resolver := NewResolver(store, newFakeCache(), zerolog.Nop())
 
 	app := fiber.New()
 	// No auth middleware, so userID is not set
@@ -103,6 +106,7 @@ func TestMiddlewareNoAuth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusUnauthorized {
 		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusUnauthorized)
 	}
@@ -111,7 +115,7 @@ func TestMiddlewareNoAuth(t *testing.T) {
 func TestMiddlewareInvalidChannelID(t *testing.T) {
 	t.Parallel()
 	store := &fakeStore{chanInfo: ChannelInfo{ID: uuid.New()}}
-	resolver := NewResolver(store, newFakeCache())
+	resolver := NewResolver(store, newFakeCache(), zerolog.Nop())
 
 	app := fiber.New()
 	app.Use(func(c *fiber.Ctx) error {
@@ -127,6 +131,7 @@ func TestMiddlewareInvalidChannelID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusBadRequest {
 		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusBadRequest)
 	}
@@ -135,7 +140,7 @@ func TestMiddlewareInvalidChannelID(t *testing.T) {
 func TestMiddlewareMissingChannelID(t *testing.T) {
 	t.Parallel()
 	store := &fakeStore{chanInfo: ChannelInfo{ID: uuid.New()}}
-	resolver := NewResolver(store, newFakeCache())
+	resolver := NewResolver(store, newFakeCache(), zerolog.Nop())
 
 	app := fiber.New()
 	app.Use(func(c *fiber.Ctx) error {
@@ -152,6 +157,7 @@ func TestMiddlewareMissingChannelID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusBadRequest {
 		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusBadRequest)
 	}
@@ -164,7 +170,7 @@ func TestMiddlewareResolverError(t *testing.T) {
 		isOwnerErr: fmt.Errorf("db down"),
 		chanInfo:   ChannelInfo{ID: channelID},
 	}
-	resolver := NewResolver(store, newFakeCache())
+	resolver := NewResolver(store, newFakeCache(), zerolog.Nop())
 
 	app := fiber.New()
 	app.Use(func(c *fiber.Ctx) error {
@@ -180,6 +186,7 @@ func TestMiddlewareResolverError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != fiber.StatusInternalServerError {
 		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusInternalServerError)
 	}

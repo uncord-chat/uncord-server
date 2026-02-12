@@ -38,7 +38,7 @@ func TestValidateEmail(t *testing.T) {
 				return
 			}
 			if norm != tt.wantNorm {
-				t.Errorf("ValidateEmail(%q) normalized = %q, want %q", tt.input, norm, tt.wantNorm)
+				t.Errorf("ValidateEmail(%q) normalised = %q, want %q", tt.input, norm, tt.wantNorm)
 			}
 			if domain != tt.wantDomain {
 				t.Errorf("ValidateEmail(%q) domain = %q, want %q", tt.input, domain, tt.wantDomain)

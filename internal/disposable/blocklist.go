@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 )
 
 // Blocklist checks email domains against a list of known disposable email providers. The domain list is fetched lazily
@@ -18,6 +18,7 @@ import (
 type Blocklist struct {
 	url     string
 	enabled bool
+	log     zerolog.Logger
 
 	mu      sync.RWMutex
 	domains map[string]struct{}
@@ -26,10 +27,11 @@ type Blocklist struct {
 
 // NewBlocklist creates a new disposable email blocklist. If enabled is false, IsBlocked always returns false without
 // fetching the list.
-func NewBlocklist(url string, enabled bool) *Blocklist {
+func NewBlocklist(url string, enabled bool, logger zerolog.Logger) *Blocklist {
 	return &Blocklist{
 		url:     url,
 		enabled: enabled,
+		log:     logger,
 	}
 }
 
@@ -42,7 +44,7 @@ func (b *Blocklist) Prefetch(ctx context.Context) {
 
 	domains, err := fetchDomains(ctx, b.url)
 	if err != nil {
-		log.Warn().Err(err).Msg("Failed to prefetch disposable email blocklist")
+		b.log.Warn().Err(err).Msg("Failed to prefetch disposable email blocklist")
 		return
 	}
 
@@ -51,7 +53,7 @@ func (b *Blocklist) Prefetch(ctx context.Context) {
 	b.loaded = true
 	b.mu.Unlock()
 
-	log.Info().Int("domains", len(domains)).Msg("Disposable email blocklist loaded")
+	b.log.Info().Int("domains", len(domains)).Msg("Disposable email blocklist loaded")
 }
 
 // IsBlocked returns true if the given domain appears in the disposable email blocklist. Returns false immediately if

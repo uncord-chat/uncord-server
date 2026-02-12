@@ -13,6 +13,7 @@ services:
     env_file: .env
     volumes:
       - media_data:/data/uncord/media
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/v1/health"]
       interval: 10s
@@ -27,6 +28,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - pg_data:/var/lib/postgresql
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U uncord"]
       interval: 5s
@@ -38,6 +40,7 @@ services:
     command: valkey-server --save 60 1 --loglevel warning
     volumes:
       - valkey_data:/data
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
       interval: 5s
@@ -49,6 +52,7 @@ services:
     command: --data-dir /data --api-key=${TYPESENSE_API_KEY} --listen-port 8108
     volumes:
       - typesense_data:/data
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/8108 && echo -e \"GET /health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3 && cat <&3 | grep -q ok'"]
       interval: 5s
@@ -63,6 +67,7 @@ services:
   #     - garage_meta:/var/lib/garage/meta
   #   environment:
   #     GARAGE_ALLOW_WORLD_READABLE_SECRETS: "true"
+  #   restart: unless-stopped
 
 volumes:
   pg_data:

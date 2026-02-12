@@ -30,3 +30,17 @@ func VerifyPassword(password, hash string) (bool, error) {
 	}
 	return match, nil
 }
+
+// NeedsRehash returns true if the given Argon2id hash was generated with parameters that differ from the provided
+// configuration values, indicating that the hash should be regenerated on next successful login.
+func NeedsRehash(hash string, memory, iterations uint32, parallelism uint8, saltLen, keyLen uint32) bool {
+	params, salt, key, err := argon2id.DecodeHash(hash)
+	if err != nil {
+		return false
+	}
+	return params.Memory != memory ||
+		params.Iterations != iterations ||
+		params.Parallelism != parallelism ||
+		uint32(len(salt)) != saltLen ||
+		uint32(len(key)) != keyLen
+}

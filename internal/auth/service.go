@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 	"github.com/uncord-chat/uncord-protocol/models"
 
 	"github.com/uncord-chat/uncord-server/internal/config"
@@ -25,13 +25,14 @@ type Service struct {
 	redis     *redis.Client
 	config    *config.Config
 	blocklist *disposable.Blocklist
+	log       zerolog.Logger
 	// dummyHash is a precomputed Argon2id hash used to keep login timing constant when a user is not found,
 	// preventing email enumeration via response-time analysis.
 	dummyHash string
 }
 
 // NewService creates a new authentication service.
-func NewService(users user.Repository, rdb *redis.Client, cfg *config.Config, bl *disposable.Blocklist) *Service {
+func NewService(users user.Repository, rdb *redis.Client, cfg *config.Config, bl *disposable.Blocklist, logger zerolog.Logger) *Service {
 	// Generate a dummy hash at startup so VerifyPassword always runs against a real Argon2id hash even when the user
 	// does not exist.
 	dummy, err := HashPassword("uncord-dummy-password", cfg.Argon2Memory, cfg.Argon2Iterations, cfg.Argon2Parallelism, cfg.Argon2SaltLength, cfg.Argon2KeyLength)
@@ -44,6 +45,7 @@ func NewService(users user.Repository, rdb *redis.Client, cfg *config.Config, bl
 		redis:     rdb,
 		config:    cfg,
 		blocklist: bl,
+		log:       logger,
 		dummyHash: dummy,
 	}
 }
@@ -91,7 +93,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*AuthResul
 
 	blocked, err := s.blocklist.IsBlocked(ctx, domain)
 	if err != nil {
-		log.Warn().Err(err).Msg("Disposable email check failed")
+		s.log.Warn().Err(err).Msg("Disposable email check failed")
 	}
 	if blocked {
 		return nil, ErrDisposableEmail
@@ -129,11 +131,13 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*AuthResul
 	}
 
 	if s.config.IsDevelopment() {
-		log.Info().
+		s.log.Info().
 			Str("user_id", userID.String()).
 			Str("token", verifyToken).
 			Msg("Email verification token (dev mode)")
 	}
+
+	s.log.Debug().Str("user_id", userID.String()).Msg("User registered")
 
 	tokens, err := s.issueTokens(ctx, userID)
 	if err != nil {
@@ -184,6 +188,17 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*AuthResult, err
 		return nil, ErrMFARequired
 	}
 
+	// Lazy hash rotation: rehash with current parameters if the stored hash was generated with older settings.
+	if NeedsRehash(u.PasswordHash, s.config.Argon2Memory, s.config.Argon2Iterations, s.config.Argon2Parallelism, s.config.Argon2SaltLength, s.config.Argon2KeyLength) {
+		if newHash, hashErr := HashPassword(req.Password, s.config.Argon2Memory, s.config.Argon2Iterations, s.config.Argon2Parallelism, s.config.Argon2SaltLength, s.config.Argon2KeyLength); hashErr == nil {
+			if updateErr := s.users.UpdatePasswordHash(ctx, u.ID, newHash); updateErr != nil {
+				s.log.Warn().Err(updateErr).Str("user_id", u.ID.String()).Msg("Failed to rotate password hash")
+			} else {
+				s.log.Debug().Str("user_id", u.ID.String()).Msg("Password hash rotated to current parameters")
+			}
+		}
+	}
+
 	s.recordLoginAttempt(ctx, email, req.IP, true)
 
 	tokens, err := s.issueTokens(ctx, u.ID)
@@ -226,13 +241,14 @@ func (s *Service) Refresh(ctx context.Context, oldToken string) (*TokenPair, err
 
 // VerifyEmail consumes a verification token and marks the user as verified.
 func (s *Service) VerifyEmail(ctx context.Context, token string) error {
-	_, err := s.users.VerifyEmail(ctx, token)
+	userID, err := s.users.VerifyEmail(ctx, token)
 	if err != nil {
 		if errors.Is(err, user.ErrInvalidToken) {
 			return ErrInvalidToken
 		}
 		return fmt.Errorf("verify email: %w", err)
 	}
+	s.log.Debug().Str("user_id", userID.String()).Msg("User email verified")
 	return nil
 }
 
@@ -258,7 +274,7 @@ func (s *Service) issueTokens(ctx context.Context, userID uuid.UUID) (*TokenPair
 
 func (s *Service) recordLoginAttempt(ctx context.Context, email, ip string, success bool) {
 	if err := s.users.RecordLoginAttempt(ctx, email, ip, success); err != nil {
-		log.Warn().Err(err).Msg("Failed to record login attempt")
+		s.log.Warn().Err(err).Msg("Failed to record login attempt")
 	}
 }
 

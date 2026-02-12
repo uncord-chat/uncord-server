@@ -16,12 +16,12 @@ func RequirePermission(resolver *Resolver, perm permissions.Permission) fiber.Ha
 	return func(c *fiber.Ctx) error {
 		userIDVal := c.Locals("userID")
 		if userIDVal == nil {
-			return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorized, "Authentication required")
+			return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Authentication required")
 		}
 
 		userID, ok := userIDVal.(uuid.UUID)
 		if !ok {
-			return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorized, "Invalid user identity")
+			return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Invalid user identity")
 		}
 
 		channelIDStr := c.Params("channelID")

@@ -125,7 +125,7 @@ func mapAuthError(c *fiber.Ctx, err error) error {
 	case errors.Is(err, auth.ErrDisposableEmail):
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.DisposableEmail, err.Error())
 	case errors.Is(err, auth.ErrEmailAlreadyTaken):
-		return httputil.Fail(c, fiber.StatusConflict, apierrors.AlreadyExists, err.Error())
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidEmail, "Unable to register with the provided email")
 	case errors.Is(err, auth.ErrInvalidCredentials):
 		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.InvalidCredentials, err.Error())
 	case errors.Is(err, auth.ErrMFARequired):
