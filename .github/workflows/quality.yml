@@ -1,4 +1,4 @@
-name: Format
+name: Quality
 
 on:
   push:
@@ -10,8 +10,8 @@ permissions:
   contents: read
 
 jobs:
-  format:
-    name: Format Check
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,5 +20,7 @@ jobs:
         with:
           go-version: "1.26"
 
-      - name: Check formatting
-        run: make fmt-check
+      - name: Lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest

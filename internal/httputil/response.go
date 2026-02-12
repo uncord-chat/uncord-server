@@ -1,4 +1,4 @@
-package api
+package httputil
 
 import "github.com/gofiber/fiber/v2"
 

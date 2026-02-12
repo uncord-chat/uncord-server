@@ -1,4 +1,4 @@
-.PHONY: build run test lint vet fmt tidy docker-up docker-down docker-build migrate-up migrate-down clean
+.PHONY: build run test lint vet fmt fmt-check tidy docker-up docker-down docker-build migrate-up migrate-down clean
 
 # Build
 
@@ -25,6 +25,9 @@ vet:
 
 fmt:
 	gofmt -w .
+
+fmt-check:
+	test -z "$$(gofmt -l .)"
 
 # Dependencies
 

@@ -7,16 +7,25 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
+	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/fiber/v2/middleware/requestid"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
 	"github.com/uncord-chat/uncord-server/internal/api"
+	"github.com/uncord-chat/uncord-server/internal/auth"
 	"github.com/uncord-chat/uncord-server/internal/bootstrap"
 	"github.com/uncord-chat/uncord-server/internal/config"
+	"github.com/uncord-chat/uncord-server/internal/disposable"
+	"github.com/uncord-chat/uncord-server/internal/permission"
 	"github.com/uncord-chat/uncord-server/internal/postgres"
 	"github.com/uncord-chat/uncord-server/internal/typesense"
+	"github.com/uncord-chat/uncord-server/internal/user"
 	"github.com/uncord-chat/uncord-server/internal/valkey"
 )
 
@@ -88,27 +97,107 @@ func run() error {
 		log.Info().Msg("Typesense messages collection already exists")
 	}
 
+	// Initialize disposable email blocklist
+	blocklist := disposable.NewBlocklist(cfg.DisposableEmailBlocklistURL, cfg.DisposableEmailBlocklistEnabled)
+
+	// Initialize permission engine
+	permStore := permission.NewPGStore(db)
+	permCache := permission.NewValkeyCache(rdb)
+	permResolver := permission.NewResolver(permStore, permCache)
+	permPublisher := permission.NewPublisher(rdb)
+
+	// Start permission cache invalidation subscriber with reconnection.
+	subCtx, subCancel := context.WithCancel(ctx)
+	defer subCancel()
+	permSub := permission.NewSubscriber(permCache, rdb)
+	go func() {
+		for {
+			if err := permSub.Run(subCtx); err != nil {
+				if errors.Is(err, context.Canceled) {
+					return
+				}
+				log.Error().Err(err).Msg("Permission cache subscriber stopped, restarting in 5s")
+				select {
+				case <-subCtx.Done():
+					return
+				case <-time.After(5 * time.Second):
+				}
+				continue
+			}
+			return
+		}
+	}()
+
+	// Initialize user repository and auth service
+	userRepo := user.NewPGRepository(db)
+	authService := auth.NewService(userRepo, rdb, cfg, blocklist)
+
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
 		AppName:               "Uncord",
 		DisableStartupMessage: true,
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
+			message := "An internal error occurred"
 			if e, ok := errors.AsType[*fiber.Error](err); ok {
 				code = e.Code
+				message = e.Message
+			} else {
+				log.Error().Err(err).
+					Str("method", c.Method()).
+					Str("path", c.Path()).
+					Msg("Unhandled error")
 			}
 			return c.Status(code).JSON(fiber.Map{
 				"error": fiber.Map{
 					"code":    "INTERNAL_ERROR",
-					"message": err.Error(),
+					"message": message,
 				},
 			})
 		},
 	})
 
+	// Global middleware
+	app.Use(requestid.New())
+	app.Use(logger.New(logger.Config{
+		Format:     "${time} ${locals:requestid} ${method} ${path} ${status} ${latency}\n",
+		TimeFormat: time.RFC3339,
+	}))
+	app.Use(cors.New(cors.Config{
+		AllowOrigins:  cfg.CORSAllowOrigins,
+		AllowMethods:  "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+		AllowHeaders:  "Origin,Content-Type,Accept,Authorization",
+		ExposeHeaders: "X-Request-ID",
+	}))
+
+	// Global API rate limiter
+	app.Use(limiter.New(limiter.Config{
+		Max:        cfg.RateLimitAPIRequests,
+		Expiration: time.Duration(cfg.RateLimitAPIWindowSeconds) * time.Second,
+	}))
+
 	// Register routes
 	health := &api.HealthHandler{DB: db, Redis: rdb}
 	app.Get("/api/v1/health", health.Health)
+
+	authHandler := &api.AuthHandler{Auth: authService}
+
+	// Auth routes with stricter rate limiting
+	authGroup := app.Group("/api/v1/auth")
+	authGroup.Use(limiter.New(limiter.Config{
+		Max:        cfg.RateLimitAuthCount,
+		Expiration: time.Duration(cfg.RateLimitAuthWindowSeconds) * time.Second,
+	}))
+	authGroup.Post("/register", authHandler.Register)
+	authGroup.Post("/login", authHandler.Login)
+	authGroup.Post("/refresh", authHandler.Refresh)
+	authGroup.Post("/verify-email", authHandler.VerifyEmail)
+
+	// Protected routes will use:
+	//   auth.RequireAuth(cfg.JWTSecret, cfg.ServerURL) middleware group
+	//   permission.RequirePermission(permResolver, perm) per-route
+	_ = permResolver  // wired into protected route groups as they are built
+	_ = permPublisher // used by handlers that mutate permissions
 
 	// Graceful shutdown
 	quit := make(chan os.Signal, 1)
@@ -117,6 +206,7 @@ func run() error {
 	go func() {
 		<-quit
 		log.Info().Msg("Shutting down server")
+		subCancel()
 		_ = app.Shutdown()
 	}()
 

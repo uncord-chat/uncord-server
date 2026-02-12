@@ -13,6 +13,8 @@ func TestLoadDefaults(t *testing.T) {
 		"DATABASE_URL", "DATABASE_MAX_CONNS", "DATABASE_MIN_CONNS",
 		"VALKEY_URL",
 		"ARGON2_MEMORY", "ARGON2_ITERATIONS", "ARGON2_PARALLELISM", "ARGON2_SALT_LENGTH", "ARGON2_KEY_LENGTH",
+		"JWT_SECRET", "JWT_ACCESS_TTL", "JWT_REFRESH_TTL",
+		"ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_ENABLED", "ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_URL",
 		"TYPESENSE_URL", "TYPESENSE_API_KEY",
 		"INIT_OWNER_EMAIL", "INIT_OWNER_PASSWORD",
 		"ONBOARDING_REQUIRE_RULES", "ONBOARDING_REQUIRE_EMAIL_VERIFICATION",
@@ -22,6 +24,9 @@ func TestLoadDefaults(t *testing.T) {
 		t.Setenv(k, "")
 		os.Unsetenv(k)
 	}
+
+	// JWT_SECRET is required by validation
+	t.Setenv("JWT_SECRET", "test-secret-for-defaults")
 
 	cfg, err := Load()
 	if err != nil {
@@ -64,6 +69,22 @@ func TestLoadDefaults(t *testing.T) {
 		t.Errorf("Argon2KeyLength = %d, want 32", cfg.Argon2KeyLength)
 	}
 
+	// JWT defaults
+	if cfg.JWTAccessTTL != 900 {
+		t.Errorf("JWTAccessTTL = %d, want 900", cfg.JWTAccessTTL)
+	}
+	if cfg.JWTRefreshTTL != 604800 {
+		t.Errorf("JWTRefreshTTL = %d, want 604800", cfg.JWTRefreshTTL)
+	}
+
+	// Abuse defaults
+	if !cfg.DisposableEmailBlocklistEnabled {
+		t.Error("DisposableEmailBlocklistEnabled = false, want true")
+	}
+	if cfg.DisposableEmailBlocklistURL == "" {
+		t.Error("DisposableEmailBlocklistURL is empty, want default URL")
+	}
+
 	// Onboarding defaults
 	if !cfg.OnboardingRequireRules {
 		t.Error("OnboardingRequireRules = false, want true")
@@ -80,6 +101,28 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.OnboardingRequireCaptcha {
 		t.Error("OnboardingRequireCaptcha = true, want false")
 	}
+
+	// Rate limit defaults
+	if cfg.RateLimitAPIRequests != 60 {
+		t.Errorf("RateLimitAPIRequests = %d, want 60", cfg.RateLimitAPIRequests)
+	}
+	if cfg.RateLimitAuthCount != 5 {
+		t.Errorf("RateLimitAuthCount = %d, want 5", cfg.RateLimitAuthCount)
+	}
+}
+
+func TestLoadValidationRequiresJWTSecret(t *testing.T) {
+	// Ensure JWT_SECRET is unset
+	t.Setenv("JWT_SECRET", "")
+	os.Unsetenv("JWT_SECRET")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() returned nil error, want validation error for missing JWT_SECRET")
+	}
+	if !strings.Contains(err.Error(), "JWT_SECRET") {
+		t.Errorf("error %q does not mention JWT_SECRET", err.Error())
+	}
 }
 
 func TestLoadOverrides(t *testing.T) {
@@ -90,6 +133,10 @@ func TestLoadOverrides(t *testing.T) {
 	t.Setenv("ARGON2_MEMORY", "131072")
 	t.Setenv("ONBOARDING_REQUIRE_RULES", "false")
 	t.Setenv("INIT_OWNER_EMAIL", "test@example.com")
+	t.Setenv("JWT_SECRET", "test-secret-key")
+	t.Setenv("JWT_ACCESS_TTL", "1800")
+	t.Setenv("JWT_REFRESH_TTL", "86400")
+	t.Setenv("ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_ENABLED", "false")
 
 	cfg, err := Load()
 	if err != nil {
@@ -116,6 +163,18 @@ func TestLoadOverrides(t *testing.T) {
 	}
 	if cfg.InitOwnerEmail != "test@example.com" {
 		t.Errorf("InitOwnerEmail = %q, want %q", cfg.InitOwnerEmail, "test@example.com")
+	}
+	if cfg.JWTSecret != "test-secret-key" {
+		t.Errorf("JWTSecret = %q, want %q", cfg.JWTSecret, "test-secret-key")
+	}
+	if cfg.JWTAccessTTL != 1800 {
+		t.Errorf("JWTAccessTTL = %d, want 1800", cfg.JWTAccessTTL)
+	}
+	if cfg.JWTRefreshTTL != 86400 {
+		t.Errorf("JWTRefreshTTL = %d, want 86400", cfg.JWTRefreshTTL)
+	}
+	if cfg.DisposableEmailBlocklistEnabled {
+		t.Error("DisposableEmailBlocklistEnabled = true, want false")
 	}
 }
 
@@ -179,7 +238,7 @@ func TestIsDevelopment(t *testing.T) {
 		{"staging", false},
 	}
 	for _, tt := range tests {
-		cfg := Config{ServerEnv: tt.env}
+		cfg := &Config{ServerEnv: tt.env}
 		if got := cfg.IsDevelopment(); got != tt.want {
 			t.Errorf("IsDevelopment() with env=%q = %v, want %v", tt.env, got, tt.want)
 		}

@@ -33,9 +33,6 @@ CREATE TABLE users (
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON users
     FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
 
-CREATE INDEX idx_users_email ON users (email);
-CREATE INDEX idx_users_username ON users (username);
-
 -- Server (single row)
 
 CREATE TABLE server_config (

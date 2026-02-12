@@ -16,7 +16,7 @@ import (
 // gooseLogger adapts zerolog to the goose.Logger interface.
 type gooseLogger struct{}
 
-func (gooseLogger) Fatalf(format string, v ...any) { log.Fatal().Msgf(format, v...) }
+func (gooseLogger) Fatalf(format string, v ...any) { log.Error().Msgf(format, v...) }
 func (gooseLogger) Printf(format string, v ...any) { log.Info().Msgf(format, v...) }
 
 // Connect creates a pgxpool.Pool from the given DSN with the specified connection limits.

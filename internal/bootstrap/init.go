@@ -2,16 +2,22 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 
-	"github.com/alexedwards/argon2id"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rs/zerolog/log"
 	"github.com/uncord-chat/uncord-protocol/permissions"
 
+	"github.com/uncord-chat/uncord-server/internal/auth"
 	"github.com/uncord-chat/uncord-server/internal/config"
 )
+
+var sanitizeUsername = regexp.MustCompile(`[^a-zA-Z0-9_.]`)
 
 // DefaultEveryonePermissions is the permission bitfield assigned to the
 // @everyone role during first-run initialization.
@@ -37,35 +43,42 @@ func IsFirstRun(ctx context.Context, db *pgxpool.Pool) (bool, error) {
 
 // RunFirstInit seeds the database with the owner account, default roles,
 // channels, and onboarding config inside a single transaction.
-func RunFirstInit(ctx context.Context, db *pgxpool.Pool, cfg config.Config) error {
+func RunFirstInit(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) error {
 	if cfg.InitOwnerEmail == "" || cfg.InitOwnerPassword == "" {
 		return fmt.Errorf("INIT_OWNER_EMAIL and INIT_OWNER_PASSWORD must be set for first-run initialization")
 	}
 
-	// Hash password with argon2id
-	params := &argon2id.Params{
-		Memory:      cfg.Argon2Memory,
-		Iterations:  cfg.Argon2Iterations,
-		Parallelism: cfg.Argon2Parallelism,
-		SaltLength:  cfg.Argon2SaltLength,
-		KeyLength:   cfg.Argon2KeyLength,
-	}
-	hash, err := argon2id.CreateHash(cfg.InitOwnerPassword, params)
+	hash, err := auth.HashPassword(
+		cfg.InitOwnerPassword,
+		cfg.Argon2Memory,
+		cfg.Argon2Iterations,
+		cfg.Argon2Parallelism,
+		cfg.Argon2SaltLength,
+		cfg.Argon2KeyLength,
+	)
 	if err != nil {
 		return fmt.Errorf("hash owner password: %w", err)
 	}
 
-	// Derive username from email local part
+	// Derive username from email local part, stripping invalid characters.
 	username := cfg.InitOwnerEmail
 	if idx := strings.Index(username, "@"); idx > 0 {
 		username = username[:idx]
+	}
+	username = sanitizeUsername.ReplaceAllString(username, "")
+	if err := auth.ValidateUsername(username); err != nil {
+		return fmt.Errorf("derived owner username %q from email is invalid: %w", username, err)
 	}
 
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin init transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			log.Warn().Err(err).Msg("tx rollback failed")
+		}
+	}()
 
 	// Insert owner user
 	var ownerID uuid.UUID

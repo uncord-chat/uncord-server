@@ -16,6 +16,8 @@ type HealthHandler struct {
 }
 
 // Health pings PostgreSQL and Valkey, returning component status.
+// The response is not wrapped in the standard success/error envelope so that
+// monitoring systems receive a simple, predictable JSON body.
 func (h *HealthHandler) Health(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.Context(), 3*time.Second)
 	defer cancel()
@@ -37,7 +39,7 @@ func (h *HealthHandler) Health(c *fiber.Ctx) error {
 		status = fiber.StatusServiceUnavailable
 	}
 
-	return SuccessStatus(c, status, fiber.Map{
+	return c.Status(status).JSON(fiber.Map{
 		"status":   overall,
 		"postgres": pgStatus,
 		"valkey":   vkStatus,
