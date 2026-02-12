@@ -48,13 +48,13 @@ docker-logs:
 # Database
 
 migrate-up:
-	goose -dir internal/adapter/postgres/migrations postgres "$(DATABASE_URL)" up
+	goose -dir internal/postgres/migrations postgres "$(DATABASE_URL)" up
 
 migrate-down:
-	goose -dir internal/adapter/postgres/migrations postgres "$(DATABASE_URL)" down
+	goose -dir internal/postgres/migrations postgres "$(DATABASE_URL)" down
 
 migrate-status:
-	goose -dir internal/adapter/postgres/migrations postgres "$(DATABASE_URL)" status
+	goose -dir internal/postgres/migrations postgres "$(DATABASE_URL)" status
 
 # Clean
 

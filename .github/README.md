@@ -46,11 +46,14 @@ See the [Makefile](../Makefile) for the full list of targets.
 ```
 cmd/uncord/             Entry point
 internal/
+  api/                  HTTP handlers and response helpers
+  bootstrap/            First-run initialization
+  config/               Environment configuration
   domain/               Core entities and interfaces
-  service/              Application use cases
-  adapter/              Infrastructure (postgres, valkey, typesense, storage, email)
-  handler/              HTTP routes, middleware, WebSocket gateway
-  pkg/                  Shared utilities (config, response, validator, imaging)
+  permission/           Permission engine
+  postgres/             Database pool, migrations
+  typesense/            Search integration
+  valkey/               Cache and pub-sub
 ```
 
 ### Related repositories
