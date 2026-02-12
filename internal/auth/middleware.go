@@ -7,6 +7,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
+	apierrors "github.com/uncord-chat/uncord-protocol/errors"
+
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 )
 
@@ -16,22 +18,22 @@ func RequireAuth(secret, issuer string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		header := c.Get("Authorization")
 		if header == "" {
-			return httputil.Fail(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Missing authorization header")
+			return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorized, "Missing authorization header")
 		}
 
 		const prefix = "Bearer "
 		if len(header) <= len(prefix) || header[:len(prefix)] != prefix {
-			return httputil.Fail(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Invalid authorization format")
+			return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorized, "Invalid authorization format")
 		}
 		tokenStr := header[len(prefix):]
 
 		claims, err := ValidateAccessToken(tokenStr, secret, issuer)
 		if err != nil {
-			code := "UNAUTHORIZED"
+			code := apierrors.Unauthorized
 			message := "Invalid token"
 
 			if errors.Is(err, jwt.ErrTokenExpired) {
-				code = "TOKEN_EXPIRED"
+				code = apierrors.TokenExpired
 				message = "Token has expired"
 			}
 
@@ -40,7 +42,7 @@ func RequireAuth(secret, issuer string) fiber.Handler {
 
 		userID, err := uuid.Parse(claims.Subject)
 		if err != nil {
-			return httputil.Fail(c, fiber.StatusUnauthorized, "UNAUTHORIZED", "Invalid token subject")
+			return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorized, "Invalid token subject")
 		}
 
 		c.Locals("userID", userID)

@@ -4,6 +4,8 @@ import (
 	"errors"
 
 	"github.com/gofiber/fiber/v2"
+	apierrors "github.com/uncord-chat/uncord-protocol/errors"
+	"github.com/uncord-chat/uncord-protocol/models"
 
 	"github.com/uncord-chat/uncord-server/internal/auth"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
@@ -14,48 +16,20 @@ type AuthHandler struct {
 	Auth *auth.Service
 }
 
-// registerRequest is the JSON body for POST /api/v1/auth/register.
-type registerRequest struct {
-	Email    string `json:"email"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-// loginRequest is the JSON body for POST /api/v1/auth/login.
-type loginRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-}
-
-// refreshRequest is the JSON body for POST /api/v1/auth/refresh.
-type refreshRequest struct {
-	RefreshToken string `json:"refresh_token"`
-}
-
-// verifyEmailRequest is the JSON body for POST /api/v1/auth/verify-email.
-type verifyEmailRequest struct {
-	Token string `json:"token"`
-}
-
-// authResultResponse builds the JSON payload for Register and Login responses.
-func authResultResponse(result *auth.AuthResult) fiber.Map {
-	return fiber.Map{
-		"user": fiber.Map{
-			"id":             result.User.ID,
-			"email":          result.User.Email,
-			"username":       result.User.Username,
-			"email_verified": result.User.EmailVerified,
-		},
-		"access_token":  result.AccessToken,
-		"refresh_token": result.RefreshToken,
+// authResponse maps a service AuthResult to the protocol response type.
+func authResponse(result *auth.AuthResult) models.AuthResponse {
+	return models.AuthResponse{
+		User:         result.User,
+		AccessToken:  result.AccessToken,
+		RefreshToken: result.RefreshToken,
 	}
 }
 
 // Register handles POST /api/v1/auth/register.
 func (h *AuthHandler) Register(c *fiber.Ctx) error {
-	var body registerRequest
+	var body models.RegisterRequest
 	if err := c.BodyParser(&body); err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, "INVALID_BODY", "Invalid request body")
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "Invalid request body")
 	}
 
 	result, err := h.Auth.Register(c.Context(), auth.RegisterRequest{
@@ -67,14 +41,14 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 		return mapAuthError(c, err)
 	}
 
-	return httputil.SuccessStatus(c, fiber.StatusCreated, authResultResponse(result))
+	return httputil.SuccessStatus(c, fiber.StatusCreated, authResponse(result))
 }
 
 // Login handles POST /api/v1/auth/login.
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
-	var body loginRequest
+	var body models.LoginRequest
 	if err := c.BodyParser(&body); err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, "INVALID_BODY", "Invalid request body")
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "Invalid request body")
 	}
 
 	result, err := h.Auth.Login(c.Context(), auth.LoginRequest{
@@ -86,17 +60,17 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		return mapAuthError(c, err)
 	}
 
-	return httputil.Success(c, authResultResponse(result))
+	return httputil.Success(c, authResponse(result))
 }
 
 // Refresh handles POST /api/v1/auth/refresh.
 func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
-	var body refreshRequest
+	var body models.RefreshRequest
 	if err := c.BodyParser(&body); err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, "INVALID_BODY", "Invalid request body")
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "Invalid request body")
 	}
 	if body.RefreshToken == "" {
-		return httputil.Fail(c, fiber.StatusBadRequest, "INVALID_BODY", "refresh_token is required")
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "refresh_token is required")
 	}
 
 	tokens, err := h.Auth.Refresh(c.Context(), body.RefreshToken)
@@ -104,28 +78,28 @@ func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
 		return mapAuthError(c, err)
 	}
 
-	return httputil.Success(c, fiber.Map{
-		"access_token":  tokens.AccessToken,
-		"refresh_token": tokens.RefreshToken,
+	return httputil.Success(c, models.TokenPairResponse{
+		AccessToken:  tokens.AccessToken,
+		RefreshToken: tokens.RefreshToken,
 	})
 }
 
 // VerifyEmail handles POST /api/v1/auth/verify-email.
 func (h *AuthHandler) VerifyEmail(c *fiber.Ctx) error {
-	var body verifyEmailRequest
+	var body models.VerifyEmailRequest
 	if err := c.BodyParser(&body); err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, "INVALID_BODY", "Invalid request body")
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "Invalid request body")
 	}
 	if body.Token == "" {
-		return httputil.Fail(c, fiber.StatusBadRequest, "INVALID_BODY", "token is required")
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "token is required")
 	}
 
 	if err := h.Auth.VerifyEmail(c.Context(), body.Token); err != nil {
 		return mapAuthError(c, err)
 	}
 
-	return httputil.Success(c, fiber.Map{
-		"message": "Email verified successfully",
+	return httputil.Success(c, models.MessageResponse{
+		Message: "Email verified successfully",
 	})
 }
 
@@ -134,29 +108,29 @@ func mapAuthError(c *fiber.Ctx, err error) error {
 	switch {
 	// Validation errors
 	case errors.Is(err, auth.ErrInvalidEmail):
-		return httputil.Fail(c, fiber.StatusBadRequest, "INVALID_EMAIL", err.Error())
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidEmail, err.Error())
 	case errors.Is(err, auth.ErrUsernameLength),
 		errors.Is(err, auth.ErrUsernameInvalidChars):
-		return httputil.Fail(c, fiber.StatusBadRequest, "INVALID_USERNAME", err.Error())
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidUsername, err.Error())
 	case errors.Is(err, auth.ErrPasswordTooShort),
 		errors.Is(err, auth.ErrPasswordTooLong):
-		return httputil.Fail(c, fiber.StatusBadRequest, "INVALID_PASSWORD", err.Error())
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidPassword, err.Error())
 
 	// Business logic errors
 	case errors.Is(err, auth.ErrDisposableEmail):
-		return httputil.Fail(c, fiber.StatusBadRequest, "DISPOSABLE_EMAIL", err.Error())
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.DisposableEmail, err.Error())
 	case errors.Is(err, auth.ErrEmailAlreadyTaken):
-		return httputil.Fail(c, fiber.StatusConflict, "ALREADY_EXISTS", err.Error())
+		return httputil.Fail(c, fiber.StatusConflict, apierrors.AlreadyExists, err.Error())
 	case errors.Is(err, auth.ErrInvalidCredentials):
-		return httputil.Fail(c, fiber.StatusUnauthorized, "INVALID_CREDENTIALS", err.Error())
+		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.InvalidCredentials, err.Error())
 	case errors.Is(err, auth.ErrMFARequired):
-		return httputil.Fail(c, fiber.StatusForbidden, "MFA_REQUIRED", err.Error())
+		return httputil.Fail(c, fiber.StatusForbidden, apierrors.MFARequired, err.Error())
 	case errors.Is(err, auth.ErrRefreshTokenReused):
-		return httputil.Fail(c, fiber.StatusUnauthorized, "TOKEN_REUSED", "Refresh token has already been used")
+		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.TokenReused, "Refresh token has already been used")
 	case errors.Is(err, auth.ErrInvalidToken):
-		return httputil.Fail(c, fiber.StatusBadRequest, "INVALID_TOKEN", err.Error())
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidToken, err.Error())
 
 	default:
-		return httputil.Fail(c, fiber.StatusInternalServerError, "INTERNAL_ERROR", "An internal error occurred")
+		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
 	}
 }

@@ -1,6 +1,10 @@
 package httputil
 
-import "github.com/gofiber/fiber/v2"
+import (
+	"github.com/gofiber/fiber/v2"
+
+	apierrors "github.com/uncord-chat/uncord-protocol/errors"
+)
 
 // SuccessResponse wraps successful API responses.
 type SuccessResponse struct {
@@ -9,8 +13,8 @@ type SuccessResponse struct {
 
 // ErrorBody holds structured error details.
 type ErrorBody struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code    apierrors.Code `json:"code"`
+	Message string            `json:"message"`
 }
 
 // ErrorResponse wraps failed API responses.
@@ -29,7 +33,7 @@ func SuccessStatus(c *fiber.Ctx, status int, data any) error {
 }
 
 // Fail sends a JSON error response with the given status, code, and message.
-func Fail(c *fiber.Ctx, status int, code, message string) error {
+func Fail(c *fiber.Ctx, status int, code apierrors.Code, message string) error {
 	return c.Status(status).JSON(ErrorResponse{
 		Error: ErrorBody{
 			Code:    code,

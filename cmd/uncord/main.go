@@ -17,6 +17,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	apierrors "github.com/uncord-chat/uncord-protocol/errors"
+
 	"github.com/uncord-chat/uncord-server/internal/api"
 	"github.com/uncord-chat/uncord-server/internal/auth"
 	"github.com/uncord-chat/uncord-server/internal/bootstrap"
@@ -150,7 +152,7 @@ func run() error {
 			}
 			return c.Status(code).JSON(fiber.Map{
 				"error": fiber.Map{
-					"code":    "INTERNAL_ERROR",
+					"code":    apierrors.InternalError,
 					"message": message,
 				},
 			})

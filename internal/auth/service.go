@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
+	"github.com/uncord-chat/uncord-protocol/models"
 
 	"github.com/uncord-chat/uncord-server/internal/config"
 	"github.com/uncord-chat/uncord-server/internal/disposable"
@@ -52,17 +53,9 @@ type LoginRequest struct {
 
 // AuthResult is the output for Register and Login.
 type AuthResult struct {
-	User         UserInfo
+	User         models.User
 	AccessToken  string
 	RefreshToken string
-}
-
-// UserInfo is a safe-to-return subset of the user record.
-type UserInfo struct {
-	ID            string
-	Email         string
-	Username      string
-	EmailVerified bool
 }
 
 // TokenPair is the output for Refresh.
@@ -137,7 +130,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*AuthResul
 	}
 
 	return &AuthResult{
-		User: UserInfo{
+		User: models.User{
 			ID:            userID.String(),
 			Email:         email,
 			Username:      req.Username,
@@ -185,7 +178,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*AuthResult, err
 	}
 
 	return &AuthResult{
-		User: UserInfo{
+		User: models.User{
 			ID:            u.ID.String(),
 			Email:         email,
 			Username:      u.Username,

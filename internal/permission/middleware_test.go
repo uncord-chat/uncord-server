@@ -11,6 +11,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 	"github.com/uncord-chat/uncord-protocol/permissions"
 )
 
@@ -131,8 +132,8 @@ func TestMiddlewareDenied(t *testing.T) {
 	}
 
 	code := readErrCode(t, resp)
-	if code != "MISSING_PERMISSIONS" {
-		t.Errorf("error code = %q, want MISSING_PERMISSIONS", code)
+	if code != string(apierrors.MissingPermissions) {
+		t.Errorf("error code = %q, want %q", code, apierrors.MissingPermissions)
 	}
 }
 

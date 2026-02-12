@@ -10,6 +10,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 )
 
 func TestRequireAuthNoHeader(t *testing.T) {
@@ -30,8 +31,8 @@ func TestRequireAuthNoHeader(t *testing.T) {
 	}
 
 	body := readErrorCode(t, resp)
-	if body != "UNAUTHORIZED" {
-		t.Errorf("error code = %q, want %q", body, "UNAUTHORIZED")
+	if body != string(apierrors.Unauthorized) {
+		t.Errorf("error code = %q, want %q", body, apierrors.Unauthorized)
 	}
 }
 
@@ -80,8 +81,8 @@ func TestRequireAuthExpiredToken(t *testing.T) {
 	}
 
 	body := readErrorCode(t, resp)
-	if body != "TOKEN_EXPIRED" {
-		t.Errorf("error code = %q, want %q", body, "TOKEN_EXPIRED")
+	if body != string(apierrors.TokenExpired) {
+		t.Errorf("error code = %q, want %q", body, apierrors.TokenExpired)
 	}
 }
 
