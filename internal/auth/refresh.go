@@ -22,9 +22,9 @@ func userRefreshKey(userID uuid.UUID) string {
 	return "user_refresh:" + userID.String()
 }
 
-// rotateScript atomically consumes an old refresh token and issues a new one.
-// Returns the user ID on success, or nil if the old token was not found
-// (indicating reuse).
+// rotateScript atomically consumes an old refresh token and issues a new one. Returns the user ID on success, or nil
+// if the old token was not found (indicating reuse). Also cleans up expired token UUIDs from the user set so it does
+// not grow unboundedly when tokens expire naturally without being rotated or revoked.
 //
 //	KEYS[1] = refresh:{oldToken}
 //	ARGV[1] = oldToken (UUID string, for SREM from user set)
@@ -41,12 +41,43 @@ redis.call('DEL', KEYS[1])
 local userSetKey = 'user_refresh:' .. userId
 redis.call('SREM', userSetKey, ARGV[1])
 
+-- Remove stale entries whose refresh:{token} key has expired.
+local members = redis.call('SMEMBERS', userSetKey)
+for _, member in ipairs(members) do
+    if redis.call('EXISTS', 'refresh:' .. member) == 0 then
+        redis.call('SREM', userSetKey, member)
+    end
+end
+
 local newKey = 'refresh:' .. ARGV[2]
 redis.call('SET', newKey, userId, 'EX', tonumber(ARGV[3]))
 redis.call('SADD', userSetKey, ARGV[2])
 redis.call('EXPIRE', userSetKey, tonumber(ARGV[3]))
 
 return userId
+`)
+
+// createScript atomically stores a new refresh token and adds it to the user's token set, ensuring both operations
+// succeed or fail together. Expired token UUIDs are cleaned from the set to prevent unbounded growth.
+//
+//	KEYS[1] = refresh:{token}
+//	KEYS[2] = user_refresh:{userID}
+//	ARGV[1] = userID string
+//	ARGV[2] = token UUID string (for SADD into user set)
+//	ARGV[3] = TTL in seconds
+var createScript = redis.NewScript(`
+-- Remove stale entries whose refresh:{token} key has expired.
+local members = redis.call('SMEMBERS', KEYS[2])
+for _, member in ipairs(members) do
+    if redis.call('EXISTS', 'refresh:' .. member) == 0 then
+        redis.call('SREM', KEYS[2], member)
+    end
+end
+
+redis.call('SET', KEYS[1], ARGV[1], 'EX', tonumber(ARGV[3]))
+redis.call('SADD', KEYS[2], ARGV[2])
+redis.call('EXPIRE', KEYS[2], tonumber(ARGV[3]))
+return 1
 `)
 
 // revokeAllScript atomically removes all refresh tokens for a user.
@@ -61,25 +92,23 @@ redis.call('DEL', KEYS[1])
 return #tokens
 `)
 
-// CreateRefreshToken generates a new refresh token for the user and stores it
-// in Valkey with the given TTL.
+// CreateRefreshToken generates a new refresh token for the user and stores it in Valkey with the given TTL. A Lua
+// script ensures the token key and user set are updated atomically.
 func CreateRefreshToken(ctx context.Context, rdb *redis.Client, userID uuid.UUID, ttl time.Duration) (string, error) {
 	token := uuid.New().String()
 
-	pipe := rdb.Pipeline()
-	pipe.Set(ctx, refreshKey(token), userID.String(), ttl)
-	pipe.SAdd(ctx, userRefreshKey(userID), token)
-	pipe.Expire(ctx, userRefreshKey(userID), ttl)
-
-	if _, err := pipe.Exec(ctx); err != nil {
+	_, err := createScript.Run(ctx, rdb,
+		[]string{refreshKey(token), userRefreshKey(userID)},
+		userID.String(), token, int(ttl.Seconds()),
+	).Result()
+	if err != nil {
 		return "", fmt.Errorf("create refresh token: %w", err)
 	}
 
 	return token, nil
 }
 
-// ValidateRefreshToken checks whether a refresh token exists in Valkey and
-// returns the associated user ID.
+// ValidateRefreshToken checks whether a refresh token exists in Valkey and returns the associated user ID.
 func ValidateRefreshToken(ctx context.Context, rdb *redis.Client, token string) (uuid.UUID, error) {
 	val, err := rdb.Get(ctx, refreshKey(token)).Result()
 	if err == redis.Nil {
@@ -97,9 +126,8 @@ func ValidateRefreshToken(ctx context.Context, rdb *redis.Client, token string) 
 	return userID, nil
 }
 
-// RotateRefreshToken atomically consumes an old refresh token and issues a new
-// one via a Lua script. If the old token was already consumed, returns
-// ErrRefreshTokenReused.
+// RotateRefreshToken atomically consumes an old refresh token and issues a new one via a Lua script. If the old token
+// was already consumed, returns ErrRefreshTokenReused.
 func RotateRefreshToken(ctx context.Context, rdb *redis.Client, oldToken string, ttl time.Duration) (string, uuid.UUID, error) {
 	newToken := uuid.New().String()
 
@@ -123,8 +151,7 @@ func RotateRefreshToken(ctx context.Context, rdb *redis.Client, oldToken string,
 	return newToken, userID, nil
 }
 
-// RevokeAllRefreshTokens atomically removes all refresh tokens for the given
-// user via a Lua script.
+// RevokeAllRefreshTokens atomically removes all refresh tokens for the given user via a Lua script.
 func RevokeAllRefreshTokens(ctx context.Context, rdb *redis.Client, userID uuid.UUID) error {
 	_, err := revokeAllScript.Run(ctx, rdb,
 		[]string{userRefreshKey(userID)},

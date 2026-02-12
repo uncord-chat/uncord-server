@@ -89,6 +89,7 @@ func (c *fakeCache) DeleteExact(_ context.Context, _, _ uuid.UUID) error  { retu
 // --- Tests ---
 
 func TestOwnerBypass(t *testing.T) {
+	t.Parallel()
 	store := &fakeStore{isOwner: true}
 	cache := newFakeCache()
 	r := NewResolver(store, cache)
@@ -103,6 +104,7 @@ func TestOwnerBypass(t *testing.T) {
 }
 
 func TestManageServerRoleGivesAll(t *testing.T) {
+	t.Parallel()
 	roleID := uuid.New()
 	channelID := uuid.New()
 	store := &fakeStore{
@@ -122,6 +124,7 @@ func TestManageServerRoleGivesAll(t *testing.T) {
 }
 
 func TestRoleUnionOR(t *testing.T) {
+	t.Parallel()
 	role1 := uuid.New()
 	role2 := uuid.New()
 	channelID := uuid.New()
@@ -147,6 +150,7 @@ func TestRoleUnionOR(t *testing.T) {
 }
 
 func TestCategoryDenyOverridesRoleAllow(t *testing.T) {
+	t.Parallel()
 	roleID := uuid.New()
 	userID := uuid.New()
 	channelID := uuid.New()
@@ -180,6 +184,7 @@ func TestCategoryDenyOverridesRoleAllow(t *testing.T) {
 }
 
 func TestChannelOverrideOverridesCategory(t *testing.T) {
+	t.Parallel()
 	roleID := uuid.New()
 	userID := uuid.New()
 	channelID := uuid.New()
@@ -213,6 +218,7 @@ func TestChannelOverrideOverridesCategory(t *testing.T) {
 }
 
 func TestUserOverrideBeatRoleOverride(t *testing.T) {
+	t.Parallel()
 	roleID := uuid.New()
 	userID := uuid.New()
 	channelID := uuid.New()
@@ -243,6 +249,7 @@ func TestUserOverrideBeatRoleOverride(t *testing.T) {
 }
 
 func TestDenyWinsAtSameLevel(t *testing.T) {
+	t.Parallel()
 	role1 := uuid.New()
 	role2 := uuid.New()
 	userID := uuid.New()
@@ -275,6 +282,7 @@ func TestDenyWinsAtSameLevel(t *testing.T) {
 }
 
 func TestEveryoneRoleIncluded(t *testing.T) {
+	t.Parallel()
 	everyoneRole := uuid.New()
 	channelID := uuid.New()
 
@@ -299,6 +307,7 @@ func TestEveryoneRoleIncluded(t *testing.T) {
 }
 
 func TestNoCategoryOnlyChannelOverrides(t *testing.T) {
+	t.Parallel()
 	roleID := uuid.New()
 	userID := uuid.New()
 	channelID := uuid.New()
@@ -331,6 +340,7 @@ func TestNoCategoryOnlyChannelOverrides(t *testing.T) {
 }
 
 func TestCacheHitReturnsCachedValue(t *testing.T) {
+	t.Parallel()
 	store := &fakeStore{}
 	cache := newFakeCache()
 	userID := uuid.New()
@@ -361,6 +371,7 @@ func TestCacheHitReturnsCachedValue(t *testing.T) {
 }
 
 func TestCacheMissComputesAndCaches(t *testing.T) {
+	t.Parallel()
 	roleID := uuid.New()
 	channelID := uuid.New()
 	store := &fakeStore{
@@ -389,6 +400,7 @@ func TestCacheMissComputesAndCaches(t *testing.T) {
 }
 
 func TestCacheGetErrorDegradesToDB(t *testing.T) {
+	t.Parallel()
 	roleID := uuid.New()
 	channelID := uuid.New()
 	store := &fakeStore{
@@ -411,6 +423,7 @@ func TestCacheGetErrorDegradesToDB(t *testing.T) {
 }
 
 func TestStoreErrorPropagated(t *testing.T) {
+	t.Parallel()
 	store := &fakeStore{isOwnerErr: fmt.Errorf("db connection lost")}
 	cache := newFakeCache()
 	r := NewResolver(store, cache)
@@ -422,6 +435,7 @@ func TestStoreErrorPropagated(t *testing.T) {
 }
 
 func TestEmptyOverridesLeaveBaseUnchanged(t *testing.T) {
+	t.Parallel()
 	roleID := uuid.New()
 	channelID := uuid.New()
 	store := &fakeStore{
@@ -446,6 +460,7 @@ func TestEmptyOverridesLeaveBaseUnchanged(t *testing.T) {
 }
 
 func TestRolePermissionsError(t *testing.T) {
+	t.Parallel()
 	store := &fakeStore{roleErr: fmt.Errorf("db error")}
 	cache := newFakeCache()
 	r := NewResolver(store, cache)
@@ -457,6 +472,7 @@ func TestRolePermissionsError(t *testing.T) {
 }
 
 func TestChannelInfoError(t *testing.T) {
+	t.Parallel()
 	store := &fakeStore{
 		roleEntries: []RolePermEntry{
 			{RoleID: uuid.New(), Permissions: permissions.ViewChannels},
@@ -473,6 +489,7 @@ func TestChannelInfoError(t *testing.T) {
 }
 
 func TestCategoryOverridesError(t *testing.T) {
+	t.Parallel()
 	catID := uuid.New()
 	store := &fakeStore{
 		roleEntries: []RolePermEntry{
@@ -491,8 +508,8 @@ func TestCategoryOverridesError(t *testing.T) {
 }
 
 func TestChannelOverridesError(t *testing.T) {
+	t.Parallel()
 	channelID := uuid.New()
-	callCount := 0
 	store := &fakeStore{
 		roleEntries: []RolePermEntry{
 			{RoleID: uuid.New(), Permissions: permissions.ViewChannels},
@@ -502,7 +519,6 @@ func TestChannelOverridesError(t *testing.T) {
 	// Override the Overrides method to fail on channel override query
 	// Since we have no category, the first call is the channel override
 	store.overridesErr = fmt.Errorf("channel overrides failed")
-	_ = callCount
 	cache := newFakeCache()
 	r := NewResolver(store, cache)
 
@@ -513,6 +529,7 @@ func TestChannelOverridesError(t *testing.T) {
 }
 
 func TestCacheSetError(t *testing.T) {
+	t.Parallel()
 	roleID := uuid.New()
 	channelID := uuid.New()
 	store := &fakeStore{
@@ -536,6 +553,7 @@ func TestCacheSetError(t *testing.T) {
 }
 
 func TestHasPermission(t *testing.T) {
+	t.Parallel()
 	roleID := uuid.New()
 	channelID := uuid.New()
 	store := &fakeStore{

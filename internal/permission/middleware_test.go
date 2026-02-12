@@ -1,7 +1,6 @@
 package permission
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,58 +14,8 @@ import (
 	"github.com/uncord-chat/uncord-protocol/permissions"
 )
 
-// --- Fake resolver for middleware tests ---
-
-type fakeResolver struct {
-	allowed bool
-	err     error
-}
-
-func (f *fakeResolver) fakeStore() *fakeStore {
-	return &fakeStore{
-		roleEntries: []RolePermEntry{},
-		chanInfo:    ChannelInfo{ID: uuid.New()},
-	}
-}
-
-func newFakeResolver(allowed bool, err error) *Resolver {
-	fr := &fakeResolver{allowed: allowed, err: err}
-	store := fr.fakeStore()
-	cache := newFakeCache()
-
-	if allowed {
-		store.roleEntries = []RolePermEntry{
-			{RoleID: uuid.New(), Permissions: permissions.AllPermissions},
-		}
-	}
-
-	r := NewResolver(store, cache)
-	return r
-}
-
-// overrideResolver creates a resolver with a controllable store/cache for middleware tests
-type testResolver struct {
-	result permissions.Permission
-	err    error
-}
-
-func (r *testResolver) HasPermission(_ context.Context, _, _ uuid.UUID, perm permissions.Permission) (bool, error) {
-	if r.err != nil {
-		return false, r.err
-	}
-	return r.result.Has(perm), nil
-}
-
-func setupMiddlewareApp(t *testing.T, resolver *Resolver, perm permissions.Permission) *fiber.App {
-	t.Helper()
-	app := fiber.New()
-	app.Get("/channels/:channelID/test", RequirePermission(resolver, perm), func(c *fiber.Ctx) error {
-		return c.SendStatus(200)
-	})
-	return app
-}
-
 func TestMiddlewareAllowed(t *testing.T) {
+	t.Parallel()
 	channelID := uuid.New()
 	userID := uuid.New()
 	roleID := uuid.New()
@@ -100,6 +49,7 @@ func TestMiddlewareAllowed(t *testing.T) {
 }
 
 func TestMiddlewareDenied(t *testing.T) {
+	t.Parallel()
 	channelID := uuid.New()
 	userID := uuid.New()
 	roleID := uuid.New()
@@ -138,11 +88,12 @@ func TestMiddlewareDenied(t *testing.T) {
 }
 
 func TestMiddlewareNoAuth(t *testing.T) {
+	t.Parallel()
 	store := &fakeStore{chanInfo: ChannelInfo{ID: uuid.New()}}
 	resolver := NewResolver(store, newFakeCache())
 
 	app := fiber.New()
-	// No auth middleware — userID not set
+	// No auth middleware, so userID is not set
 	app.Get("/channels/:channelID/test", RequirePermission(resolver, permissions.ViewChannels), func(c *fiber.Ctx) error {
 		return c.SendStatus(200)
 	})
@@ -158,6 +109,7 @@ func TestMiddlewareNoAuth(t *testing.T) {
 }
 
 func TestMiddlewareInvalidChannelID(t *testing.T) {
+	t.Parallel()
 	store := &fakeStore{chanInfo: ChannelInfo{ID: uuid.New()}}
 	resolver := NewResolver(store, newFakeCache())
 
@@ -181,6 +133,7 @@ func TestMiddlewareInvalidChannelID(t *testing.T) {
 }
 
 func TestMiddlewareMissingChannelID(t *testing.T) {
+	t.Parallel()
 	store := &fakeStore{chanInfo: ChannelInfo{ID: uuid.New()}}
 	resolver := NewResolver(store, newFakeCache())
 
@@ -205,6 +158,7 @@ func TestMiddlewareMissingChannelID(t *testing.T) {
 }
 
 func TestMiddlewareResolverError(t *testing.T) {
+	t.Parallel()
 	channelID := uuid.New()
 	store := &fakeStore{
 		isOwnerErr: fmt.Errorf("db down"),

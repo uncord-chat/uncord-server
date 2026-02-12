@@ -47,8 +47,9 @@ func (c *spyCache) DeleteExact(_ context.Context, userID, channelID uuid.UUID) e
 }
 
 func TestHandleMessageUserOnly(t *testing.T) {
+	t.Parallel()
 	cache := &spyCache{}
-	sub := &Subscriber{Cache: cache}
+	sub := &Subscriber{cache: cache}
 	userID := uuid.New()
 
 	payload := `{"user_id":"` + userID.String() + `"}`
@@ -63,8 +64,9 @@ func TestHandleMessageUserOnly(t *testing.T) {
 }
 
 func TestHandleMessageChannelOnly(t *testing.T) {
+	t.Parallel()
 	cache := &spyCache{}
-	sub := &Subscriber{Cache: cache}
+	sub := &Subscriber{cache: cache}
 	channelID := uuid.New()
 
 	payload := `{"channel_id":"` + channelID.String() + `"}`
@@ -79,8 +81,9 @@ func TestHandleMessageChannelOnly(t *testing.T) {
 }
 
 func TestHandleMessageBoth(t *testing.T) {
+	t.Parallel()
 	cache := &spyCache{}
-	sub := &Subscriber{Cache: cache}
+	sub := &Subscriber{cache: cache}
 	userID := uuid.New()
 	channelID := uuid.New()
 
@@ -99,8 +102,9 @@ func TestHandleMessageBoth(t *testing.T) {
 }
 
 func TestHandleMessageMalformedJSON(t *testing.T) {
+	t.Parallel()
 	cache := &spyCache{}
-	sub := &Subscriber{Cache: cache}
+	sub := &Subscriber{cache: cache}
 
 	// Should not panic or call any cache method
 	sub.handleMessage(context.Background(), "not valid json")
@@ -111,8 +115,9 @@ func TestHandleMessageMalformedJSON(t *testing.T) {
 }
 
 func TestHandleMessageEmptyJSON(t *testing.T) {
+	t.Parallel()
 	cache := &spyCache{}
-	sub := &Subscriber{Cache: cache}
+	sub := &Subscriber{cache: cache}
 
 	sub.handleMessage(context.Background(), "{}")
 
@@ -171,6 +176,7 @@ func setupPubSub(t *testing.T) (*miniredis.Miniredis, *redis.Client) {
 }
 
 func TestPublisherInvalidateUser(t *testing.T) {
+	t.Parallel()
 	_, rdb := setupPubSub(t)
 	ctx := context.Background()
 	pub := NewPublisher(rdb)
@@ -189,7 +195,7 @@ func TestPublisherInvalidateUser(t *testing.T) {
 	select {
 	case msg := <-ch:
 		var im InvalidationMessage
-		json.Unmarshal([]byte(msg.Payload), &im)
+		_ = json.Unmarshal([]byte(msg.Payload), &im)
 		if im.UserID == nil || *im.UserID != userID {
 			t.Errorf("published user_id = %v, want %v", im.UserID, userID)
 		}
@@ -202,6 +208,7 @@ func TestPublisherInvalidateUser(t *testing.T) {
 }
 
 func TestPublisherInvalidateChannel(t *testing.T) {
+	t.Parallel()
 	_, rdb := setupPubSub(t)
 	ctx := context.Background()
 	pub := NewPublisher(rdb)
@@ -219,7 +226,7 @@ func TestPublisherInvalidateChannel(t *testing.T) {
 	select {
 	case msg := <-ch:
 		var im InvalidationMessage
-		json.Unmarshal([]byte(msg.Payload), &im)
+		_ = json.Unmarshal([]byte(msg.Payload), &im)
 		if im.ChannelID == nil || *im.ChannelID != channelID {
 			t.Errorf("published channel_id = %v, want %v", im.ChannelID, channelID)
 		}
@@ -232,6 +239,7 @@ func TestPublisherInvalidateChannel(t *testing.T) {
 }
 
 func TestPublisherInvalidateUserChannel(t *testing.T) {
+	t.Parallel()
 	_, rdb := setupPubSub(t)
 	ctx := context.Background()
 	pub := NewPublisher(rdb)
@@ -250,7 +258,7 @@ func TestPublisherInvalidateUserChannel(t *testing.T) {
 	select {
 	case msg := <-ch:
 		var im InvalidationMessage
-		json.Unmarshal([]byte(msg.Payload), &im)
+		_ = json.Unmarshal([]byte(msg.Payload), &im)
 		if im.UserID == nil || *im.UserID != userID {
 			t.Errorf("published user_id = %v, want %v", im.UserID, userID)
 		}
@@ -263,6 +271,7 @@ func TestPublisherInvalidateUserChannel(t *testing.T) {
 }
 
 func TestSubscriberRunContextCancel(t *testing.T) {
+	t.Parallel()
 	_, rdb := setupPubSub(t)
 	cache := &spyCache{}
 	sub := NewSubscriber(cache, rdb)
@@ -290,6 +299,7 @@ func TestSubscriberRunContextCancel(t *testing.T) {
 }
 
 func TestSubscriberRunReceivesAndInvalidates(t *testing.T) {
+	t.Parallel()
 	_, rdb := setupPubSub(t)
 	cache := &syncSpyCache{}
 	sub := NewSubscriber(cache, rdb)

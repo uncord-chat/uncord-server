@@ -9,11 +9,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
+	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
@@ -24,6 +27,7 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/bootstrap"
 	"github.com/uncord-chat/uncord-server/internal/config"
 	"github.com/uncord-chat/uncord-server/internal/disposable"
+	"github.com/uncord-chat/uncord-server/internal/httputil"
 	"github.com/uncord-chat/uncord-server/internal/permission"
 	"github.com/uncord-chat/uncord-server/internal/postgres"
 	"github.com/uncord-chat/uncord-server/internal/typesense"
@@ -51,6 +55,10 @@ func run() error {
 	}
 
 	log.Info().Str("env", cfg.ServerEnv).Msg("Starting Uncord Server")
+
+	if cfg.CORSAllowOrigins == "*" {
+		log.Warn().Msg("CORS_ALLOW_ORIGINS is set to a wildcard \"*\". This allows any origin to make requests to your server. Set an explicit origin (e.g. https://your-client.example.com) for production deployments.")
+	}
 
 	ctx := context.Background()
 
@@ -82,7 +90,7 @@ func run() error {
 		return fmt.Errorf("check first run: %w", err)
 	}
 	if firstRun {
-		log.Info().Msg("First run detected — running initialization")
+		log.Info().Msg("First run detected, running initialization")
 		if err := bootstrap.RunFirstInit(ctx, db, cfg); err != nil {
 			return fmt.Errorf("first-run initialization: %w", err)
 		}
@@ -90,7 +98,7 @@ func run() error {
 	}
 
 	// Typesense collection (best-effort)
-	created, err := typesense.EnsureMessagesCollection(cfg.TypesenseURL, cfg.TypesenseAPIKey)
+	created, err := typesense.EnsureMessagesCollection(ctx, cfg.TypesenseURL, cfg.TypesenseAPIKey)
 	if err != nil {
 		log.Warn().Err(err).Msg("Typesense collection setup failed (non-fatal)")
 	} else if created {
@@ -99,8 +107,10 @@ func run() error {
 		log.Info().Msg("Typesense messages collection already exists")
 	}
 
-	// Initialize disposable email blocklist
+	// Initialize disposable email blocklist and prefetch asynchronously so the first registration request does not
+	// block on a network call.
 	blocklist := disposable.NewBlocklist(cfg.DisposableEmailBlocklistURL, cfg.DisposableEmailBlocklistEnabled)
+	go blocklist.Prefetch(ctx)
 
 	// Initialize permission engine
 	permStore := permission.NewPGStore(db)
@@ -138,22 +148,26 @@ func run() error {
 	app := fiber.New(fiber.Config{
 		AppName:               "Uncord",
 		DisableStartupMessage: true,
+		// ErrorHandler catches errors returned by handlers that are not already mapped to structured API responses
+		// (e.g. Fiber's built-in 404/405). errors.AsType is a generic helper added in Go 1.26.
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
-			code := fiber.StatusInternalServerError
+			status := fiber.StatusInternalServerError
 			message := "An internal error occurred"
+			apiCode := apierrors.InternalError
 			if e, ok := errors.AsType[*fiber.Error](err); ok {
-				code = e.Code
+				status = e.Code
 				message = e.Message
+				apiCode = fiberStatusToAPICode(e.Code)
 			} else {
 				log.Error().Err(err).
 					Str("method", c.Method()).
 					Str("path", c.Path()).
 					Msg("Unhandled error")
 			}
-			return c.Status(code).JSON(fiber.Map{
-				"error": fiber.Map{
-					"code":    apierrors.InternalError,
-					"message": message,
+			return c.Status(status).JSON(httputil.ErrorResponse{
+				Error: httputil.ErrorBody{
+					Code:    apiCode,
+					Message: message,
 				},
 			})
 		},
@@ -179,27 +193,7 @@ func run() error {
 	}))
 
 	// Register routes
-	health := &api.HealthHandler{DB: db, Redis: rdb}
-	app.Get("/api/v1/health", health.Health)
-
-	authHandler := &api.AuthHandler{Auth: authService}
-
-	// Auth routes with stricter rate limiting
-	authGroup := app.Group("/api/v1/auth")
-	authGroup.Use(limiter.New(limiter.Config{
-		Max:        cfg.RateLimitAuthCount,
-		Expiration: time.Duration(cfg.RateLimitAuthWindowSeconds) * time.Second,
-	}))
-	authGroup.Post("/register", authHandler.Register)
-	authGroup.Post("/login", authHandler.Login)
-	authGroup.Post("/refresh", authHandler.Refresh)
-	authGroup.Post("/verify-email", authHandler.VerifyEmail)
-
-	// Protected routes will use:
-	//   auth.RequireAuth(cfg.JWTSecret, cfg.ServerURL) middleware group
-	//   permission.RequirePermission(permResolver, perm) per-route
-	_ = permResolver  // wired into protected route groups as they are built
-	_ = permPublisher // used by handlers that mutate permissions
+	registerRoutes(app, cfg, db, rdb, authService, permResolver, permPublisher)
 
 	// Graceful shutdown
 	quit := make(chan os.Signal, 1)
@@ -220,4 +214,62 @@ func run() error {
 	}
 
 	return nil
+}
+
+func registerRoutes(
+	app *fiber.App,
+	cfg *config.Config,
+	db *pgxpool.Pool,
+	rdb *redis.Client,
+	authService *auth.Service,
+	permResolver *permission.Resolver,
+	permPublisher *permission.Publisher,
+) {
+	health := api.NewHealthHandler(db, redisPinger{client: rdb})
+	app.Get("/api/v1/health", health.Health)
+
+	authHandler := api.NewAuthHandler(authService)
+
+	// Auth routes with stricter rate limiting
+	authGroup := app.Group("/api/v1/auth")
+	authGroup.Use(limiter.New(limiter.Config{
+		Max:        cfg.RateLimitAuthCount,
+		Expiration: time.Duration(cfg.RateLimitAuthWindowSeconds) * time.Second,
+	}))
+	authGroup.Post("/register", authHandler.Register)
+	authGroup.Post("/login", authHandler.Login)
+	authGroup.Post("/refresh", authHandler.Refresh)
+	authGroup.Post("/verify-email", authHandler.VerifyEmail)
+
+	// Protected routes will use:
+	//   auth.RequireAuth(cfg.JWTSecret, cfg.ServerURL) middleware group
+	//   permission.RequirePermission(permResolver, perm) per-route
+	_ = permResolver  // wired into protected route groups as they are built
+	_ = permPublisher // used by handlers that mutate permissions
+}
+
+// redisPinger adapts *redis.Client to the api.Pinger interface.
+type redisPinger struct{ client *redis.Client }
+
+func (p redisPinger) Ping(ctx context.Context) error { return p.client.Ping(ctx).Err() }
+
+// fiberStatusToAPICode maps an HTTP status code from Fiber's built-in errors (404, 405, etc.) to the closest protocol
+// error code.
+func fiberStatusToAPICode(status int) apierrors.Code {
+	switch {
+	case status == fiber.StatusNotFound:
+		return apierrors.NotFound
+	case status == fiber.StatusMethodNotAllowed:
+		return apierrors.ValidationError
+	case status == fiber.StatusTooManyRequests:
+		return apierrors.RateLimited
+	case status == fiber.StatusRequestEntityTooLarge:
+		return apierrors.PayloadTooLarge
+	case status == fiber.StatusServiceUnavailable:
+		return apierrors.ServiceUnavailable
+	case status >= 400 && status < 500:
+		return apierrors.ValidationError
+	default:
+		return apierrors.InternalError
+	}
 }

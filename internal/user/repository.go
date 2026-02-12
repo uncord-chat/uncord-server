@@ -14,18 +14,18 @@ import (
 
 // PGRepository implements Repository using PostgreSQL.
 type PGRepository struct {
-	DB *pgxpool.Pool
+	db *pgxpool.Pool
 }
 
 // NewPGRepository creates a new PostgreSQL-backed user repository.
 func NewPGRepository(db *pgxpool.Pool) *PGRepository {
-	return &PGRepository{DB: db}
+	return &PGRepository{db: db}
 }
 
-// Create inserts a new user and, when params.VerifyToken is non-empty, an
-// email verification row — all inside a single transaction.
+// Create inserts a new user and, when params.VerifyToken is non-empty, an email verification row, all inside a single
+// transaction.
 func (r *PGRepository) Create(ctx context.Context, params CreateParams) (uuid.UUID, error) {
-	tx, err := r.DB.Begin(ctx)
+	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("begin create user tx: %w", err)
 	}
@@ -70,7 +70,7 @@ func (r *PGRepository) Create(ctx context.Context, params CreateParams) (uuid.UU
 // GetByEmail returns the user matching the given email address.
 func (r *PGRepository) GetByEmail(ctx context.Context, email string) (*User, error) {
 	var u User
-	err := r.DB.QueryRow(ctx,
+	err := r.db.QueryRow(ctx,
 		`SELECT id, password_hash, username, mfa_enabled, email_verified
 		 FROM users WHERE email = $1`,
 		email,
@@ -85,10 +85,9 @@ func (r *PGRepository) GetByEmail(ctx context.Context, email string) (*User, err
 	return &u, nil
 }
 
-// VerifyEmail consumes a verification token and marks the user as verified,
-// all within a single transaction.
+// VerifyEmail consumes a verification token and marks the user as verified, all within a single transaction.
 func (r *PGRepository) VerifyEmail(ctx context.Context, token string) (uuid.UUID, error) {
-	tx, err := r.DB.Begin(ctx)
+	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("begin verify email tx: %w", err)
 	}
@@ -130,7 +129,7 @@ func (r *PGRepository) VerifyEmail(ctx context.Context, token string) (uuid.UUID
 
 // RecordLoginAttempt writes an entry to the login_attempts table.
 func (r *PGRepository) RecordLoginAttempt(ctx context.Context, email, ipAddress string, success bool) error {
-	_, err := r.DB.Exec(ctx,
+	_, err := r.db.Exec(ctx,
 		`INSERT INTO login_attempts (email, ip_address, success) VALUES ($1, $2::inet, $3)`,
 		email, ipAddress, success,
 	)

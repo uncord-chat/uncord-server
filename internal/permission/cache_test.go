@@ -18,6 +18,7 @@ func setupMiniRedis(t *testing.T) (*miniredis.Miniredis, *ValkeyCache) {
 }
 
 func TestCacheSetAndGet(t *testing.T) {
+	t.Parallel()
 	_, cache := setupMiniRedis(t)
 	ctx := context.Background()
 	userID := uuid.New()
@@ -41,6 +42,7 @@ func TestCacheSetAndGet(t *testing.T) {
 }
 
 func TestCacheGetMiss(t *testing.T) {
+	t.Parallel()
 	_, cache := setupMiniRedis(t)
 	ctx := context.Background()
 
@@ -54,6 +56,7 @@ func TestCacheGetMiss(t *testing.T) {
 }
 
 func TestCacheDeleteByUser(t *testing.T) {
+	t.Parallel()
 	_, cache := setupMiniRedis(t)
 	ctx := context.Background()
 	userID := uuid.New()
@@ -62,9 +65,9 @@ func TestCacheDeleteByUser(t *testing.T) {
 	otherUser := uuid.New()
 
 	// Set entries for our user and another user
-	cache.Set(ctx, userID, ch1, permissions.ViewChannels)
-	cache.Set(ctx, userID, ch2, permissions.SendMessages)
-	cache.Set(ctx, otherUser, ch1, permissions.ViewChannels)
+	_ = cache.Set(ctx, userID, ch1, permissions.ViewChannels)
+	_ = cache.Set(ctx, userID, ch2, permissions.SendMessages)
+	_ = cache.Set(ctx, otherUser, ch1, permissions.ViewChannels)
 
 	if err := cache.DeleteByUser(ctx, userID); err != nil {
 		t.Fatalf("DeleteByUser() error = %v", err)
@@ -88,6 +91,7 @@ func TestCacheDeleteByUser(t *testing.T) {
 }
 
 func TestCacheDeleteByChannel(t *testing.T) {
+	t.Parallel()
 	_, cache := setupMiniRedis(t)
 	ctx := context.Background()
 	channelID := uuid.New()
@@ -95,9 +99,9 @@ func TestCacheDeleteByChannel(t *testing.T) {
 	u2 := uuid.New()
 	otherChannel := uuid.New()
 
-	cache.Set(ctx, u1, channelID, permissions.ViewChannels)
-	cache.Set(ctx, u2, channelID, permissions.SendMessages)
-	cache.Set(ctx, u1, otherChannel, permissions.ViewChannels)
+	_ = cache.Set(ctx, u1, channelID, permissions.ViewChannels)
+	_ = cache.Set(ctx, u2, channelID, permissions.SendMessages)
+	_ = cache.Set(ctx, u1, otherChannel, permissions.ViewChannels)
 
 	if err := cache.DeleteByChannel(ctx, channelID); err != nil {
 		t.Fatalf("DeleteByChannel() error = %v", err)
@@ -119,14 +123,15 @@ func TestCacheDeleteByChannel(t *testing.T) {
 }
 
 func TestCacheDeleteExact(t *testing.T) {
+	t.Parallel()
 	_, cache := setupMiniRedis(t)
 	ctx := context.Background()
 	userID := uuid.New()
 	ch1 := uuid.New()
 	ch2 := uuid.New()
 
-	cache.Set(ctx, userID, ch1, permissions.ViewChannels)
-	cache.Set(ctx, userID, ch2, permissions.SendMessages)
+	_ = cache.Set(ctx, userID, ch1, permissions.ViewChannels)
+	_ = cache.Set(ctx, userID, ch2, permissions.SendMessages)
 
 	if err := cache.DeleteExact(ctx, userID, ch1); err != nil {
 		t.Fatalf("DeleteExact() error = %v", err)
@@ -144,6 +149,7 @@ func TestCacheDeleteExact(t *testing.T) {
 }
 
 func TestCacheTTLApplied(t *testing.T) {
+	t.Parallel()
 	mr, cache := setupMiniRedis(t)
 	ctx := context.Background()
 	userID := uuid.New()

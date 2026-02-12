@@ -3,6 +3,7 @@ package auth
 import "testing"
 
 func TestHashAndVerifyPassword(t *testing.T) {
+	t.Parallel()
 	password := "testPassword123!"
 
 	hash, err := HashPassword(password, 65536, 1, 1, 16, 32)
@@ -24,6 +25,7 @@ func TestHashAndVerifyPassword(t *testing.T) {
 }
 
 func TestVerifyPasswordWrong(t *testing.T) {
+	t.Parallel()
 	hash, err := HashPassword("correctPassword", 65536, 1, 1, 16, 32)
 	if err != nil {
 		t.Fatalf("HashPassword() error = %v", err)

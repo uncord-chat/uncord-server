@@ -13,7 +13,12 @@ import (
 
 // AuthHandler serves authentication endpoints.
 type AuthHandler struct {
-	Auth *auth.Service
+	auth *auth.Service
+}
+
+// NewAuthHandler creates a new authentication handler.
+func NewAuthHandler(svc *auth.Service) *AuthHandler {
+	return &AuthHandler{auth: svc}
 }
 
 // authResponse maps a service AuthResult to the protocol response type.
@@ -32,7 +37,7 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "Invalid request body")
 	}
 
-	result, err := h.Auth.Register(c.Context(), auth.RegisterRequest{
+	result, err := h.auth.Register(c.Context(), auth.RegisterRequest{
 		Email:    body.Email,
 		Username: body.Username,
 		Password: body.Password,
@@ -51,7 +56,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "Invalid request body")
 	}
 
-	result, err := h.Auth.Login(c.Context(), auth.LoginRequest{
+	result, err := h.auth.Login(c.Context(), auth.LoginRequest{
 		Email:    body.Email,
 		Password: body.Password,
 		IP:       c.IP(),
@@ -73,7 +78,7 @@ func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "refresh_token is required")
 	}
 
-	tokens, err := h.Auth.Refresh(c.Context(), body.RefreshToken)
+	tokens, err := h.auth.Refresh(c.Context(), body.RefreshToken)
 	if err != nil {
 		return mapAuthError(c, err)
 	}
@@ -94,7 +99,7 @@ func (h *AuthHandler) VerifyEmail(c *fiber.Ctx) error {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "token is required")
 	}
 
-	if err := h.Auth.VerifyEmail(c.Context(), body.Token); err != nil {
+	if err := h.auth.VerifyEmail(c.Context(), body.Token); err != nil {
 		return mapAuthError(c, err)
 	}
 

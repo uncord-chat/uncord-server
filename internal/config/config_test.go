@@ -1,11 +1,11 @@
 package config
 
 import (
-	"os"
 	"strings"
 	"testing"
 )
 
+// TestLoadDefaults is not t.Parallel because it mutates process-wide environment variables.
 func TestLoadDefaults(t *testing.T) {
 	// Clear any env vars that would override defaults
 	keys := []string{
@@ -22,7 +22,6 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	for _, k := range keys {
 		t.Setenv(k, "")
-		os.Unsetenv(k)
 	}
 
 	// JWT_SECRET is required by validation
@@ -112,9 +111,7 @@ func TestLoadDefaults(t *testing.T) {
 }
 
 func TestLoadValidationRequiresJWTSecret(t *testing.T) {
-	// Ensure JWT_SECRET is unset
 	t.Setenv("JWT_SECRET", "")
-	os.Unsetenv("JWT_SECRET")
 
 	_, err := Load()
 	if err == nil {

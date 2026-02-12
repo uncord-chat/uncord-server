@@ -22,8 +22,7 @@ func HashPassword(password string, memory, iterations uint32, parallelism uint8,
 	return hash, nil
 }
 
-// VerifyPassword checks whether a plaintext password matches the given
-// argon2id hash.
+// VerifyPassword checks whether a plaintext password matches the given argon2id hash.
 func VerifyPassword(password, hash string) (bool, error) {
 	match, err := argon2id.ComparePasswordAndHash(password, hash)
 	if err != nil {

@@ -14,6 +14,7 @@ import (
 )
 
 func TestRequireAuthNoHeader(t *testing.T) {
+	t.Parallel()
 	app := fiber.New()
 	app.Use(RequireAuth("secret", ""))
 	app.Get("/test", func(c *fiber.Ctx) error {
@@ -37,6 +38,7 @@ func TestRequireAuthNoHeader(t *testing.T) {
 }
 
 func TestRequireAuthBadFormat(t *testing.T) {
+	t.Parallel()
 	app := fiber.New()
 	app.Use(RequireAuth("secret", ""))
 	app.Get("/test", func(c *fiber.Ctx) error {
@@ -56,6 +58,7 @@ func TestRequireAuthBadFormat(t *testing.T) {
 }
 
 func TestRequireAuthExpiredToken(t *testing.T) {
+	t.Parallel()
 	app := fiber.New()
 	secret := "test-secret"
 	app.Use(RequireAuth(secret, ""))
@@ -87,6 +90,7 @@ func TestRequireAuthExpiredToken(t *testing.T) {
 }
 
 func TestRequireAuthValid(t *testing.T) {
+	t.Parallel()
 	app := fiber.New()
 	secret := "test-secret"
 	userID := uuid.New()
@@ -123,6 +127,7 @@ func TestRequireAuthValid(t *testing.T) {
 }
 
 func TestRequireAuthWrongSignature(t *testing.T) {
+	t.Parallel()
 	app := fiber.New()
 	app.Use(RequireAuth("correct-secret", ""))
 	app.Get("/test", func(c *fiber.Ctx) error {

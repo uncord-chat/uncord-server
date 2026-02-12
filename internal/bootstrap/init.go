@@ -19,8 +19,7 @@ import (
 
 var sanitizeUsername = regexp.MustCompile(`[^a-zA-Z0-9_.]`)
 
-// DefaultEveryonePermissions is the permission bitfield assigned to the
-// @everyone role during first-run initialization.
+// DefaultEveryonePermissions is the permission bitfield assigned to the @everyone role during first-run initialization.
 var DefaultEveryonePermissions = permissions.ViewChannels |
 	permissions.SendMessages |
 	permissions.ReadMessageHistory |
@@ -41,11 +40,16 @@ func IsFirstRun(ctx context.Context, db *pgxpool.Pool) (bool, error) {
 	return count == 0, nil
 }
 
-// RunFirstInit seeds the database with the owner account, default roles,
-// channels, and onboarding config inside a single transaction.
+// RunFirstInit seeds the database with the owner account, default roles, channels, and onboarding config inside a
+// single transaction.
 func RunFirstInit(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) error {
 	if cfg.InitOwnerEmail == "" || cfg.InitOwnerPassword == "" {
 		return fmt.Errorf("INIT_OWNER_EMAIL and INIT_OWNER_PASSWORD must be set for first-run initialization")
+	}
+
+	ownerEmail, _, err := auth.ValidateEmail(cfg.InitOwnerEmail)
+	if err != nil {
+		return fmt.Errorf("invalid INIT_OWNER_EMAIL: %w", err)
 	}
 
 	hash, err := auth.HashPassword(
@@ -61,7 +65,7 @@ func RunFirstInit(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) err
 	}
 
 	// Derive username from email local part, stripping invalid characters.
-	username := cfg.InitOwnerEmail
+	username := ownerEmail
 	if idx := strings.Index(username, "@"); idx > 0 {
 		username = username[:idx]
 	}
@@ -86,7 +90,7 @@ func RunFirstInit(ctx context.Context, db *pgxpool.Pool, cfg *config.Config) err
 		`INSERT INTO users (email, username, password_hash, email_verified)
 		 VALUES ($1, $2, $3, true)
 		 RETURNING id`,
-		cfg.InitOwnerEmail, username, hash,
+		ownerEmail, username, hash,
 	).Scan(&ownerID)
 	if err != nil {
 		return fmt.Errorf("insert owner user: %w", err)

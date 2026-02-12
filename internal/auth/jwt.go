@@ -38,8 +38,8 @@ func NewAccessToken(userID uuid.UUID, secret string, ttl time.Duration, issuer s
 	return signed, nil
 }
 
-// ValidateAccessToken parses and validates a JWT access token string,
-// enforcing HMAC signing method and optional issuer check.
+// ValidateAccessToken parses and validates a JWT access token string, enforcing HMAC signing method and optional
+// issuer check.
 func ValidateAccessToken(tokenStr, secret, issuer string) (*AccessClaims, error) {
 	claims := &AccessClaims{}
 

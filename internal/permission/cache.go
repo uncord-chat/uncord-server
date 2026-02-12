@@ -40,16 +40,16 @@ type Cache interface {
 
 // ValkeyCache implements Cache using Valkey/Redis.
 type ValkeyCache struct {
-	Client *redis.Client
+	client *redis.Client
 }
 
 // NewValkeyCache creates a new Valkey-backed permission cache.
 func NewValkeyCache(client *redis.Client) *ValkeyCache {
-	return &ValkeyCache{Client: client}
+	return &ValkeyCache{client: client}
 }
 
 func (c *ValkeyCache) Get(ctx context.Context, userID, channelID uuid.UUID) (permissions.Permission, bool, error) {
-	val, err := c.Client.Get(ctx, cacheKey(userID, channelID)).Result()
+	val, err := c.client.Get(ctx, cacheKey(userID, channelID)).Result()
 	if err == redis.Nil {
 		return 0, false, nil
 	}
@@ -66,7 +66,7 @@ func (c *ValkeyCache) Get(ctx context.Context, userID, channelID uuid.UUID) (per
 }
 
 func (c *ValkeyCache) Set(ctx context.Context, userID, channelID uuid.UUID, perm permissions.Permission) error {
-	err := c.Client.Set(ctx, cacheKey(userID, channelID), strconv.FormatInt(int64(perm), 10), CacheTTL).Err()
+	err := c.client.Set(ctx, cacheKey(userID, channelID), strconv.FormatInt(int64(perm), 10), CacheTTL).Err()
 	if err != nil {
 		return fmt.Errorf("cache set: %w", err)
 	}
@@ -82,18 +82,18 @@ func (c *ValkeyCache) DeleteByChannel(ctx context.Context, channelID uuid.UUID) 
 }
 
 func (c *ValkeyCache) DeleteExact(ctx context.Context, userID, channelID uuid.UUID) error {
-	return c.Client.Del(ctx, cacheKey(userID, channelID)).Err()
+	return c.client.Del(ctx, cacheKey(userID, channelID)).Err()
 }
 
 func (c *ValkeyCache) scanAndDelete(ctx context.Context, pattern string) error {
 	var cursor uint64
 	for {
-		keys, next, err := c.Client.Scan(ctx, cursor, pattern, scanBatchSize).Result()
+		keys, next, err := c.client.Scan(ctx, cursor, pattern, scanBatchSize).Result()
 		if err != nil {
 			return fmt.Errorf("scan keys %q: %w", pattern, err)
 		}
 		if len(keys) > 0 {
-			if err := c.Client.Del(ctx, keys...).Err(); err != nil {
+			if err := c.client.Del(ctx, keys...).Err(); err != nil {
 				return fmt.Errorf("delete keys: %w", err)
 			}
 		}

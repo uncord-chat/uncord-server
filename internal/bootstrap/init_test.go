@@ -7,6 +7,8 @@ import (
 )
 
 func TestDefaultEveryonePermissions(t *testing.T) {
+	t.Parallel()
+
 	// Permissions that MUST be set on @everyone
 	required := []struct {
 		perm permissions.Permission
@@ -24,9 +26,12 @@ func TestDefaultEveryonePermissions(t *testing.T) {
 	}
 
 	for _, tt := range required {
-		if !DefaultEveryonePermissions.Has(tt.perm) {
-			t.Errorf("DefaultEveryonePermissions missing %s", tt.name)
-		}
+		t.Run("required/"+tt.name, func(t *testing.T) {
+			t.Parallel()
+			if !DefaultEveryonePermissions.Has(tt.perm) {
+				t.Errorf("DefaultEveryonePermissions missing %s", tt.name)
+			}
+		})
 	}
 
 	// Privileged permissions that MUST NOT be set on @everyone
@@ -46,8 +51,11 @@ func TestDefaultEveryonePermissions(t *testing.T) {
 	}
 
 	for _, tt := range forbidden {
-		if DefaultEveryonePermissions.Has(tt.perm) {
-			t.Errorf("DefaultEveryonePermissions should not include %s", tt.name)
-		}
+		t.Run("forbidden/"+tt.name, func(t *testing.T) {
+			t.Parallel()
+			if DefaultEveryonePermissions.Has(tt.perm) {
+				t.Errorf("DefaultEveryonePermissions should not include %s", tt.name)
+			}
+		})
 	}
 }

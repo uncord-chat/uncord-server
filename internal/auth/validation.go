@@ -8,8 +8,10 @@ import (
 
 var usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9_.]+$`)
 
-// ValidateEmail parses and normalizes an email address, returning the
-// normalized form and domain. Returns ErrInvalidEmail if the format is invalid.
+const maxEmailLength = 254
+
+// ValidateEmail parses and normalizes an email address, returning the normalized form and domain. Returns
+// ErrInvalidEmail if the format is invalid or the address exceeds the RFC 5321 maximum of 254 characters.
 func ValidateEmail(email string) (normalized, domain string, err error) {
 	addr, parseErr := mail.ParseAddress(email)
 	if parseErr != nil {
@@ -17,6 +19,10 @@ func ValidateEmail(email string) (normalized, domain string, err error) {
 	}
 
 	normalized = strings.ToLower(addr.Address)
+
+	if len(normalized) > maxEmailLength {
+		return "", "", ErrInvalidEmail
+	}
 
 	parts := strings.SplitN(normalized, "@", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
@@ -26,8 +32,8 @@ func ValidateEmail(email string) (normalized, domain string, err error) {
 	return normalized, parts[1], nil
 }
 
-// ValidateUsername checks that a username is 2-32 characters and only contains
-// letters, digits, underscores, and periods.
+// ValidateUsername checks a username is 2-32 characters and only contains letters, digits, underscores, and periods.
+// len() is used intentionally because usernameRegex restricts to ASCII, where byte count equals rune count.
 func ValidateUsername(username string) error {
 	if len(username) < 2 || len(username) > 32 {
 		return ErrUsernameLength

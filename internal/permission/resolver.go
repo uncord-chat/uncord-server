@@ -11,22 +11,21 @@ import (
 
 // Resolver computes effective permissions for a user in a channel.
 type Resolver struct {
-	Store Store
-	Cache Cache
+	store Store
+	cache Cache
 }
 
 // NewResolver creates a new permission resolver.
 func NewResolver(store Store, cache Cache) *Resolver {
-	return &Resolver{Store: store, Cache: cache}
+	return &Resolver{store: store, cache: cache}
 }
 
-// Resolve returns the effective permissions for a user in a channel, using
-// the cache when available.
+// Resolve returns the effective permissions for a user in a channel, using the cache when available.
 func (r *Resolver) Resolve(ctx context.Context, userID, channelID uuid.UUID) (permissions.Permission, error) {
 	// Check cache first
-	perm, ok, err := r.Cache.Get(ctx, userID, channelID)
+	perm, ok, err := r.cache.Get(ctx, userID, channelID)
 	if err != nil {
-		// Cache error is non-fatal — fall through to compute
+		// Cache error is non-fatal; fall through to compute
 		log.Warn().Err(err).Msg("Permission cache get failed, falling through to compute")
 	}
 	if ok {
@@ -39,7 +38,7 @@ func (r *Resolver) Resolve(ctx context.Context, userID, channelID uuid.UUID) (pe
 	}
 
 	// Cache the result (best-effort)
-	if cacheErr := r.Cache.Set(ctx, userID, channelID, perm); cacheErr != nil {
+	if cacheErr := r.cache.Set(ctx, userID, channelID, perm); cacheErr != nil {
 		log.Warn().Err(cacheErr).Msg("Permission cache set failed")
 	}
 
@@ -58,7 +57,7 @@ func (r *Resolver) HasPermission(ctx context.Context, userID, channelID uuid.UUI
 // compute runs the 4-step permission algorithm.
 func (r *Resolver) compute(ctx context.Context, userID, channelID uuid.UUID) (permissions.Permission, error) {
 	// Step 1: Owner bypass
-	isOwner, err := r.Store.IsOwner(ctx, userID)
+	isOwner, err := r.store.IsOwner(ctx, userID)
 	if err != nil {
 		return 0, fmt.Errorf("check owner: %w", err)
 	}
@@ -67,7 +66,7 @@ func (r *Resolver) compute(ctx context.Context, userID, channelID uuid.UUID) (pe
 	}
 
 	// Step 2: Role union
-	roleEntries, err := r.Store.RolePermissions(ctx, userID)
+	roleEntries, err := r.store.RolePermissions(ctx, userID)
 	if err != nil {
 		return 0, fmt.Errorf("get role permissions: %w", err)
 	}
@@ -85,13 +84,13 @@ func (r *Resolver) compute(ctx context.Context, userID, channelID uuid.UUID) (pe
 	}
 
 	// Step 3: Category overrides
-	chanInfo, err := r.Store.ChannelInfo(ctx, channelID)
+	chanInfo, err := r.store.ChannelInfo(ctx, channelID)
 	if err != nil {
 		return 0, fmt.Errorf("get channel info: %w", err)
 	}
 
 	if chanInfo.CategoryID != nil {
-		catOverrides, err := r.Store.Overrides(ctx, TargetCategory, *chanInfo.CategoryID)
+		catOverrides, err := r.store.Overrides(ctx, TargetCategory, *chanInfo.CategoryID)
 		if err != nil {
 			return 0, fmt.Errorf("get category overrides: %w", err)
 		}
@@ -99,7 +98,7 @@ func (r *Resolver) compute(ctx context.Context, userID, channelID uuid.UUID) (pe
 	}
 
 	// Step 4: Channel overrides
-	chanOverrides, err := r.Store.Overrides(ctx, TargetChannel, channelID)
+	chanOverrides, err := r.store.Overrides(ctx, TargetChannel, channelID)
 	if err != nil {
 		return 0, fmt.Errorf("get channel overrides: %w", err)
 	}
@@ -108,9 +107,8 @@ func (r *Resolver) compute(ctx context.Context, userID, channelID uuid.UUID) (pe
 	return base, nil
 }
 
-// applyOverrides applies permission overrides to a base bitfield.
-// Role overrides for roles the user holds are merged first, then the
-// user-specific override is applied on top.
+// applyOverrides applies permission overrides to a base bitfield. Role overrides for roles the user holds are merged
+// first, then the user-specific override is applied on top.
 func applyOverrides(base permissions.Permission, overrides []Override, userRoles map[uuid.UUID]struct{}, userID uuid.UUID) permissions.Permission {
 	var roleAllow, roleDeny permissions.Permission
 	var userOverride *Override

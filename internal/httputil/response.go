@@ -14,7 +14,7 @@ type SuccessResponse struct {
 // ErrorBody holds structured error details.
 type ErrorBody struct {
 	Code    apierrors.Code `json:"code"`
-	Message string            `json:"message"`
+	Message string         `json:"message"`
 }
 
 // ErrorResponse wraps failed API responses.

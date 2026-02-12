@@ -12,8 +12,8 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 )
 
-// RequireAuth returns Fiber middleware that validates a JWT Bearer token from
-// the Authorization header and stores the user ID in c.Locals("userID").
+// RequireAuth returns Fiber middleware that validates a JWT Bearer token from the Authorization header and stores the
+// user ID in c.Locals("userID").
 func RequireAuth(secret, issuer string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		header := c.Get("Authorization")

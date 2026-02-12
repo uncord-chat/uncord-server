@@ -2,16 +2,16 @@ package typesense
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
 )
 
-// EnsureMessagesCollection creates the messages collection in Typesense if it
-// does not already exist. Returns true if the collection was created, false if
-// it already existed. A 409 (conflict) response is treated as success.
-func EnsureMessagesCollection(baseURL, apiKey string) (bool, error) {
+// EnsureMessagesCollection creates the messages collection in Typesense if it does not already exist. Returns true if
+// the collection was created, false if it already existed. A 409 (conflict) response is treated as success.
+func EnsureMessagesCollection(ctx context.Context, baseURL, apiKey string) (bool, error) {
 	schema := map[string]any{
 		"name": "messages",
 		"fields": []map[string]any{
@@ -31,7 +31,7 @@ func EnsureMessagesCollection(baseURL, apiKey string) (bool, error) {
 
 	client := &http.Client{Timeout: 10 * time.Second}
 
-	req, err := http.NewRequest(http.MethodPost, baseURL+"/collections", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/collections", bytes.NewReader(body))
 	if err != nil {
 		return false, fmt.Errorf("create typesense request: %w", err)
 	}
@@ -48,7 +48,7 @@ func EnsureMessagesCollection(baseURL, apiKey string) (bool, error) {
 		return false, nil
 	}
 
-	if resp.StatusCode >= 300 {
+	if resp.StatusCode >= 400 {
 		return false, fmt.Errorf("typesense returned status %d", resp.StatusCode)
 	}
 

@@ -25,8 +25,8 @@ type User struct {
 	EmailVerified bool
 }
 
-// CreateParams groups the inputs for creating a new user. When VerifyToken is
-// non-empty, an email_verifications row is inserted in the same transaction.
+// CreateParams groups the inputs for creating a new user. When VerifyToken is non-empty, an email_verifications row is
+// inserted in the same transaction.
 type CreateParams struct {
 	Email        string
 	Username     string

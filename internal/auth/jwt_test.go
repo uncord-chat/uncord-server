@@ -9,6 +9,7 @@ import (
 )
 
 func TestNewAccessTokenAndValidate(t *testing.T) {
+	t.Parallel()
 	userID := uuid.New()
 	secret := "test-secret-key-for-jwt"
 
@@ -28,6 +29,7 @@ func TestNewAccessTokenAndValidate(t *testing.T) {
 }
 
 func TestNewAccessTokenEmptySecret(t *testing.T) {
+	t.Parallel()
 	_, err := NewAccessToken(uuid.New(), "", 15*time.Minute, "")
 	if err == nil {
 		t.Fatal("NewAccessToken() with empty secret should return error")
@@ -35,6 +37,7 @@ func TestNewAccessTokenEmptySecret(t *testing.T) {
 }
 
 func TestValidateAccessTokenExpired(t *testing.T) {
+	t.Parallel()
 	userID := uuid.New()
 	secret := "test-secret"
 
@@ -60,6 +63,7 @@ func TestValidateAccessTokenExpired(t *testing.T) {
 }
 
 func TestValidateAccessTokenWrongSecret(t *testing.T) {
+	t.Parallel()
 	userID := uuid.New()
 
 	tokenStr, err := NewAccessToken(userID, "correct-secret", 15*time.Minute, "")
@@ -74,6 +78,7 @@ func TestValidateAccessTokenWrongSecret(t *testing.T) {
 }
 
 func TestValidateAccessTokenMalformed(t *testing.T) {
+	t.Parallel()
 	_, err := ValidateAccessToken("not.a.valid.jwt", "secret", "")
 	if err == nil {
 		t.Fatal("ValidateAccessToken() with malformed token should return error")

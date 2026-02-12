@@ -18,22 +18,33 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/user"
 )
 
-// Service implements authentication business logic, keeping HTTP handlers
-// thin and focused on request parsing / response formatting.
+// Service implements authentication business logic, keeping HTTP handlers thin and focused on request parsing /
+// response formatting.
 type Service struct {
 	users     user.Repository
 	redis     *redis.Client
 	config    *config.Config
 	blocklist *disposable.Blocklist
+	// dummyHash is a precomputed Argon2id hash used to keep login timing constant when a user is not found,
+	// preventing email enumeration via response-time analysis.
+	dummyHash string
 }
 
 // NewService creates a new authentication service.
 func NewService(users user.Repository, rdb *redis.Client, cfg *config.Config, bl *disposable.Blocklist) *Service {
+	// Generate a dummy hash at startup so VerifyPassword always runs against a real Argon2id hash even when the user
+	// does not exist.
+	dummy, err := HashPassword("uncord-dummy-password", cfg.Argon2Memory, cfg.Argon2Iterations, cfg.Argon2Parallelism, cfg.Argon2SaltLength, cfg.Argon2KeyLength)
+	if err != nil {
+		// This should never fail with valid config; fall back to a static hash so the service can still start.
+		dummy = "$argon2id$v=19$m=65536,t=3,p=2$c2FsdHNhbHRzYWx0$placeholder"
+	}
 	return &Service{
 		users:     users,
 		redis:     rdb,
 		config:    cfg,
 		blocklist: bl,
+		dummyHash: dummy,
 	}
 }
 
@@ -64,8 +75,8 @@ type TokenPair struct {
 	RefreshToken string
 }
 
-// Register validates inputs, creates the user with an email verification
-// token in a single transaction, and returns auth tokens.
+// Register validates inputs, creates the user with an email verification token in a single transaction, and returns
+// auth tokens.
 func (s *Service) Register(ctx context.Context, req RegisterRequest) (*AuthResult, error) {
 	email, domain, err := ValidateEmail(req.Email)
 	if err != nil {
@@ -78,7 +89,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*AuthResul
 		return nil, err
 	}
 
-	blocked, err := s.blocklist.IsBlocked(domain)
+	blocked, err := s.blocklist.IsBlocked(ctx, domain)
 	if err != nil {
 		log.Warn().Err(err).Msg("Disposable email check failed")
 	}
@@ -151,6 +162,9 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*AuthResult, err
 	u, err := s.users.GetByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, user.ErrNotFound) {
+			// Hash against a dummy value to prevent timing-based email enumeration. Without this, "user not found" returns
+			// faster than "wrong password" because Argon2id is skipped.
+			_, _ = VerifyPassword(req.Password, s.dummyHash)
 			s.recordLoginAttempt(ctx, email, req.IP, false)
 			return nil, ErrInvalidCredentials
 		}

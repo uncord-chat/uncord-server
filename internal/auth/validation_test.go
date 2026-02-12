@@ -6,6 +6,8 @@ import (
 )
 
 func TestValidateEmail(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		input      string
@@ -23,10 +25,13 @@ func TestValidateEmail(t *testing.T) {
 		{"invalid no domain", "user@", "", "", true},
 		{"invalid no local", "@example.com", "", "", true},
 		{"invalid spaces", "user @example.com", "", "", true},
+		{"too long", strings.Repeat("a", 243) + "@example.com", "", "", true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			norm, domain, err := ValidateEmail(tt.input)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidateEmail(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
@@ -43,6 +48,8 @@ func TestValidateEmail(t *testing.T) {
 }
 
 func TestValidateUsername(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		input   string
@@ -65,6 +72,8 @@ func TestValidateUsername(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			err := ValidateUsername(tt.input)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidateUsername(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
@@ -80,6 +89,8 @@ func TestValidateUsername(t *testing.T) {
 }
 
 func TestValidatePassword(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		input   string
@@ -96,6 +107,8 @@ func TestValidatePassword(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			err := ValidatePassword(tt.input)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidatePassword(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)

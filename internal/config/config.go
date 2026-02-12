@@ -65,9 +65,8 @@ type Config struct {
 	CORSAllowOrigins string
 }
 
-// Load reads configuration from environment variables with defaults matching
-// .env.example. It returns an error if any variable is set but cannot be
-// parsed, or if required security values are missing.
+// Load reads configuration from environment variables with defaults matching .env.example. It returns an error if any
+// variable is set but cannot be parsed, or if required security values are missing.
 func Load() (*Config, error) {
 	p := &parser{}
 
@@ -84,11 +83,11 @@ func Load() (*Config, error) {
 
 		ValkeyURL: envStr("VALKEY_URL", "valkey://valkey:6379/0"),
 
-		Argon2Memory:      uint32(p.int("ARGON2_MEMORY", 65536)),
-		Argon2Iterations:  uint32(p.int("ARGON2_ITERATIONS", 3)),
-		Argon2Parallelism: uint8(p.int("ARGON2_PARALLELISM", 2)),
-		Argon2SaltLength:  uint32(p.int("ARGON2_SALT_LENGTH", 16)),
-		Argon2KeyLength:   uint32(p.int("ARGON2_KEY_LENGTH", 32)),
+		Argon2Memory:      p.uint32("ARGON2_MEMORY", 65536),
+		Argon2Iterations:  p.uint32("ARGON2_ITERATIONS", 3),
+		Argon2Parallelism: p.uint8("ARGON2_PARALLELISM", 2),
+		Argon2SaltLength:  p.uint32("ARGON2_SALT_LENGTH", 16),
+		Argon2KeyLength:   p.uint32("ARGON2_KEY_LENGTH", 32),
 
 		JWTSecret:     envStr("JWT_SECRET", ""),
 		JWTAccessTTL:  p.int("JWT_ACCESS_TTL", 900),
@@ -216,6 +215,32 @@ func (p *parser) bool(key string, fallback bool) bool {
 		return fallback
 	}
 	return b
+}
+
+func (p *parser) uint32(key string, fallback uint32) uint32 {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.ParseUint(v, 10, 32)
+	if err != nil {
+		p.errs = append(p.errs, fmt.Errorf("invalid value for %s: %q (expected unsigned 32-bit integer)", key, v))
+		return fallback
+	}
+	return uint32(n)
+}
+
+func (p *parser) uint8(key string, fallback uint8) uint8 {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.ParseUint(v, 10, 8)
+	if err != nil {
+		p.errs = append(p.errs, fmt.Errorf("invalid value for %s: %q (expected unsigned 8-bit integer)", key, v))
+		return fallback
+	}
+	return uint8(n)
 }
 
 func envStr(key, fallback string) string {

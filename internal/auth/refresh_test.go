@@ -19,6 +19,7 @@ func setupMiniredis(t *testing.T) (*miniredis.Miniredis, *redis.Client) {
 }
 
 func TestCreateAndValidateRefreshToken(t *testing.T) {
+	t.Parallel()
 	_, rdb := setupMiniredis(t)
 	ctx := context.Background()
 	userID := uuid.New()
@@ -41,6 +42,7 @@ func TestCreateAndValidateRefreshToken(t *testing.T) {
 }
 
 func TestValidateRefreshTokenNotFound(t *testing.T) {
+	t.Parallel()
 	_, rdb := setupMiniredis(t)
 	ctx := context.Background()
 
@@ -51,6 +53,7 @@ func TestValidateRefreshTokenNotFound(t *testing.T) {
 }
 
 func TestRotateRefreshToken(t *testing.T) {
+	t.Parallel()
 	_, rdb := setupMiniredis(t)
 	ctx := context.Background()
 	userID := uuid.New()
@@ -92,6 +95,7 @@ func TestRotateRefreshToken(t *testing.T) {
 }
 
 func TestRotateRefreshTokenReused(t *testing.T) {
+	t.Parallel()
 	_, rdb := setupMiniredis(t)
 	ctx := context.Background()
 	userID := uuid.New()
@@ -116,6 +120,7 @@ func TestRotateRefreshTokenReused(t *testing.T) {
 }
 
 func TestRevokeAllRefreshTokens(t *testing.T) {
+	t.Parallel()
 	_, rdb := setupMiniredis(t)
 	ctx := context.Background()
 	userID := uuid.New()
@@ -142,6 +147,7 @@ func TestRevokeAllRefreshTokens(t *testing.T) {
 }
 
 func TestRevokeAllRefreshTokensEmpty(t *testing.T) {
+	t.Parallel()
 	_, rdb := setupMiniredis(t)
 	ctx := context.Background()
 

@@ -1,6 +1,7 @@
 package disposable
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -8,9 +9,10 @@ import (
 )
 
 func TestBlocklistDisabled(t *testing.T) {
+	t.Parallel()
 	bl := NewBlocklist("http://unused", false)
 
-	blocked, err := bl.IsBlocked("mailinator.com")
+	blocked, err := bl.IsBlocked(context.Background(), "mailinator.com")
 	if err != nil {
 		t.Fatalf("IsBlocked() error = %v", err)
 	}
@@ -20,14 +22,15 @@ func TestBlocklistDisabled(t *testing.T) {
 }
 
 func TestBlocklistBlockedDomain(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("mailinator.com\nguerrillamail.com\n"))
+		_, _ = w.Write([]byte("mailinator.com\nguerrillamail.com\n"))
 	}))
 	defer srv.Close()
 
 	bl := NewBlocklist(srv.URL, true)
 
-	blocked, err := bl.IsBlocked("mailinator.com")
+	blocked, err := bl.IsBlocked(context.Background(), "mailinator.com")
 	if err != nil {
 		t.Fatalf("IsBlocked() error = %v", err)
 	}
@@ -37,14 +40,15 @@ func TestBlocklistBlockedDomain(t *testing.T) {
 }
 
 func TestBlocklistAllowedDomain(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("mailinator.com\nguerrillamail.com\n"))
+		_, _ = w.Write([]byte("mailinator.com\nguerrillamail.com\n"))
 	}))
 	defer srv.Close()
 
 	bl := NewBlocklist(srv.URL, true)
 
-	blocked, err := bl.IsBlocked("gmail.com")
+	blocked, err := bl.IsBlocked(context.Background(), "gmail.com")
 	if err != nil {
 		t.Fatalf("IsBlocked() error = %v", err)
 	}
@@ -54,6 +58,7 @@ func TestBlocklistAllowedDomain(t *testing.T) {
 }
 
 func TestBlocklistFetchError(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -61,26 +66,27 @@ func TestBlocklistFetchError(t *testing.T) {
 
 	bl := NewBlocklist(srv.URL, true)
 
-	_, err := bl.IsBlocked("test.com")
+	_, err := bl.IsBlocked(context.Background(), "test.com")
 	if err == nil {
 		t.Fatal("IsBlocked() should return error on fetch failure")
 	}
 }
 
 func TestBlocklistLazyCaching(t *testing.T) {
+	t.Parallel()
 	var fetchCount atomic.Int32
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fetchCount.Add(1)
-		w.Write([]byte("mailinator.com\n"))
+		_, _ = w.Write([]byte("mailinator.com\n"))
 	}))
 	defer srv.Close()
 
 	bl := NewBlocklist(srv.URL, true)
 
-	// Call multiple times — should only fetch once
+	// Call multiple times; should only fetch once
 	for i := 0; i < 5; i++ {
-		_, err := bl.IsBlocked("mailinator.com")
+		_, err := bl.IsBlocked(context.Background(), "mailinator.com")
 		if err != nil {
 			t.Fatalf("IsBlocked() call %d error = %v", i, err)
 		}
@@ -92,14 +98,15 @@ func TestBlocklistLazyCaching(t *testing.T) {
 }
 
 func TestBlocklistCaseInsensitive(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Mailinator.COM\n"))
+		_, _ = w.Write([]byte("Mailinator.COM\n"))
 	}))
 	defer srv.Close()
 
 	bl := NewBlocklist(srv.URL, true)
 
-	blocked, err := bl.IsBlocked("mailinator.com")
+	blocked, err := bl.IsBlocked(context.Background(), "mailinator.com")
 	if err != nil {
 		t.Fatalf("IsBlocked() error = %v", err)
 	}
@@ -109,18 +116,52 @@ func TestBlocklistCaseInsensitive(t *testing.T) {
 }
 
 func TestBlocklistCommentsAndBlanks(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("# comment\n\nmailinator.com\n\n# another comment\n"))
+		_, _ = w.Write([]byte("# comment\n\nmailinator.com\n\n# another comment\n"))
 	}))
 	defer srv.Close()
 
 	bl := NewBlocklist(srv.URL, true)
 
-	blocked, err := bl.IsBlocked("mailinator.com")
+	blocked, err := bl.IsBlocked(context.Background(), "mailinator.com")
 	if err != nil {
 		t.Fatalf("IsBlocked() error = %v", err)
 	}
 	if !blocked {
 		t.Error("IsBlocked() = false, want true")
 	}
+}
+
+func TestPrefetchLoadsBlocklist(t *testing.T) {
+	t.Parallel()
+	var fetchCount atomic.Int32
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fetchCount.Add(1)
+		_, _ = w.Write([]byte("mailinator.com\n"))
+	}))
+	defer srv.Close()
+
+	bl := NewBlocklist(srv.URL, true)
+	bl.Prefetch(context.Background())
+
+	// After prefetch, IsBlocked should not trigger another fetch
+	blocked, err := bl.IsBlocked(context.Background(), "mailinator.com")
+	if err != nil {
+		t.Fatalf("IsBlocked() error = %v", err)
+	}
+	if !blocked {
+		t.Error("IsBlocked(mailinator.com) = false after Prefetch, want true")
+	}
+
+	if fetchCount.Load() != 1 {
+		t.Errorf("fetch count = %d, want 1 (prefetch only)", fetchCount.Load())
+	}
+}
+
+func TestPrefetchDisabledNoop(t *testing.T) {
+	t.Parallel()
+	bl := NewBlocklist("http://unused", false)
+	bl.Prefetch(context.Background()) // should not panic or fetch
 }

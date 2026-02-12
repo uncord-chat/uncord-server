@@ -18,12 +18,12 @@ type InvalidationMessage struct {
 
 // Publisher sends cache invalidation messages via Valkey pub/sub.
 type Publisher struct {
-	Client *redis.Client
+	client *redis.Client
 }
 
 // NewPublisher creates a new invalidation publisher.
 func NewPublisher(client *redis.Client) *Publisher {
-	return &Publisher{Client: client}
+	return &Publisher{client: client}
 }
 
 // InvalidateUser publishes an invalidation for all cached permissions of a user.
@@ -46,24 +46,24 @@ func (p *Publisher) publish(ctx context.Context, msg InvalidationMessage) error 
 	if err != nil {
 		return fmt.Errorf("marshal invalidation: %w", err)
 	}
-	return p.Client.Publish(ctx, InvalidateChannel, data).Err()
+	return p.client.Publish(ctx, InvalidateChannel, data).Err()
 }
 
 // Subscriber listens for cache invalidation messages and removes cached entries.
 type Subscriber struct {
-	Cache  Cache
-	Client *redis.Client
+	cache  Cache
+	client *redis.Client
 }
 
 // NewSubscriber creates a new invalidation subscriber.
 func NewSubscriber(cache Cache, client *redis.Client) *Subscriber {
-	return &Subscriber{Cache: cache, Client: client}
+	return &Subscriber{cache: cache, client: client}
 }
 
-// Run subscribes to the invalidation channel and processes messages until the
-// context is cancelled. This method blocks and should be called in a goroutine.
+// Run subscribes to the invalidation channel and processes messages until the context is cancelled. This method blocks
+// and should be called in a goroutine.
 func (s *Subscriber) Run(ctx context.Context) error {
-	sub := s.Client.Subscribe(ctx, InvalidateChannel)
+	sub := s.client.Subscribe(ctx, InvalidateChannel)
 	defer sub.Close()
 
 	ch := sub.Channel()
@@ -90,11 +90,11 @@ func (s *Subscriber) handleMessage(ctx context.Context, payload string) {
 	var err error
 	switch {
 	case msg.UserID != nil && msg.ChannelID != nil:
-		err = s.Cache.DeleteExact(ctx, *msg.UserID, *msg.ChannelID)
+		err = s.cache.DeleteExact(ctx, *msg.UserID, *msg.ChannelID)
 	case msg.UserID != nil:
-		err = s.Cache.DeleteByUser(ctx, *msg.UserID)
+		err = s.cache.DeleteByUser(ctx, *msg.UserID)
 	case msg.ChannelID != nil:
-		err = s.Cache.DeleteByChannel(ctx, *msg.ChannelID)
+		err = s.cache.DeleteByChannel(ctx, *msg.ChannelID)
 	default:
 		return
 	}

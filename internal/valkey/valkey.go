@@ -8,8 +8,8 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Connect parses the Valkey URL, connects, and pings to verify the connection.
-// The valkey:// scheme is replaced with redis:// for go-redis compatibility.
+// Connect parses the Valkey URL, connects, and pings to verify the connection. The valkey:// scheme is replaced with
+// redis:// for go-redis compatibility.
 func Connect(ctx context.Context, url string) (*redis.Client, error) {
 	// go-redis only understands redis:// scheme
 	url = strings.Replace(url, "valkey://", "redis://", 1)

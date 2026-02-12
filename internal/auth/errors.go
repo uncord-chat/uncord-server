@@ -4,14 +4,13 @@ import "errors"
 
 // Token errors.
 var (
-	// ErrRefreshTokenReused is returned when a consumed refresh token is
-	// presented again, indicating potential token theft.
+	// ErrRefreshTokenReused is returned when a consumed refresh token is presented again, indicating potential token
+	// theft.
 	ErrRefreshTokenReused = errors.New("refresh token reused")
 )
 
-// Validation errors returned by ValidateEmail, ValidateUsername, and
-// ValidatePassword. These are sentinel values so callers can match with
-// errors.Is and the handler can map them to HTTP responses independently.
+// Validation errors returned by ValidateEmail, ValidateUsername, and ValidatePassword. These are sentinel values so
+// callers can match with errors.Is and the handler can map them to HTTP responses independently.
 var (
 	ErrInvalidEmail         = errors.New("invalid email format")
 	ErrUsernameLength       = errors.New("username must be between 2 and 32 characters")

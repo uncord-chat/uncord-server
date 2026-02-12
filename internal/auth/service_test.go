@@ -99,6 +99,7 @@ func newTestService(t *testing.T, repo *fakeRepository) *Service {
 // --- Register tests ---
 
 func TestServiceRegisterSuccess(t *testing.T) {
+	t.Parallel()
 	repo := newFakeRepository()
 	svc := newTestService(t, repo)
 	ctx := context.Background()
@@ -129,6 +130,7 @@ func TestServiceRegisterSuccess(t *testing.T) {
 }
 
 func TestServiceRegisterInvalidEmail(t *testing.T) {
+	t.Parallel()
 	repo := newFakeRepository()
 	svc := newTestService(t, repo)
 
@@ -143,6 +145,7 @@ func TestServiceRegisterInvalidEmail(t *testing.T) {
 }
 
 func TestServiceRegisterInvalidUsername(t *testing.T) {
+	t.Parallel()
 	repo := newFakeRepository()
 	svc := newTestService(t, repo)
 
@@ -157,6 +160,7 @@ func TestServiceRegisterInvalidUsername(t *testing.T) {
 }
 
 func TestServiceRegisterInvalidPassword(t *testing.T) {
+	t.Parallel()
 	repo := newFakeRepository()
 	svc := newTestService(t, repo)
 
@@ -171,6 +175,7 @@ func TestServiceRegisterInvalidPassword(t *testing.T) {
 }
 
 func TestServiceRegisterDuplicateEmail(t *testing.T) {
+	t.Parallel()
 	repo := newFakeRepository()
 	svc := newTestService(t, repo)
 	ctx := context.Background()
@@ -195,9 +200,10 @@ func TestServiceRegisterDuplicateEmail(t *testing.T) {
 }
 
 func TestServiceRegisterDisposableEmailBlocked(t *testing.T) {
+	t.Parallel()
 	repo := newFakeRepository()
 	_, rdb := setupMiniredis(t)
-	// Enable blocklist but with empty URL — won't load, IsBlocked returns error.
+	// Enable blocklist but with empty URL so it won't load; IsBlocked returns error.
 	// To properly test blocking, we need a blocklist that reports blocked.
 	// Since Blocklist is a concrete type we can't easily mock, test via integration:
 	// use a disabled blocklist for the non-blocking case (covered above).
@@ -223,6 +229,7 @@ func TestServiceRegisterDisposableEmailBlocked(t *testing.T) {
 }
 
 func TestServiceRegisterCreateFails(t *testing.T) {
+	t.Parallel()
 	repo := newFakeRepository()
 	repo.createErr = errors.New("database is down")
 	svc := newTestService(t, repo)
@@ -243,6 +250,7 @@ func TestServiceRegisterCreateFails(t *testing.T) {
 // --- Login tests ---
 
 func TestServiceLoginSuccess(t *testing.T) {
+	t.Parallel()
 	repo := newFakeRepository()
 	svc := newTestService(t, repo)
 	ctx := context.Background()
@@ -286,6 +294,7 @@ func TestServiceLoginSuccess(t *testing.T) {
 }
 
 func TestServiceLoginInvalidEmail(t *testing.T) {
+	t.Parallel()
 	repo := newFakeRepository()
 	svc := newTestService(t, repo)
 
@@ -300,6 +309,7 @@ func TestServiceLoginInvalidEmail(t *testing.T) {
 }
 
 func TestServiceLoginUserNotFound(t *testing.T) {
+	t.Parallel()
 	repo := newFakeRepository()
 	svc := newTestService(t, repo)
 
@@ -319,6 +329,7 @@ func TestServiceLoginUserNotFound(t *testing.T) {
 }
 
 func TestServiceLoginWrongPassword(t *testing.T) {
+	t.Parallel()
 	repo := newFakeRepository()
 	svc := newTestService(t, repo)
 	ctx := context.Background()
@@ -354,6 +365,7 @@ func TestServiceLoginWrongPassword(t *testing.T) {
 }
 
 func TestServiceLoginMFARequired(t *testing.T) {
+	t.Parallel()
 	repo := newFakeRepository()
 	svc := newTestService(t, repo)
 	ctx := context.Background()
@@ -380,6 +392,7 @@ func TestServiceLoginMFARequired(t *testing.T) {
 }
 
 func TestServiceLoginGetByEmailFails(t *testing.T) {
+	t.Parallel()
 	repo := newFakeRepository()
 	repo.getByEmailErr = errors.New("database timeout")
 	svc := newTestService(t, repo)
@@ -400,6 +413,7 @@ func TestServiceLoginGetByEmailFails(t *testing.T) {
 // --- Refresh tests ---
 
 func TestServiceRefreshSuccess(t *testing.T) {
+	t.Parallel()
 	repo := newFakeRepository()
 	svc := newTestService(t, repo)
 	ctx := context.Background()
@@ -430,6 +444,7 @@ func TestServiceRefreshSuccess(t *testing.T) {
 }
 
 func TestServiceRefreshTokenReused(t *testing.T) {
+	t.Parallel()
 	repo := newFakeRepository()
 	svc := newTestService(t, repo)
 	ctx := context.Background()
@@ -457,6 +472,7 @@ func TestServiceRefreshTokenReused(t *testing.T) {
 }
 
 func TestServiceRefreshInvalidToken(t *testing.T) {
+	t.Parallel()
 	repo := newFakeRepository()
 	svc := newTestService(t, repo)
 
@@ -469,6 +485,7 @@ func TestServiceRefreshInvalidToken(t *testing.T) {
 // --- VerifyEmail tests ---
 
 func TestServiceVerifyEmailSuccess(t *testing.T) {
+	t.Parallel()
 	repo := newFakeRepository()
 	svc := newTestService(t, repo)
 
@@ -479,6 +496,7 @@ func TestServiceVerifyEmailSuccess(t *testing.T) {
 }
 
 func TestServiceVerifyEmailInvalidToken(t *testing.T) {
+	t.Parallel()
 	repo := newFakeRepository()
 	svc := newTestService(t, repo)
 
@@ -489,6 +507,7 @@ func TestServiceVerifyEmailInvalidToken(t *testing.T) {
 }
 
 func TestServiceVerifyEmailRepoError(t *testing.T) {
+	t.Parallel()
 	repo := newFakeRepository()
 	repo.verifyErr = errors.New("database error")
 	svc := newTestService(t, repo)
@@ -505,6 +524,7 @@ func TestServiceVerifyEmailRepoError(t *testing.T) {
 // --- Token issuance integration ---
 
 func TestServiceRegisterTokensAreValid(t *testing.T) {
+	t.Parallel()
 	repo := newFakeRepository()
 	svc := newTestService(t, repo)
 	ctx := context.Background()
@@ -538,6 +558,7 @@ func TestServiceRegisterTokensAreValid(t *testing.T) {
 }
 
 func TestServiceLoginRecordsSuccessAttempt(t *testing.T) {
+	t.Parallel()
 	repo := newFakeRepository()
 	svc := newTestService(t, repo)
 	ctx := context.Background()
@@ -572,6 +593,7 @@ func TestServiceLoginRecordsSuccessAttempt(t *testing.T) {
 }
 
 func TestServiceRegisterNormalizesEmail(t *testing.T) {
+	t.Parallel()
 	repo := newFakeRepository()
 	svc := newTestService(t, repo)
 	ctx := context.Background()
@@ -590,6 +612,7 @@ func TestServiceRegisterNormalizesEmail(t *testing.T) {
 }
 
 func TestServiceRefreshIssuesNewAccessToken(t *testing.T) {
+	t.Parallel()
 	repo := newFakeRepository()
 	svc := newTestService(t, repo)
 	ctx := context.Background()

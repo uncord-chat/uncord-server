@@ -16,6 +16,8 @@ import (
 // gooseLogger adapts zerolog to the goose.Logger interface.
 type gooseLogger struct{}
 
+// Fatalf is intentionally downgraded to Error because the error from goose.Up is handled by the caller. Calling
+// log.Fatal here would bypass the structured error return in Migrate.
 func (gooseLogger) Fatalf(format string, v ...any) { log.Error().Msgf(format, v...) }
 func (gooseLogger) Printf(format string, v ...any) { log.Info().Msgf(format, v...) }
 

@@ -10,9 +10,8 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 )
 
-// RequirePermission returns Fiber middleware that checks whether the
-// authenticated user has the given permission in the channel specified by
-// the "channelID" route parameter.
+// RequirePermission returns Fiber middleware that checks whether the authenticated user has the given permission in
+// the channel specified by the "channelID" route parameter.
 func RequirePermission(resolver *Resolver, perm permissions.Permission) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		userIDVal := c.Locals("userID")
