@@ -23,6 +23,7 @@ func TestLoadDefaults(t *testing.T) {
 		"ONBOARDING_MIN_ACCOUNT_AGE", "ONBOARDING_REQUIRE_PHONE", "ONBOARDING_REQUIRE_CAPTCHA",
 		"MAX_UPLOAD_SIZE_MB",
 		"MAX_CHANNELS", "MAX_CATEGORIES",
+		"SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM",
 	}
 	for _, k := range keys {
 		t.Setenv(k, "")
@@ -127,6 +128,17 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.MaxCategories != 50 {
 		t.Errorf("MaxCategories = %d, want 50", cfg.MaxCategories)
+	}
+
+	// SMTP defaults
+	if cfg.SMTPHost != "" {
+		t.Errorf("SMTPHost = %q, want empty", cfg.SMTPHost)
+	}
+	if cfg.SMTPPort != 587 {
+		t.Errorf("SMTPPort = %d, want 587", cfg.SMTPPort)
+	}
+	if cfg.SMTPFrom != "noreply@chat.example.com" {
+		t.Errorf("SMTPFrom = %q, want %q", cfg.SMTPFrom, "noreply@chat.example.com")
 	}
 }
 
@@ -306,6 +318,92 @@ func TestIsDevelopment(t *testing.T) {
 		cfg := &Config{ServerEnv: tt.env}
 		if got := cfg.IsDevelopment(); got != tt.want {
 			t.Errorf("IsDevelopment() with env=%q = %v, want %v", tt.env, got, tt.want)
+		}
+	}
+}
+
+func TestLoadSMTPOverrides(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+	t.Setenv("SMTP_HOST", "mail.example.com")
+	t.Setenv("SMTP_PORT", "465")
+	t.Setenv("SMTP_USERNAME", "user@example.com")
+	t.Setenv("SMTP_PASSWORD", "secret")
+	t.Setenv("SMTP_FROM", "hello@example.com")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() returned unexpected error: %v", err)
+	}
+	if cfg.SMTPHost != "mail.example.com" {
+		t.Errorf("SMTPHost = %q, want %q", cfg.SMTPHost, "mail.example.com")
+	}
+	if cfg.SMTPPort != 465 {
+		t.Errorf("SMTPPort = %d, want 465", cfg.SMTPPort)
+	}
+	if cfg.SMTPUsername != "user@example.com" {
+		t.Errorf("SMTPUsername = %q, want %q", cfg.SMTPUsername, "user@example.com")
+	}
+	if cfg.SMTPPassword != "secret" {
+		t.Errorf("SMTPPassword = %q, want %q", cfg.SMTPPassword, "secret")
+	}
+	if cfg.SMTPFrom != "hello@example.com" {
+		t.Errorf("SMTPFrom = %q, want %q", cfg.SMTPFrom, "hello@example.com")
+	}
+}
+
+func TestLoadSMTPValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		host    string
+		port    string
+		from    string
+		wantErr string
+	}{
+		{
+			name:    "invalid port",
+			host:    "mail.example.com",
+			port:    "99999",
+			from:    "noreply@example.com",
+			wantErr: "SMTP_PORT",
+		},
+		{
+			name:    "invalid from address",
+			host:    "mail.example.com",
+			port:    "587",
+			from:    "not-an-email",
+			wantErr: "SMTP_FROM",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+			t.Setenv("SMTP_HOST", tt.host)
+			t.Setenv("SMTP_PORT", tt.port)
+			t.Setenv("SMTP_FROM", tt.from)
+
+			_, err := Load()
+			if err == nil {
+				t.Fatal("Load() returned nil error, want validation error")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("error %q does not mention %q", err.Error(), tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestSMTPConfigured(t *testing.T) {
+	tests := []struct {
+		host string
+		want bool
+	}{
+		{"", false},
+		{"mail.example.com", true},
+	}
+	for _, tt := range tests {
+		cfg := &Config{SMTPHost: tt.host}
+		if got := cfg.SMTPConfigured(); got != tt.want {
+			t.Errorf("SMTPConfigured() with host=%q = %v, want %v", tt.host, got, tt.want)
 		}
 	}
 }

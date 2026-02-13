@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/mail"
 	"os"
 	"strconv"
 	"time"
@@ -70,6 +71,13 @@ type Config struct {
 	MaxChannels   int
 	MaxCategories int
 
+	// SMTP
+	SMTPHost     string
+	SMTPPort     int
+	SMTPUsername string
+	SMTPPassword string
+	SMTPFrom     string
+
 	// CORS
 	CORSAllowOrigins string
 }
@@ -128,6 +136,12 @@ func Load() (*Config, error) {
 		MaxChannels:   p.int("MAX_CHANNELS", 500),
 		MaxCategories: p.int("MAX_CATEGORIES", 50),
 
+		SMTPHost:     envStr("SMTP_HOST", ""),
+		SMTPPort:     p.int("SMTP_PORT", 587),
+		SMTPUsername: envStr("SMTP_USERNAME", ""),
+		SMTPPassword: envStr("SMTP_PASSWORD", ""),
+		SMTPFrom:     envStr("SMTP_FROM", "noreply@chat.example.com"),
+
 		CORSAllowOrigins: envStr("CORS_ALLOW_ORIGINS", "*"),
 	}
 
@@ -145,6 +159,11 @@ func Load() (*Config, error) {
 // IsDevelopment returns true when running in development mode.
 func (c *Config) IsDevelopment() bool {
 	return c.ServerEnv == "development"
+}
+
+// SMTPConfigured returns true when an SMTP host is set, indicating that the server should attempt to send emails.
+func (c *Config) SMTPConfigured() bool {
+	return c.SMTPHost != ""
 }
 
 // BodyLimitBytes returns the maximum request body size in bytes, derived from MaxUploadSizeMB with a small margin for
@@ -215,6 +234,15 @@ func (c *Config) validate() error {
 	}
 	if c.RateLimitAuthWindowSeconds < 1 {
 		errs = append(errs, fmt.Errorf("RATE_LIMIT_AUTH_WINDOW_SECONDS must be at least 1"))
+	}
+
+	if c.SMTPHost != "" {
+		if c.SMTPPort < 1 || c.SMTPPort > 65535 {
+			errs = append(errs, fmt.Errorf("SMTP_PORT must be between 1 and 65535"))
+		}
+		if _, err := mail.ParseAddress(c.SMTPFrom); err != nil {
+			errs = append(errs, fmt.Errorf("SMTP_FROM is not a valid email address: %q", c.SMTPFrom))
+		}
 	}
 
 	return errors.Join(errs...)

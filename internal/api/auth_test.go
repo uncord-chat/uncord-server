@@ -116,7 +116,7 @@ func testAuthHandler(t *testing.T) (*AuthHandler, *fiber.App) {
 	}
 
 	bl := disposable.NewBlocklist("", false, zerolog.Nop())
-	svc, err := auth.NewService(newFakeRepo(), rdb, cfg, bl, zerolog.Nop())
+	svc, err := auth.NewService(newFakeRepo(), rdb, cfg, bl, nil, zerolog.Nop())
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}

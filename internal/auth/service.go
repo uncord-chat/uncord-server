@@ -18,6 +18,11 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/user"
 )
 
+// Sender sends transactional emails such as verification messages. Implementations must be safe for concurrent use.
+type Sender interface {
+	SendVerification(to, token, serverURL, serverName string) error
+}
+
 // Service implements authentication business logic, keeping HTTP handlers thin and focused on request parsing /
 // response formatting.
 type Service struct {
@@ -25,15 +30,17 @@ type Service struct {
 	redis     *redis.Client
 	config    *config.Config
 	blocklist *disposable.Blocklist
+	sender    Sender
 	log       zerolog.Logger
 	// dummyHash is a precomputed Argon2id hash used to keep login timing constant when a user is not found,
 	// preventing email enumeration via response-time analysis.
 	dummyHash string
 }
 
-// NewService creates a new authentication service. It returns an error if the Argon2id configuration is invalid,
-// since password hashing is fundamental to every auth operation.
-func NewService(users user.Repository, rdb *redis.Client, cfg *config.Config, bl *disposable.Blocklist, logger zerolog.Logger) (*Service, error) {
+// NewService creates a new authentication service. The sender parameter may be nil when SMTP is not configured; in that
+// case, verification emails are silently skipped. It returns an error if the Argon2id configuration is invalid, since
+// password hashing is fundamental to every auth operation.
+func NewService(users user.Repository, rdb *redis.Client, cfg *config.Config, bl *disposable.Blocklist, sender Sender, logger zerolog.Logger) (*Service, error) {
 	// Generate a dummy hash at startup so VerifyPassword always runs against a real Argon2id hash even when the user
 	// does not exist. A failure here means the Argon2 parameters are broken and no password operation will succeed.
 	dummy, err := HashPassword("uncord-dummy-password", cfg.Argon2Memory, cfg.Argon2Iterations, cfg.Argon2Parallelism, cfg.Argon2SaltLength, cfg.Argon2KeyLength)
@@ -45,6 +52,7 @@ func NewService(users user.Repository, rdb *redis.Client, cfg *config.Config, bl
 		redis:     rdb,
 		config:    cfg,
 		blocklist: bl,
+		sender:    sender,
 		log:       logger,
 		dummyHash: dummy,
 	}, nil
@@ -135,6 +143,12 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*AuthResul
 			Str("user_id", userID.String()).
 			Str("token", verifyToken).
 			Msg("Email verification token (dev mode)")
+	}
+
+	if s.sender != nil {
+		if err := s.sender.SendVerification(email, verifyToken, s.config.ServerURL, s.config.ServerName); err != nil {
+			s.log.Error().Err(err).Str("user_id", userID.String()).Msg("Failed to send verification email")
+		}
 	}
 
 	s.log.Debug().Str("user_id", userID.String()).Msg("User registered")

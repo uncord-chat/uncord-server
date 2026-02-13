@@ -30,6 +30,7 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/channel"
 	"github.com/uncord-chat/uncord-server/internal/config"
 	"github.com/uncord-chat/uncord-server/internal/disposable"
+	"github.com/uncord-chat/uncord-server/internal/email"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 	"github.com/uncord-chat/uncord-server/internal/permission"
 	"github.com/uncord-chat/uncord-server/internal/postgres"
@@ -180,12 +181,26 @@ func run() error {
 		}
 	}()
 
+	// SMTP client for transactional email (verification, password reset, etc.)
+	var emailSender auth.Sender
+	if cfg.SMTPConfigured() {
+		emailClient := email.NewClient(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom)
+		if err := emailClient.Ping(); err != nil {
+			log.Warn().Err(err).Msg("SMTP connection test failed. Verification emails may not be delivered.")
+		} else {
+			log.Info().Str("host", cfg.SMTPHost).Int("port", cfg.SMTPPort).Msg("SMTP connection verified")
+		}
+		emailSender = emailClient
+	} else {
+		log.Warn().Msg("SMTP_HOST is not configured. Email verification will only work in development mode (token logged to console).")
+	}
+
 	// Initialise repositories and services
 	userRepo := user.NewPGRepository(db, log.Logger)
 	serverRepo := servercfg.NewPGRepository(db, log.Logger)
 	channelRepo := channel.NewPGRepository(db, log.Logger)
 	categoryRepo := category.NewPGRepository(db, log.Logger)
-	authService, err := auth.NewService(userRepo, rdb, cfg, blocklist, log.Logger)
+	authService, err := auth.NewService(userRepo, rdb, cfg, blocklist, emailSender, log.Logger)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create auth service")
 	}

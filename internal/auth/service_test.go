@@ -136,7 +136,7 @@ func newTestService(t *testing.T, repo *fakeRepository) *Service {
 	t.Helper()
 	_, rdb := setupMiniredis(t)
 	bl := disposable.NewBlocklist("", false, zerolog.Nop())
-	svc, err := NewService(repo, rdb, testConfig(), bl, zerolog.Nop())
+	svc, err := NewService(repo, rdb, testConfig(), bl, nil, zerolog.Nop())
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -259,7 +259,7 @@ func TestServiceRegisterDisposableEmailBlocked(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	bl := disposable.NewBlocklist(srv.URL, true, zerolog.Nop())
-	svc, err := NewService(repo, rdb, testConfig(), bl, zerolog.Nop())
+	svc, err := NewService(repo, rdb, testConfig(), bl, nil, zerolog.Nop())
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -702,5 +702,101 @@ func TestServiceRefreshIssuesNewAccessToken(t *testing.T) {
 	// Refresh token should be rotated
 	if tokens.RefreshToken == result.RefreshToken {
 		t.Error("Refresh() returned same refresh token (should rotate)")
+	}
+}
+
+// --- Verification email tests ---
+
+type fakeSender struct {
+	calls []fakeSendCall
+	err   error
+}
+
+type fakeSendCall struct {
+	To         string
+	Token      string
+	ServerURL  string
+	ServerName string
+}
+
+func (f *fakeSender) SendVerification(to, token, serverURL, serverName string) error {
+	f.calls = append(f.calls, fakeSendCall{To: to, Token: token, ServerURL: serverURL, ServerName: serverName})
+	return f.err
+}
+
+func newTestServiceWithSender(t *testing.T, repo *fakeRepository, sender Sender) *Service {
+	t.Helper()
+	_, rdb := setupMiniredis(t)
+	bl := disposable.NewBlocklist("", false, zerolog.Nop())
+	svc, err := NewService(repo, rdb, testConfig(), bl, sender, zerolog.Nop())
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	return svc
+}
+
+func TestServiceRegisterSendsVerificationEmail(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	sender := &fakeSender{}
+	svc := newTestServiceWithSender(t, repo, sender)
+
+	_, err := svc.Register(context.Background(), RegisterRequest{
+		Email:    "alice@example.com",
+		Username: "alice",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	if len(sender.calls) != 1 {
+		t.Fatalf("sender called %d times, want 1", len(sender.calls))
+	}
+	call := sender.calls[0]
+	if call.To != "alice@example.com" {
+		t.Errorf("SendVerification to = %q, want %q", call.To, "alice@example.com")
+	}
+	if call.Token == "" {
+		t.Error("SendVerification token is empty")
+	}
+	if call.ServerURL != "https://test.example.com" {
+		t.Errorf("SendVerification serverURL = %q, want %q", call.ServerURL, "https://test.example.com")
+	}
+}
+
+func TestServiceRegisterContinuesWhenEmailFails(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	sender := &fakeSender{err: fmt.Errorf("SMTP connection refused")}
+	svc := newTestServiceWithSender(t, repo, sender)
+
+	result, err := svc.Register(context.Background(), RegisterRequest{
+		Email:    "alice@example.com",
+		Username: "alice",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Fatalf("Register() should succeed even when email fails, got error = %v", err)
+	}
+	if result.User.Email != "alice@example.com" {
+		t.Errorf("Register() email = %q, want %q", result.User.Email, "alice@example.com")
+	}
+}
+
+func TestServiceRegisterNilSenderSkipsEmail(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	svc := newTestServiceWithSender(t, repo, nil)
+
+	result, err := svc.Register(context.Background(), RegisterRequest{
+		Email:    "alice@example.com",
+		Username: "alice",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	if result.User.Email != "alice@example.com" {
+		t.Errorf("Register() email = %q, want %q", result.User.Email, "alice@example.com")
 	}
 }
