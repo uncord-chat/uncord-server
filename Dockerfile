@@ -5,10 +5,8 @@ RUN apk add --no-cache git ca-certificates
 
 WORKDIR /src
 
-COPY go.mod go.sum ./
-RUN go mod download
-
 COPY . .
+RUN sed -i '/^replace /d' go.mod && go mod tidy
 
 ARG VERSION=dev
 RUN CGO_ENABLED=0 GOOS=linux go build \
