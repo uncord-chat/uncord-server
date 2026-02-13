@@ -123,6 +123,7 @@ CREATE TRIGGER set_updated_at BEFORE UPDATE ON messages
 
 CREATE INDEX idx_messages_channel_time ON messages (channel_id, created_at DESC);
 CREATE INDEX idx_messages_author ON messages (author_id, created_at DESC);
+CREATE INDEX idx_messages_thread ON messages (thread_id) WHERE thread_id IS NOT NULL;
 
 -- Message Attachments
 
@@ -479,11 +480,41 @@ CREATE TABLE registered_plugins (
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON registered_plugins
     FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
 
+-- Email Verifications
+
+CREATE TABLE email_verifications (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token       TEXT UNIQUE NOT NULL,
+    expires_at  TIMESTAMPTZ NOT NULL,
+    consumed_at TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_email_verifications_token ON email_verifications (token) WHERE consumed_at IS NULL;
+CREATE INDEX idx_email_verifications_user ON email_verifications (user_id);
+
+-- Login Attempts
+
+CREATE TABLE login_attempts (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email      TEXT NOT NULL,
+    ip_address INET NOT NULL,
+    success    BOOLEAN NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_login_attempts_email_time ON login_attempts (email, created_at DESC);
+CREATE INDEX idx_login_attempts_ip_time ON login_attempts (ip_address, created_at DESC);
+CREATE INDEX idx_login_attempts_created ON login_attempts (created_at);
+
 -- +goose Down
 
 DROP FUNCTION IF EXISTS clean_permission_overrides_target();
 DROP FUNCTION IF EXISTS clean_permission_overrides_principal();
 
+DROP TABLE IF EXISTS login_attempts CASCADE;
+DROP TABLE IF EXISTS email_verifications CASCADE;
 DROP TABLE IF EXISTS registered_plugins CASCADE;
 DROP TABLE IF EXISTS abuse_flags CASCADE;
 DROP TABLE IF EXISTS user_devices CASCADE;

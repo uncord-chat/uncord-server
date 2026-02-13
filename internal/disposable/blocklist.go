@@ -19,6 +19,7 @@ type Blocklist struct {
 	url     string
 	enabled bool
 	log     zerolog.Logger
+	client  *http.Client
 
 	mu      sync.RWMutex
 	domains map[string]struct{}
@@ -32,6 +33,7 @@ func NewBlocklist(url string, enabled bool, logger zerolog.Logger) *Blocklist {
 		url:     url,
 		enabled: enabled,
 		log:     logger,
+		client:  &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
@@ -42,7 +44,7 @@ func (b *Blocklist) Prefetch(ctx context.Context) {
 		return
 	}
 
-	domains, err := fetchDomains(ctx, b.url)
+	domains, err := fetchDomains(ctx, b.client, b.url)
 	if err != nil {
 		b.log.Warn().Err(err).Msg("Failed to prefetch disposable email blocklist")
 		return
@@ -59,10 +61,10 @@ func (b *Blocklist) Prefetch(ctx context.Context) {
 // Run performs an initial fetch of the blocklist, then periodically re-fetches it at the given interval to pick up
 // newly added disposable domains. It blocks until the context is cancelled and is designed to be called in a goroutine.
 // On refresh failure the existing cached list remains valid and a warning is logged.
-func (b *Blocklist) Run(ctx context.Context, interval time.Duration) error {
+func (b *Blocklist) Run(ctx context.Context, interval time.Duration) {
 	if !b.enabled {
 		<-ctx.Done()
-		return nil
+		return
 	}
 
 	// Initial fetch.
@@ -74,9 +76,9 @@ func (b *Blocklist) Run(ctx context.Context, interval time.Duration) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
+			return
 		case <-ticker.C:
-			domains, err := fetchDomains(ctx, b.url)
+			domains, err := fetchDomains(ctx, b.client, b.url)
 			if err != nil {
 				b.log.Warn().Err(err).Msg("Failed to refresh disposable email blocklist, using cached list")
 				continue
@@ -118,7 +120,7 @@ func (b *Blocklist) IsBlocked(ctx context.Context, domain string) (bool, error) 
 		return blocked, nil
 	}
 
-	domains, err := fetchDomains(ctx, b.url)
+	domains, err := fetchDomains(ctx, b.client, b.url)
 	if err != nil {
 		return false, fmt.Errorf("load disposable email blocklist: %w", err)
 	}
@@ -130,9 +132,7 @@ func (b *Blocklist) IsBlocked(ctx context.Context, domain string) (bool, error) 
 	return blocked, nil
 }
 
-func fetchDomains(ctx context.Context, url string) (map[string]struct{}, error) {
-	client := &http.Client{Timeout: 10 * time.Second}
-
+func fetchDomains(ctx context.Context, client *http.Client, url string) (map[string]struct{}, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create blocklist request: %w", err)

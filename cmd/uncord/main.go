@@ -157,11 +157,7 @@ func run() error {
 	// Start background services with a shared cancellable context.
 	subCtx, subCancel := context.WithCancel(ctx)
 
-	go func() {
-		if err := blocklist.Run(subCtx, cfg.DisposableEmailBlocklistRefreshInterval); err != nil {
-			log.Error().Err(err).Msg("Disposable email blocklist refresh stopped")
-		}
-	}()
+	go blocklist.Run(subCtx, cfg.DisposableEmailBlocklistRefreshInterval)
 
 	// Start permission cache invalidation subscriber with reconnection.
 	defer subCancel()

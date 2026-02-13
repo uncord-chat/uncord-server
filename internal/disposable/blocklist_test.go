@@ -184,7 +184,7 @@ func TestRunPeriodicRefresh(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		_ = bl.Run(ctx, 50*time.Millisecond)
+		bl.Run(ctx, 50*time.Millisecond)
 		close(done)
 	}()
 
@@ -222,7 +222,7 @@ func TestRunContextCancellation(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		_ = bl.Run(ctx, 24*time.Hour)
+		bl.Run(ctx, 24*time.Hour)
 		close(done)
 	}()
 
@@ -254,7 +254,7 @@ func TestRunRefreshFailureContinues(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		_ = bl.Run(ctx, 50*time.Millisecond)
+		bl.Run(ctx, 50*time.Millisecond)
 		close(done)
 	}()
 

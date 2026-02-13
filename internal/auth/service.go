@@ -191,7 +191,11 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*AuthResult, err
 	}
 
 	// Lazy hash rotation: rehash with current parameters if the stored hash was generated with older settings.
-	if NeedsRehash(u.PasswordHash, s.config.Argon2Memory, s.config.Argon2Iterations, s.config.Argon2Parallelism, s.config.Argon2SaltLength, s.config.Argon2KeyLength) {
+	needsRehash, rehashErr := NeedsRehash(u.PasswordHash, s.config.Argon2Memory, s.config.Argon2Iterations, s.config.Argon2Parallelism, s.config.Argon2SaltLength, s.config.Argon2KeyLength)
+	if rehashErr != nil {
+		s.log.Warn().Err(rehashErr).Str("user_id", u.ID.String()).Msg("Password hash decode failed during rehash check")
+	}
+	if needsRehash {
 		if newHash, hashErr := HashPassword(req.Password, s.config.Argon2Memory, s.config.Argon2Iterations, s.config.Argon2Parallelism, s.config.Argon2SaltLength, s.config.Argon2KeyLength); hashErr == nil {
 			if updateErr := s.users.UpdatePasswordHash(ctx, u.ID, newHash); updateErr != nil {
 				s.log.Warn().Err(updateErr).Str("user_id", u.ID.String()).Msg("Failed to rotate password hash")

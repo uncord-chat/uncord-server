@@ -60,7 +60,7 @@ const (
 // collection exists but the schema differs, it is dropped and recreated. The returned Result indicates what action was
 // taken.
 func EnsureMessagesCollection(ctx context.Context, baseURL, apiKey string) (Result, error) {
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 30 * time.Second}
 
 	// Check whether the collection already exists.
 	existing, err := getCollection(ctx, client, baseURL, apiKey)
@@ -134,7 +134,8 @@ func getCollection(ctx context.Context, client *http.Client, baseURL, apiKey str
 	}
 
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("typesense returned status %d", resp.StatusCode)
+		detail, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("typesense returned status %d: %s", resp.StatusCode, detail)
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -165,7 +166,8 @@ func deleteCollection(ctx context.Context, client *http.Client, baseURL, apiKey 
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
-		return fmt.Errorf("typesense returned status %d on delete", resp.StatusCode)
+		detail, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("typesense returned status %d on delete: %s", resp.StatusCode, detail)
 	}
 
 	return nil
@@ -198,7 +200,8 @@ func createCollection(ctx context.Context, client *http.Client, baseURL, apiKey 
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
-		return fmt.Errorf("typesense returned status %d on create", resp.StatusCode)
+		detail, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("typesense returned status %d on create: %s", resp.StatusCode, detail)
 	}
 
 	return nil

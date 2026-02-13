@@ -42,14 +42,20 @@ func (h *ChannelHandler) ListChannels(c fiber.Ctx) error {
 		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
 	}
 
+	channelIDs := make([]uuid.UUID, len(all))
+	for i := range all {
+		channelIDs[i] = all[i].ID
+	}
+
+	permitted, err := h.resolver.FilterPermitted(c, userID, channelIDs, permissions.ViewChannels)
+	if err != nil {
+		log.Error().Err(err).Str("handler", "channel").Msg("permission check failed during channel list")
+		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
+	}
+
 	result := make([]models.Channel, 0, len(all))
 	for i := range all {
-		allowed, err := h.resolver.HasPermission(c, userID, all[i].ID, permissions.ViewChannels)
-		if err != nil {
-			log.Error().Err(err).Str("handler", "channel").Msg("permission check failed during channel list")
-			return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
-		}
-		if allowed {
+		if permitted[i] {
 			result = append(result, toChannelModel(&all[i]))
 		}
 	}

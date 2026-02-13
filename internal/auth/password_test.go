@@ -77,7 +77,10 @@ func TestNeedsRehash(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := NeedsRehash(hash, tt.memory, tt.iterations, tt.parallelism, tt.saltLen, tt.keyLen)
+			got, err := NeedsRehash(hash, tt.memory, tt.iterations, tt.parallelism, tt.saltLen, tt.keyLen)
+			if err != nil {
+				t.Fatalf("NeedsRehash() error = %v", err)
+			}
 			if got != tt.want {
 				t.Errorf("NeedsRehash() = %v, want %v", got, tt.want)
 			}
@@ -87,8 +90,11 @@ func TestNeedsRehash(t *testing.T) {
 
 func TestNeedsRehashInvalidHash(t *testing.T) {
 	t.Parallel()
-	// An unparseable hash should return false (not crashable, not rehash-worthy).
-	got := NeedsRehash("not-a-valid-argon2id-hash", 65536, 1, 1, 16, 32)
+	// An unparseable hash should return false with an error.
+	got, err := NeedsRehash("not-a-valid-argon2id-hash", 65536, 1, 1, 16, 32)
+	if err == nil {
+		t.Error("NeedsRehash() with invalid hash should return error")
+	}
 	if got {
 		t.Error("NeedsRehash() with invalid hash = true, want false")
 	}

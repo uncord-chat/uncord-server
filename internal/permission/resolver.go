@@ -55,32 +55,31 @@ func (r *Resolver) HasPermission(ctx context.Context, userID, channelID uuid.UUI
 	return effective.Has(perm), nil
 }
 
-// ResolveServer returns the effective server-level permissions for a user. Only steps 1 (owner bypass) and 2 (role
-// union) apply; channel and category overrides are not relevant at the server level.
+// serverPermKey is a fixed sentinel UUID used as the channel ID component in cache keys for server-level permission
+// results. PostgreSQL gen_random_uuid() produces v4 UUIDs, so the nil UUID cannot collide with real channel IDs.
+var serverPermKey = uuid.Nil
+
+// ResolveServer returns the effective server-level permissions for a user, using the cache when available. Only steps 1
+// (owner bypass) and 2 (role union) apply; channel and category overrides are not relevant at the server level.
 func (r *Resolver) ResolveServer(ctx context.Context, userID uuid.UUID) (permissions.Permission, error) {
-	isOwner, err := r.store.IsOwner(ctx, userID)
+	perm, ok, err := r.cache.Get(ctx, userID, serverPermKey)
 	if err != nil {
-		return 0, fmt.Errorf("check owner: %w", err)
+		r.log.Warn().Err(err).Msg("Server permission cache get failed, falling through to compute")
 	}
-	if isOwner {
-		return permissions.AllPermissions, nil
+	if ok {
+		return perm, nil
 	}
 
-	roleEntries, err := r.store.RolePermissions(ctx, userID)
+	perm, _, err = r.basePermissions(ctx, userID)
 	if err != nil {
-		return 0, fmt.Errorf("get role permissions: %w", err)
+		return 0, err
 	}
 
-	var base permissions.Permission
-	for _, entry := range roleEntries {
-		base = base.Add(entry.Permissions)
+	if cacheErr := r.cache.Set(ctx, userID, serverPermKey, perm); cacheErr != nil {
+		r.log.Warn().Err(cacheErr).Msg("Server permission cache set failed")
 	}
 
-	if base.Has(permissions.ManageServer) {
-		return permissions.AllPermissions, nil
-	}
-
-	return base, nil
+	return perm, nil
 }
 
 // HasServerPermission checks whether a user has a specific server-level permission.
@@ -92,21 +91,65 @@ func (r *Resolver) HasServerPermission(ctx context.Context, userID uuid.UUID, pe
 	return effective.Has(perm), nil
 }
 
-// compute runs the 4-step permission algorithm.
-func (r *Resolver) compute(ctx context.Context, userID, channelID uuid.UUID) (permissions.Permission, error) {
-	// Step 1: Owner bypass
-	isOwner, err := r.store.IsOwner(ctx, userID)
+// FilterPermitted returns a boolean slice indicating which of the given channels the user has the requested permission
+// for. Each element corresponds to the channel at the same index in the input slice. The owner check and role union are
+// performed once, then channel/category overrides are applied per channel.
+func (r *Resolver) FilterPermitted(ctx context.Context, userID uuid.UUID, channelIDs []uuid.UUID, perm permissions.Permission) ([]bool, error) {
+	base, roleIDs, err := r.basePermissions(ctx, userID)
 	if err != nil {
-		return 0, fmt.Errorf("check owner: %w", err)
-	}
-	if isOwner {
-		return permissions.AllPermissions, nil
+		return nil, err
 	}
 
-	// Step 2: Role union
+	result := make([]bool, len(channelIDs))
+
+	// Admin (owner or ManageServer) has all permissions in every channel.
+	if roleIDs == nil {
+		for i := range result {
+			result[i] = true
+		}
+		return result, nil
+	}
+
+	for i, chID := range channelIDs {
+		cached, ok, cacheErr := r.cache.Get(ctx, userID, chID)
+		if cacheErr != nil {
+			r.log.Warn().Err(cacheErr).Msg("Permission cache get failed in batch")
+		}
+
+		var effective permissions.Permission
+		if ok {
+			effective = cached
+		} else {
+			effective, err = r.channelOverrides(ctx, base, roleIDs, userID, chID)
+			if err != nil {
+				return nil, err
+			}
+			if cacheErr := r.cache.Set(ctx, userID, chID, effective); cacheErr != nil {
+				r.log.Warn().Err(cacheErr).Msg("Permission cache set failed in batch")
+			}
+		}
+
+		result[i] = effective.Has(perm)
+	}
+
+	return result, nil
+}
+
+// basePermissions performs steps 1 (owner bypass) and 2 (role union) of the permission algorithm. If the user is an
+// owner or has ManageServer, it returns AllPermissions with a nil roleIDs map as a signal that no further override
+// checks are needed.
+func (r *Resolver) basePermissions(ctx context.Context, userID uuid.UUID) (permissions.Permission, map[uuid.UUID]struct{}, error) {
+	isOwner, err := r.store.IsOwner(ctx, userID)
+	if err != nil {
+		return 0, nil, fmt.Errorf("check owner: %w", err)
+	}
+	if isOwner {
+		return permissions.AllPermissions, nil, nil
+	}
+
 	roleEntries, err := r.store.RolePermissions(ctx, userID)
 	if err != nil {
-		return 0, fmt.Errorf("get role permissions: %w", err)
+		return 0, nil, fmt.Errorf("get role permissions: %w", err)
 	}
 
 	var base permissions.Permission
@@ -116,12 +159,30 @@ func (r *Resolver) compute(ctx context.Context, userID, channelID uuid.UUID) (pe
 		roleIDs[entry.RoleID] = struct{}{}
 	}
 
-	// ManageServer = administrator, full permissions
 	if base.Has(permissions.ManageServer) {
-		return permissions.AllPermissions, nil
+		return permissions.AllPermissions, nil, nil
 	}
 
-	// Step 3: Category overrides
+	return base, roleIDs, nil
+}
+
+// compute runs the 4-step permission algorithm for a single channel.
+func (r *Resolver) compute(ctx context.Context, userID, channelID uuid.UUID) (permissions.Permission, error) {
+	base, roleIDs, err := r.basePermissions(ctx, userID)
+	if err != nil {
+		return 0, err
+	}
+
+	// Admin (owner or ManageServer) bypasses all overrides.
+	if roleIDs == nil {
+		return base, nil
+	}
+
+	return r.channelOverrides(ctx, base, roleIDs, userID, channelID)
+}
+
+// channelOverrides applies steps 3 (category overrides) and 4 (channel overrides) to a base permission set.
+func (r *Resolver) channelOverrides(ctx context.Context, base permissions.Permission, roleIDs map[uuid.UUID]struct{}, userID, channelID uuid.UUID) (permissions.Permission, error) {
 	chanInfo, err := r.store.ChannelInfo(ctx, channelID)
 	if err != nil {
 		return 0, fmt.Errorf("get channel info: %w", err)
@@ -135,7 +196,6 @@ func (r *Resolver) compute(ctx context.Context, userID, channelID uuid.UUID) (pe
 		base = applyOverrides(base, catOverrides, roleIDs, userID)
 	}
 
-	// Step 4: Channel overrides
 	chanOverrides, err := r.store.Overrides(ctx, TargetChannel, channelID)
 	if err != nil {
 		return 0, fmt.Errorf("get channel overrides: %w", err)

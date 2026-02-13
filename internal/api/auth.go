@@ -22,8 +22,8 @@ func NewAuthHandler(svc *auth.Service) *AuthHandler {
 	return &AuthHandler{auth: svc}
 }
 
-// authResponse maps a service AuthResult to the protocol response type.
-func authResponse(result *auth.AuthResult) models.AuthResponse {
+// toAuthResponse maps a service AuthResult to the protocol response type.
+func toAuthResponse(result *auth.AuthResult) models.AuthResponse {
 	return models.AuthResponse{
 		User:         result.User,
 		AccessToken:  result.AccessToken,
@@ -47,7 +47,7 @@ func (h *AuthHandler) Register(c fiber.Ctx) error {
 		return mapAuthError(c, err)
 	}
 
-	return httputil.SuccessStatus(c, fiber.StatusCreated, authResponse(result))
+	return httputil.SuccessStatus(c, fiber.StatusCreated, toAuthResponse(result))
 }
 
 // Login handles POST /api/v1/auth/login.
@@ -66,7 +66,7 @@ func (h *AuthHandler) Login(c fiber.Ctx) error {
 		return mapAuthError(c, err)
 	}
 
-	return httputil.Success(c, authResponse(result))
+	return httputil.Success(c, toAuthResponse(result))
 }
 
 // Refresh handles POST /api/v1/auth/refresh.

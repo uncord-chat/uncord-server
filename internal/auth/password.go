@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/alexedwards/argon2id"
-	"github.com/rs/zerolog/log"
 )
 
 // HashPassword hashes a password using argon2id with the given parameters.
@@ -33,16 +32,16 @@ func VerifyPassword(password, hash string) (bool, error) {
 }
 
 // NeedsRehash returns true if the given Argon2id hash was generated with parameters that differ from the provided
-// configuration values, indicating that the hash should be regenerated on next successful login.
-func NeedsRehash(hash string, memory, iterations uint32, parallelism uint8, saltLen, keyLen uint32) bool {
+// configuration values, indicating that the hash should be regenerated on next successful login. If the hash cannot be
+// decoded (possible corruption), it returns false and a non-nil error so the caller can log at the appropriate level.
+func NeedsRehash(hash string, memory, iterations uint32, parallelism uint8, saltLen, keyLen uint32) (bool, error) {
 	params, salt, key, err := argon2id.DecodeHash(hash)
 	if err != nil {
-		log.Warn().Err(err).Msg("Failed to decode password hash for rehash check; possible corruption")
-		return false
+		return false, fmt.Errorf("decode password hash: %w", err)
 	}
 	return params.Memory != memory ||
 		params.Iterations != iterations ||
 		params.Parallelism != parallelism ||
 		uint32(len(salt)) != saltLen ||
-		uint32(len(key)) != keyLen
+		uint32(len(key)) != keyLen, nil
 }
