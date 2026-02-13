@@ -63,6 +63,9 @@ type Config struct {
 	RateLimitAuthCount         int
 	RateLimitAuthWindowSeconds int
 
+	// Upload Limits
+	MaxUploadSizeMB int
+
 	// CORS
 	CORSAllowOrigins string
 }
@@ -116,6 +119,8 @@ func Load() (*Config, error) {
 		RateLimitAuthCount:         p.int("RATE_LIMIT_AUTH_COUNT", 5),
 		RateLimitAuthWindowSeconds: p.int("RATE_LIMIT_AUTH_WINDOW_SECONDS", 300),
 
+		MaxUploadSizeMB: p.int("MAX_UPLOAD_SIZE_MB", 100),
+
 		CORSAllowOrigins: envStr("CORS_ALLOW_ORIGINS", "*"),
 	}
 
@@ -133,6 +138,12 @@ func Load() (*Config, error) {
 // IsDevelopment returns true when running in development mode.
 func (c *Config) IsDevelopment() bool {
 	return c.ServerEnv == "development"
+}
+
+// BodyLimitBytes returns the maximum request body size in bytes, derived from MaxUploadSizeMB with a small margin for
+// multipart framing overhead.
+func (c *Config) BodyLimitBytes() int {
+	return (c.MaxUploadSizeMB + 1) * 1024 * 1024
 }
 
 func (c *Config) validate() error {
@@ -173,6 +184,10 @@ func (c *Config) validate() error {
 	}
 	if c.Argon2Parallelism == 0 {
 		errs = append(errs, fmt.Errorf("ARGON2_PARALLELISM must be greater than 0"))
+	}
+
+	if c.MaxUploadSizeMB < 1 {
+		errs = append(errs, fmt.Errorf("MAX_UPLOAD_SIZE_MB must be at least 1"))
 	}
 
 	if c.RateLimitAPIRequests < 1 {

@@ -181,6 +181,7 @@ func run() error {
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
 		AppName:               "Uncord",
+		BodyLimit:             cfg.BodyLimitBytes(),
 		DisableStartupMessage: true,
 		// ErrorHandler catches errors returned by handlers that are not already mapped to structured API responses
 		// (e.g. Fiber's built-in 404/405). errors.AsType is a generic helper added in Go 1.26.
