@@ -3,7 +3,7 @@ package auth
 import (
 	"errors"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
@@ -15,7 +15,7 @@ import (
 // RequireAuth returns Fiber middleware that validates a JWT Bearer token from the Authorization header and stores the
 // user ID in c.Locals("userID").
 func RequireAuth(secret, issuer string) fiber.Handler {
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		header := c.Get("Authorization")
 		if header == "" {
 			return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing authorization header")

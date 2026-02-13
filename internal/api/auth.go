@@ -3,7 +3,7 @@ package api
 import (
 	"errors"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/rs/zerolog/log"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 	"github.com/uncord-chat/uncord-protocol/models"
@@ -32,13 +32,13 @@ func authResponse(result *auth.AuthResult) models.AuthResponse {
 }
 
 // Register handles POST /api/v1/auth/register.
-func (h *AuthHandler) Register(c *fiber.Ctx) error {
+func (h *AuthHandler) Register(c fiber.Ctx) error {
 	var body models.RegisterRequest
-	if err := c.BodyParser(&body); err != nil {
+	if err := c.Bind().Body(&body); err != nil {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "Invalid request body")
 	}
 
-	result, err := h.auth.Register(c.Context(), auth.RegisterRequest{
+	result, err := h.auth.Register(c, auth.RegisterRequest{
 		Email:    body.Email,
 		Username: body.Username,
 		Password: body.Password,
@@ -51,13 +51,13 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 }
 
 // Login handles POST /api/v1/auth/login.
-func (h *AuthHandler) Login(c *fiber.Ctx) error {
+func (h *AuthHandler) Login(c fiber.Ctx) error {
 	var body models.LoginRequest
-	if err := c.BodyParser(&body); err != nil {
+	if err := c.Bind().Body(&body); err != nil {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "Invalid request body")
 	}
 
-	result, err := h.auth.Login(c.Context(), auth.LoginRequest{
+	result, err := h.auth.Login(c, auth.LoginRequest{
 		Email:    body.Email,
 		Password: body.Password,
 		IP:       c.IP(),
@@ -70,16 +70,16 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 }
 
 // Refresh handles POST /api/v1/auth/refresh.
-func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
+func (h *AuthHandler) Refresh(c fiber.Ctx) error {
 	var body models.RefreshRequest
-	if err := c.BodyParser(&body); err != nil {
+	if err := c.Bind().Body(&body); err != nil {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "Invalid request body")
 	}
 	if body.RefreshToken == "" {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "refresh_token is required")
 	}
 
-	tokens, err := h.auth.Refresh(c.Context(), body.RefreshToken)
+	tokens, err := h.auth.Refresh(c, body.RefreshToken)
 	if err != nil {
 		return mapAuthError(c, err)
 	}
@@ -91,16 +91,16 @@ func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
 }
 
 // VerifyEmail handles POST /api/v1/auth/verify-email.
-func (h *AuthHandler) VerifyEmail(c *fiber.Ctx) error {
+func (h *AuthHandler) VerifyEmail(c fiber.Ctx) error {
 	var body models.VerifyEmailRequest
-	if err := c.BodyParser(&body); err != nil {
+	if err := c.Bind().Body(&body); err != nil {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "Invalid request body")
 	}
 	if body.Token == "" {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "token is required")
 	}
 
-	if err := h.auth.VerifyEmail(c.Context(), body.Token); err != nil {
+	if err := h.auth.VerifyEmail(c, body.Token); err != nil {
 		return mapAuthError(c, err)
 	}
 
@@ -110,7 +110,7 @@ func (h *AuthHandler) VerifyEmail(c *fiber.Ctx) error {
 }
 
 // mapAuthError converts auth-layer errors to appropriate HTTP responses.
-func mapAuthError(c *fiber.Ctx, err error) error {
+func mapAuthError(c fiber.Ctx, err error) error {
 	switch {
 	// Validation errors
 	case errors.Is(err, auth.ErrInvalidEmail):

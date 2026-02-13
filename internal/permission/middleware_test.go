@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
@@ -31,11 +31,11 @@ func TestMiddlewareAllowed(t *testing.T) {
 	resolver := NewResolver(store, cache, zerolog.Nop())
 
 	app := fiber.New()
-	app.Use(func(c *fiber.Ctx) error {
+	app.Use(func(c fiber.Ctx) error {
 		c.Locals("userID", userID)
 		return c.Next()
 	})
-	app.Get("/channels/:channelID/test", RequirePermission(resolver, permissions.ViewChannels), func(c *fiber.Ctx) error {
+	app.Get("/channels/:channelID/test", RequirePermission(resolver, permissions.ViewChannels), func(c fiber.Ctx) error {
 		return c.SendStatus(200)
 	})
 
@@ -66,11 +66,11 @@ func TestMiddlewareDenied(t *testing.T) {
 	resolver := NewResolver(store, cache, zerolog.Nop())
 
 	app := fiber.New()
-	app.Use(func(c *fiber.Ctx) error {
+	app.Use(func(c fiber.Ctx) error {
 		c.Locals("userID", userID)
 		return c.Next()
 	})
-	app.Get("/channels/:channelID/test", RequirePermission(resolver, permissions.ManageRoles), func(c *fiber.Ctx) error {
+	app.Get("/channels/:channelID/test", RequirePermission(resolver, permissions.ManageRoles), func(c fiber.Ctx) error {
 		return c.SendStatus(200)
 	})
 
@@ -97,7 +97,7 @@ func TestMiddlewareNoAuth(t *testing.T) {
 
 	app := fiber.New()
 	// No auth middleware, so userID is not set
-	app.Get("/channels/:channelID/test", RequirePermission(resolver, permissions.ViewChannels), func(c *fiber.Ctx) error {
+	app.Get("/channels/:channelID/test", RequirePermission(resolver, permissions.ViewChannels), func(c fiber.Ctx) error {
 		return c.SendStatus(200)
 	})
 
@@ -118,11 +118,11 @@ func TestMiddlewareInvalidChannelID(t *testing.T) {
 	resolver := NewResolver(store, newFakeCache(), zerolog.Nop())
 
 	app := fiber.New()
-	app.Use(func(c *fiber.Ctx) error {
+	app.Use(func(c fiber.Ctx) error {
 		c.Locals("userID", uuid.New())
 		return c.Next()
 	})
-	app.Get("/channels/:channelID/test", RequirePermission(resolver, permissions.ViewChannels), func(c *fiber.Ctx) error {
+	app.Get("/channels/:channelID/test", RequirePermission(resolver, permissions.ViewChannels), func(c fiber.Ctx) error {
 		return c.SendStatus(200)
 	})
 
@@ -143,12 +143,12 @@ func TestMiddlewareMissingChannelID(t *testing.T) {
 	resolver := NewResolver(store, newFakeCache(), zerolog.Nop())
 
 	app := fiber.New()
-	app.Use(func(c *fiber.Ctx) error {
+	app.Use(func(c fiber.Ctx) error {
 		c.Locals("userID", uuid.New())
 		return c.Next()
 	})
 	// Route without :channelID param
-	app.Get("/test", RequirePermission(resolver, permissions.ViewChannels), func(c *fiber.Ctx) error {
+	app.Get("/test", RequirePermission(resolver, permissions.ViewChannels), func(c fiber.Ctx) error {
 		return c.SendStatus(200)
 	})
 
@@ -173,11 +173,11 @@ func TestMiddlewareResolverError(t *testing.T) {
 	resolver := NewResolver(store, newFakeCache(), zerolog.Nop())
 
 	app := fiber.New()
-	app.Use(func(c *fiber.Ctx) error {
+	app.Use(func(c fiber.Ctx) error {
 		c.Locals("userID", uuid.New())
 		return c.Next()
 	})
-	app.Get("/channels/:channelID/test", RequirePermission(resolver, permissions.ViewChannels), func(c *fiber.Ctx) error {
+	app.Get("/channels/:channelID/test", RequirePermission(resolver, permissions.ViewChannels), func(c fiber.Ctx) error {
 		return c.SendStatus(200)
 	})
 

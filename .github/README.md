@@ -13,7 +13,7 @@ The Go server for the [Uncord](https://github.com/uncord-chat) project, deployed
 | Component | Technology |
 |-----------|------------|
 | Language | Go |
-| HTTP Framework | Fiber v2 |
+| HTTP Framework | Fiber v3 |
 | WebSocket | gorilla/websocket |
 | Database | PostgreSQL 18 |
 | Cache / Pub-Sub | Valkey 9 |

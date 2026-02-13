@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 )
@@ -17,7 +17,7 @@ func TestRequireAuthNoHeader(t *testing.T) {
 	t.Parallel()
 	app := fiber.New()
 	app.Use(RequireAuth("secret", ""))
-	app.Get("/test", func(c *fiber.Ctx) error {
+	app.Get("/test", func(c fiber.Ctx) error {
 		return c.SendStatus(200)
 	})
 
@@ -42,7 +42,7 @@ func TestRequireAuthBadFormat(t *testing.T) {
 	t.Parallel()
 	app := fiber.New()
 	app.Use(RequireAuth("secret", ""))
-	app.Get("/test", func(c *fiber.Ctx) error {
+	app.Get("/test", func(c fiber.Ctx) error {
 		return c.SendStatus(200)
 	})
 
@@ -64,7 +64,7 @@ func TestRequireAuthExpiredToken(t *testing.T) {
 	app := fiber.New()
 	secret := "test-secret"
 	app.Use(RequireAuth(secret, ""))
-	app.Get("/test", func(c *fiber.Ctx) error {
+	app.Get("/test", func(c fiber.Ctx) error {
 		return c.SendStatus(200)
 	})
 
@@ -99,7 +99,7 @@ func TestRequireAuthValid(t *testing.T) {
 	userID := uuid.New()
 
 	app.Use(RequireAuth(secret, ""))
-	app.Get("/test", func(c *fiber.Ctx) error {
+	app.Get("/test", func(c fiber.Ctx) error {
 		id, ok := c.Locals("userID").(uuid.UUID)
 		if !ok {
 			return c.Status(500).SendString("userID not found in locals")
@@ -134,7 +134,7 @@ func TestRequireAuthWrongSignature(t *testing.T) {
 	t.Parallel()
 	app := fiber.New()
 	app.Use(RequireAuth("correct-secret", ""))
-	app.Get("/test", func(c *fiber.Ctx) error {
+	app.Get("/test", func(c fiber.Ctx) error {
 		return c.SendStatus(200)
 	})
 

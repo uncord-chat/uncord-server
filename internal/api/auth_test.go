@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
@@ -22,6 +22,10 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/disposable"
 	"github.com/uncord-chat/uncord-server/internal/user"
 )
+
+// testTimeout extends the default app.Test() deadline so that argon2 hashing under the race detector does not trigger
+// a spurious i/o timeout.
+var testTimeout = fiber.TestConfig{Timeout: 5 * time.Second}
 
 // fakeRepo implements user.Repository for handler tests.
 type fakeRepo struct {
@@ -142,16 +146,23 @@ func jsonReq(method, url, body string) *http.Request {
 	return req
 }
 
+// doReq sends a request through app.Test with the extended test timeout.
+func doReq(t *testing.T, app *fiber.App, req *http.Request) *http.Response {
+	t.Helper()
+	resp, err := app.Test(req, testTimeout)
+	if err != nil {
+		t.Fatalf("app.Test() error = %v", err)
+	}
+	return resp
+}
+
 // --- Register handler tests ---
 
 func TestRegisterHandler_InvalidJSON(t *testing.T) {
 	t.Parallel()
 	_, app := testAuthHandler(t)
 
-	resp, err := app.Test(jsonReq(http.MethodPost, "/register", "not json"))
-	if err != nil {
-		t.Fatalf("app.Test() error = %v", err)
-	}
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/register", "not json"))
 	body := readBody(t, resp)
 
 	if resp.StatusCode != fiber.StatusBadRequest {
@@ -192,10 +203,7 @@ func TestRegisterHandler_ValidationErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			resp, err := app.Test(jsonReq(http.MethodPost, "/register", tt.body))
-			if err != nil {
-				t.Fatalf("app.Test() error = %v", err)
-			}
+			resp := doReq(t, app, jsonReq(http.MethodPost, "/register", tt.body))
 			body := readBody(t, resp)
 
 			if resp.StatusCode != fiber.StatusBadRequest {
@@ -213,11 +221,8 @@ func TestRegisterHandler_Success(t *testing.T) {
 	t.Parallel()
 	_, app := testAuthHandler(t)
 
-	resp, err := app.Test(jsonReq(http.MethodPost, "/register",
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/register",
 		`{"email":"alice@example.com","username":"alice","password":"strongpassword"}`))
-	if err != nil {
-		t.Fatalf("app.Test() error = %v", err)
-	}
 	body := readBody(t, resp)
 
 	if resp.StatusCode != fiber.StatusCreated {
@@ -253,10 +258,7 @@ func TestLoginHandler_InvalidJSON(t *testing.T) {
 	t.Parallel()
 	_, app := testAuthHandler(t)
 
-	resp, err := app.Test(jsonReq(http.MethodPost, "/login", "{bad"))
-	if err != nil {
-		t.Fatalf("app.Test() error = %v", err)
-	}
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/login", "{bad"))
 	body := readBody(t, resp)
 
 	if resp.StatusCode != fiber.StatusBadRequest {
@@ -272,11 +274,8 @@ func TestLoginHandler_InvalidCredentials(t *testing.T) {
 	t.Parallel()
 	_, app := testAuthHandler(t)
 
-	resp, err := app.Test(jsonReq(http.MethodPost, "/login",
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/login",
 		`{"email":"nobody@example.com","password":"strongpassword"}`))
-	if err != nil {
-		t.Fatalf("app.Test() error = %v", err)
-	}
 	body := readBody(t, resp)
 
 	if resp.StatusCode != fiber.StatusUnauthorized {
@@ -293,19 +292,13 @@ func TestLoginHandler_Success(t *testing.T) {
 	_, app := testAuthHandler(t)
 
 	// Register first.
-	resp, err := app.Test(jsonReq(http.MethodPost, "/register",
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/register",
 		`{"email":"bob@example.com","username":"bob","password":"strongpassword"}`))
-	if err != nil {
-		t.Fatalf("register app.Test() error = %v", err)
-	}
 	readBody(t, resp)
 
 	// Login.
-	resp, err = app.Test(jsonReq(http.MethodPost, "/login",
+	resp = doReq(t, app, jsonReq(http.MethodPost, "/login",
 		`{"email":"bob@example.com","password":"strongpassword"}`))
-	if err != nil {
-		t.Fatalf("login app.Test() error = %v", err)
-	}
 	body := readBody(t, resp)
 
 	if resp.StatusCode != fiber.StatusOK {
@@ -334,10 +327,7 @@ func TestRefreshHandler_InvalidJSON(t *testing.T) {
 	t.Parallel()
 	_, app := testAuthHandler(t)
 
-	resp, err := app.Test(jsonReq(http.MethodPost, "/refresh", "%%%"))
-	if err != nil {
-		t.Fatalf("app.Test() error = %v", err)
-	}
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/refresh", "%%%"))
 	body := readBody(t, resp)
 
 	if resp.StatusCode != fiber.StatusBadRequest {
@@ -353,10 +343,7 @@ func TestRefreshHandler_MissingToken(t *testing.T) {
 	t.Parallel()
 	_, app := testAuthHandler(t)
 
-	resp, err := app.Test(jsonReq(http.MethodPost, "/refresh", `{}`))
-	if err != nil {
-		t.Fatalf("app.Test() error = %v", err)
-	}
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/refresh", `{}`))
 	body := readBody(t, resp)
 
 	if resp.StatusCode != fiber.StatusBadRequest {
@@ -373,11 +360,8 @@ func TestRefreshHandler_Success(t *testing.T) {
 	_, app := testAuthHandler(t)
 
 	// Register to obtain tokens.
-	resp, err := app.Test(jsonReq(http.MethodPost, "/register",
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/register",
 		`{"email":"carol@example.com","username":"carol","password":"strongpassword"}`))
-	if err != nil {
-		t.Fatalf("register app.Test() error = %v", err)
-	}
 	regBody := readBody(t, resp)
 	regEnv := parseSuccess(t, regBody)
 
@@ -389,11 +373,8 @@ func TestRefreshHandler_Success(t *testing.T) {
 	}
 
 	// Refresh.
-	resp, err = app.Test(jsonReq(http.MethodPost, "/refresh",
+	resp = doReq(t, app, jsonReq(http.MethodPost, "/refresh",
 		`{"refresh_token":"`+regData.RefreshToken+`"}`))
-	if err != nil {
-		t.Fatalf("refresh app.Test() error = %v", err)
-	}
 	body := readBody(t, resp)
 
 	if resp.StatusCode != fiber.StatusOK {
@@ -425,10 +406,7 @@ func TestVerifyEmailHandler_InvalidJSON(t *testing.T) {
 	t.Parallel()
 	_, app := testAuthHandler(t)
 
-	resp, err := app.Test(jsonReq(http.MethodPost, "/verify-email", "{{"))
-	if err != nil {
-		t.Fatalf("app.Test() error = %v", err)
-	}
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/verify-email", "{{"))
 	body := readBody(t, resp)
 
 	if resp.StatusCode != fiber.StatusBadRequest {
@@ -444,10 +422,7 @@ func TestVerifyEmailHandler_MissingToken(t *testing.T) {
 	t.Parallel()
 	_, app := testAuthHandler(t)
 
-	resp, err := app.Test(jsonReq(http.MethodPost, "/verify-email", `{}`))
-	if err != nil {
-		t.Fatalf("app.Test() error = %v", err)
-	}
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/verify-email", `{}`))
 	body := readBody(t, resp)
 
 	if resp.StatusCode != fiber.StatusBadRequest {
@@ -463,10 +438,7 @@ func TestVerifyEmailHandler_InvalidToken(t *testing.T) {
 	t.Parallel()
 	_, app := testAuthHandler(t)
 
-	resp, err := app.Test(jsonReq(http.MethodPost, "/verify-email", `{"token":"bad-token"}`))
-	if err != nil {
-		t.Fatalf("app.Test() error = %v", err)
-	}
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/verify-email", `{"token":"bad-token"}`))
 	body := readBody(t, resp)
 
 	if resp.StatusCode != fiber.StatusBadRequest {
@@ -482,10 +454,7 @@ func TestVerifyEmailHandler_Success(t *testing.T) {
 	t.Parallel()
 	_, app := testAuthHandler(t)
 
-	resp, err := app.Test(jsonReq(http.MethodPost, "/verify-email", `{"token":"valid-token"}`))
-	if err != nil {
-		t.Fatalf("app.Test() error = %v", err)
-	}
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/verify-email", `{"token":"valid-token"}`))
 	body := readBody(t, resp)
 
 	if resp.StatusCode != fiber.StatusOK {

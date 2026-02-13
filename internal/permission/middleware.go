@@ -1,7 +1,7 @@
 package permission
 
 import (
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/uncord-chat/uncord-protocol/permissions"
 
@@ -13,7 +13,7 @@ import (
 // RequirePermission returns Fiber middleware that checks whether the authenticated user has the given permission in
 // the channel specified by the "channelID" route parameter.
 func RequirePermission(resolver *Resolver, perm permissions.Permission) fiber.Handler {
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		userIDVal := c.Locals("userID")
 		if userIDVal == nil {
 			return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Authentication required")
@@ -34,7 +34,7 @@ func RequirePermission(resolver *Resolver, perm permissions.Permission) fiber.Ha
 			return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
 		}
 
-		allowed, err := resolver.HasPermission(c.Context(), userID, channelID, perm)
+		allowed, err := resolver.HasPermission(c, userID, channelID, perm)
 		if err != nil {
 			return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "Failed to check permissions")
 		}

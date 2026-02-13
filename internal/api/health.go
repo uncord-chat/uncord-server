@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 // Pinger checks connectivity to a backing service.
@@ -32,8 +32,8 @@ type healthResponse struct {
 }
 
 // Health pings PostgreSQL and Valkey, returning component status.
-func (h *HealthHandler) Health(c *fiber.Ctx) error {
-	ctx, cancel := context.WithTimeout(c.Context(), 3*time.Second)
+func (h *HealthHandler) Health(c fiber.Ctx) error {
+	ctx, cancel := context.WithTimeout(c, 3*time.Second)
 	defer cancel()
 
 	pgStatus := "ok"

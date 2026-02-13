@@ -8,8 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/requestid"
+	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/requestid"
 	"github.com/rs/zerolog"
 )
 
@@ -45,7 +45,7 @@ func TestRequestLogger(t *testing.T) {
 				app.Use(requestid.New())
 			}
 			app.Use(RequestLogger(logger))
-			app.Get("/test", func(c *fiber.Ctx) error {
+			app.Get("/test", func(c fiber.Ctx) error {
 				return c.SendStatus(tt.status)
 			})
 

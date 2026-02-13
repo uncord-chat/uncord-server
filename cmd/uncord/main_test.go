@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 )
 

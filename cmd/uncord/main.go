@@ -7,15 +7,16 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/gofiber/fiber/v2/middleware/limiter"
-	"github.com/gofiber/fiber/v2/middleware/requestid"
+	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/cors"
+	"github.com/gofiber/fiber/v3/middleware/limiter"
+	"github.com/gofiber/fiber/v3/middleware/requestid"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -180,12 +181,11 @@ func run() error {
 
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
-		AppName:               "Uncord",
-		BodyLimit:             cfg.BodyLimitBytes(),
-		DisableStartupMessage: true,
+		AppName:   "Uncord",
+		BodyLimit: cfg.BodyLimitBytes(),
 		// ErrorHandler catches errors returned by handlers that are not already mapped to structured API responses
 		// (e.g. Fiber's built-in 404/405). errors.AsType is a generic helper added in Go 1.26.
-		ErrorHandler: func(c *fiber.Ctx, err error) error {
+		ErrorHandler: func(c fiber.Ctx, err error) error {
 			status := fiber.StatusInternalServerError
 			message := "An internal error occurred"
 			apiCode := apierrors.InternalError
@@ -212,10 +212,10 @@ func run() error {
 	app.Use(requestid.New())
 	app.Use(httputil.RequestLogger(log.Logger))
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:  cfg.CORSAllowOrigins,
-		AllowMethods:  "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-		AllowHeaders:  "Origin,Content-Type,Accept,Authorization",
-		ExposeHeaders: "X-Request-ID",
+		AllowOrigins:  strings.Split(cfg.CORSAllowOrigins, ","),
+		AllowMethods:  []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:  []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		ExposeHeaders: []string{"X-Request-ID"},
 	}))
 
 	// Global API rate limiter
@@ -264,7 +264,7 @@ func run() error {
 		Uint32("num_gc", mem.NumGC).
 		Msg("Runtime memory stats")
 
-	if err := app.Listen(addr); err != nil {
+	if err := app.Listen(addr, fiber.ListenConfig{DisableStartupMessage: true}); err != nil {
 		return fmt.Errorf("server error: %w", err)
 	}
 

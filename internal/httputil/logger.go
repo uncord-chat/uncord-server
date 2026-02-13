@@ -4,20 +4,22 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/requestid"
 	"github.com/rs/zerolog"
 )
 
 // RequestLogger returns Fiber middleware that logs every request through the provided zerolog logger. It should be
 // registered after the requestid middleware so that the request ID is available in Locals.
 func RequestLogger(logger zerolog.Logger) fiber.Handler {
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
+		start := time.Now()
 		err := c.Next()
 
 		status := c.Response().StatusCode()
 		event := levelForStatus(logger, status)
 
-		if rid, ok := c.Locals("requestid").(string); ok && rid != "" {
+		if rid := requestid.FromContext(c); rid != "" {
 			event.Str("request_id", rid)
 		}
 
@@ -25,7 +27,7 @@ func RequestLogger(logger zerolog.Logger) fiber.Handler {
 			Str("method", c.Method()).
 			Str("path", c.Path()).
 			Int("status", status).
-			Str("latency", strings.ReplaceAll(time.Since(c.Context().Time()).String(), "µ", "u")).
+			Str("latency", strings.ReplaceAll(time.Since(start).String(), "µ", "u")).
 			Str("ip", c.IP()).
 			Msg("Request")
 
