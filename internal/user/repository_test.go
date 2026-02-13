@@ -114,6 +114,8 @@ func TestValidateDisplayName(t *testing.T) {
 		{"empty string", ptr(""), true},
 		{"whitespace only", ptr("   "), true},
 		{"trimmed to valid", ptr("  Bob  "), false},
+		{"32 multibyte runes", ptr(strings.Repeat("🎮", 32)), false},
+		{"33 multibyte runes", ptr(strings.Repeat("🎮", 33)), true},
 	}
 
 	for _, tt := range tests {

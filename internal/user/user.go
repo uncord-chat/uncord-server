@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 )
@@ -51,7 +52,7 @@ func ValidateDisplayName(name *string) error {
 		return nil
 	}
 	trimmed := strings.TrimSpace(*name)
-	if len(trimmed) < 1 || len(trimmed) > 32 {
+	if utf8.RuneCountInString(trimmed) < 1 || utf8.RuneCountInString(trimmed) > 32 {
 		return ErrDisplayNameLength
 	}
 	return nil
