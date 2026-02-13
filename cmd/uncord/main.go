@@ -14,7 +14,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
-	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
@@ -69,7 +68,7 @@ func run() error {
 		Msg("Starting Uncord Server")
 
 	if cfg.CORSAllowOrigins == "*" {
-		log.Warn().Msg("CORS_ALLOW_ORIGINS is set to a wildcard \"*\". This allows any origin to make requests to your server. Set an explicit origin (e.g. https://your-client.example.com) for production deployments.")
+		log.Warn().Msg("CORS_ALLOW_ORIGINS is set to a wildcard. Set an explicit origin when in production.")
 	}
 
 	ctx := context.Background()
@@ -187,10 +186,7 @@ func run() error {
 
 	// Global middleware
 	app.Use(requestid.New())
-	app.Use(logger.New(logger.Config{
-		Format:     "${time} ${locals:requestid} ${method} ${path} ${status} ${latency}\n",
-		TimeFormat: time.RFC3339,
-	}))
+	app.Use(httputil.RequestLogger(log.Logger))
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:  cfg.CORSAllowOrigins,
 		AllowMethods:  "GET,POST,PUT,PATCH,DELETE,OPTIONS",
