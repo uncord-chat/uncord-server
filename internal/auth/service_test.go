@@ -132,7 +132,11 @@ func newTestService(t *testing.T, repo *fakeRepository) *Service {
 	t.Helper()
 	_, rdb := setupMiniredis(t)
 	bl := disposable.NewBlocklist("", false, zerolog.Nop())
-	return NewService(repo, rdb, testConfig(), bl, zerolog.Nop())
+	svc, err := NewService(repo, rdb, testConfig(), bl, zerolog.Nop())
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	return svc
 }
 
 // --- Register tests ---
@@ -251,9 +255,12 @@ func TestServiceRegisterDisposableEmailBlocked(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	bl := disposable.NewBlocklist(srv.URL, true, zerolog.Nop())
-	svc := NewService(repo, rdb, testConfig(), bl, zerolog.Nop())
+	svc, err := NewService(repo, rdb, testConfig(), bl, zerolog.Nop())
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
 
-	_, err := svc.Register(context.Background(), RegisterRequest{
+	_, err = svc.Register(context.Background(), RegisterRequest{
 		Email:    "alice@throwaway.email",
 		Username: "alice",
 		Password: "strongpassword",

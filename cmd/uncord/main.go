@@ -183,7 +183,10 @@ func run() error {
 	// Initialise repositories and services
 	userRepo := user.NewPGRepository(db, log.Logger)
 	serverRepo := servercfg.NewPGRepository(db, log.Logger)
-	authService := auth.NewService(userRepo, rdb, cfg, blocklist, log.Logger)
+	authService, err := auth.NewService(userRepo, rdb, cfg, blocklist, log.Logger)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to create auth service")
+	}
 
 	// Create Fiber app
 	app := fiber.New(fiber.Config{

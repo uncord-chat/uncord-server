@@ -31,14 +31,14 @@ type Service struct {
 	dummyHash string
 }
 
-// NewService creates a new authentication service.
-func NewService(users user.Repository, rdb *redis.Client, cfg *config.Config, bl *disposable.Blocklist, logger zerolog.Logger) *Service {
+// NewService creates a new authentication service. It returns an error if the Argon2id configuration is invalid,
+// since password hashing is fundamental to every auth operation.
+func NewService(users user.Repository, rdb *redis.Client, cfg *config.Config, bl *disposable.Blocklist, logger zerolog.Logger) (*Service, error) {
 	// Generate a dummy hash at startup so VerifyPassword always runs against a real Argon2id hash even when the user
-	// does not exist.
+	// does not exist. A failure here means the Argon2 parameters are broken and no password operation will succeed.
 	dummy, err := HashPassword("uncord-dummy-password", cfg.Argon2Memory, cfg.Argon2Iterations, cfg.Argon2Parallelism, cfg.Argon2SaltLength, cfg.Argon2KeyLength)
 	if err != nil {
-		// This should never fail with valid config; fall back to a static hash so the service can still start.
-		dummy = "$argon2id$v=19$m=65536,t=3,p=2$c2FsdHNhbHRzYWx0$placeholder"
+		return nil, fmt.Errorf("generate dummy hash: %w", err)
 	}
 	return &Service{
 		users:     users,
@@ -47,7 +47,7 @@ func NewService(users user.Repository, rdb *redis.Client, cfg *config.Config, bl
 		blocklist: bl,
 		log:       logger,
 		dummyHash: dummy,
-	}
+	}, nil
 }
 
 // RegisterRequest is the input for Service.Register.
