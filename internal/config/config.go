@@ -17,6 +17,7 @@ type Config struct {
 	ServerURL         string
 	ServerPort        int
 	ServerEnv         string // "development" or "production"
+	LogHealthRequests bool
 
 	// Database
 	DatabaseURL     string
@@ -93,6 +94,7 @@ func Load() (*Config, error) {
 		ServerURL:         envStr("SERVER_URL", "https://chat.example.com"),
 		ServerPort:        p.int("SERVER_PORT", 8080),
 		ServerEnv:         envStr("SERVER_ENV", "production"),
+		LogHealthRequests: p.bool("LOG_HEALTH_REQUESTS", true),
 
 		DatabaseURL:     envStr("DATABASE_URL", "postgres://uncord:password@postgres:5432/uncord?sslmode=disable"),
 		DatabaseMaxConn: p.int("DATABASE_MAX_CONNS", 25),

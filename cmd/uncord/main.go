@@ -236,7 +236,11 @@ func run() error {
 
 	// Global middleware
 	app.Use(requestid.New())
-	app.Use(httputil.RequestLogger(log.Logger))
+	if cfg.LogHealthRequests {
+		app.Use(httputil.RequestLogger(log.Logger))
+	} else {
+		app.Use(httputil.RequestLogger(log.Logger, "/api/v1/health"))
+	}
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:  strings.Split(cfg.CORSAllowOrigins, ","),
 		AllowMethods:  []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},

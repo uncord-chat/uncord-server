@@ -9,12 +9,22 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// RequestLogger returns Fiber middleware that logs every request through the provided zerolog logger. It should be
-// registered after the requestid middleware so that the request ID is available in Locals.
-func RequestLogger(logger zerolog.Logger) fiber.Handler {
+// RequestLogger returns Fiber middleware that logs every request through the provided zerolog logger. Paths passed in
+// skipPaths are excluded from logging. It should be registered after the requestid middleware so that the request ID is
+// available in Locals.
+func RequestLogger(logger zerolog.Logger, skipPaths ...string) fiber.Handler {
+	skip := make(map[string]struct{}, len(skipPaths))
+	for _, p := range skipPaths {
+		skip[p] = struct{}{}
+	}
+
 	return func(c fiber.Ctx) error {
 		start := time.Now()
 		err := c.Next()
+
+		if _, ok := skip[c.Path()]; ok {
+			return err
+		}
 
 		status := c.Response().StatusCode()
 		event := levelForStatus(logger, status)
