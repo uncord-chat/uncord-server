@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/rs/zerolog/log"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 	"github.com/uncord-chat/uncord-protocol/models"
 
@@ -136,6 +137,7 @@ func mapAuthError(c *fiber.Ctx, err error) error {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidToken, err.Error())
 
 	default:
+		log.Error().Err(err).Str("handler", "auth").Msg("unhandled auth service error")
 		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
 	}
 }
