@@ -3,6 +3,9 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/google/uuid"
@@ -214,25 +217,34 @@ func TestServiceRegisterDisposableEmailBlocked(t *testing.T) {
 	t.Parallel()
 	repo := newFakeRepository()
 	_, rdb := setupMiniredis(t)
-	// Enable blocklist but with empty URL so it won't load; IsBlocked returns error.
-	// To properly test blocking, we need a blocklist that reports blocked.
-	// Since Blocklist is a concrete type we can't easily mock, test via integration:
-	// use a disabled blocklist for the non-blocking case (covered above).
-	// For the blocking test, we create a service with enabled blocklist pointing to
-	// a test server that returns a known domain.
 
-	// Simpler: just verify that registration proceeds when blocklist is disabled
-	// (already tested above). The unit behaviour of Blocklist is tested in its own package.
-	bl := disposable.NewBlocklist("", false, zerolog.Nop())
+	// Serve a blocklist containing "throwaway.email" so the blocklist can load it.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, "throwaway.email")
+		fmt.Fprintln(w, "fakeinbox.com")
+	}))
+	t.Cleanup(srv.Close)
+
+	bl := disposable.NewBlocklist(srv.URL, true, zerolog.Nop())
 	svc := NewService(repo, rdb, testConfig(), bl, zerolog.Nop())
 
+	_, err := svc.Register(context.Background(), RegisterRequest{
+		Email:    "alice@throwaway.email",
+		Username: "alice",
+		Password: "strongpassword",
+	})
+	if !errors.Is(err, ErrDisposableEmail) {
+		t.Errorf("Register() with disposable domain error = %v, want ErrDisposableEmail", err)
+	}
+
+	// Non-disposable domain should still succeed.
 	result, err := svc.Register(context.Background(), RegisterRequest{
 		Email:    "alice@example.com",
 		Username: "alice",
 		Password: "strongpassword",
 	})
 	if err != nil {
-		t.Fatalf("Register() with disabled blocklist error = %v", err)
+		t.Fatalf("Register() with non-disposable domain error = %v", err)
 	}
 	if result == nil {
 		t.Fatal("Register() returned nil result")
