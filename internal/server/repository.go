@@ -47,7 +47,7 @@ func (r *PGRepository) Update(ctx context.Context, params UpdateParams) (*Config
 
 	if params.Name != nil {
 		setClauses = append(setClauses, fmt.Sprintf("name = $%d", argPos))
-		args = append(args, strings.TrimSpace(*params.Name))
+		args = append(args, *params.Name)
 		argPos++
 	}
 	if params.Description != nil {

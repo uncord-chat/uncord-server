@@ -130,6 +130,17 @@ func TestValidateDisplayName(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("trims whitespace in place", func(t *testing.T) {
+		t.Parallel()
+		name := ptr("  Bob  ")
+		if err := ValidateDisplayName(name); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if *name != "Bob" {
+			t.Errorf("expected trimmed value %q, got %q", "Bob", *name)
+		}
+	})
 }
 
 func ptr(s string) *string { return &s }

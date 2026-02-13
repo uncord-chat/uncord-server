@@ -33,6 +33,17 @@ func TestValidateName(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("trims whitespace in place", func(t *testing.T) {
+		t.Parallel()
+		name := ptr("  hello  ")
+		if err := ValidateName(name); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if *name != "hello" {
+			t.Errorf("expected trimmed value %q, got %q", "hello", *name)
+		}
+	})
 }
 
 func TestValidateDescription(t *testing.T) {

@@ -46,7 +46,8 @@ type UpdateParams struct {
 	AvatarKey   *string
 }
 
-// ValidateDisplayName checks that a non-nil display name is between 1 and 32 characters after trimming whitespace.
+// ValidateDisplayName checks that a non-nil display name is between 1 and 32 characters after trimming whitespace. On
+// success the pointed-to value is replaced with the trimmed result.
 func ValidateDisplayName(name *string) error {
 	if name == nil {
 		return nil
@@ -55,6 +56,7 @@ func ValidateDisplayName(name *string) error {
 	if utf8.RuneCountInString(trimmed) < 1 || utf8.RuneCountInString(trimmed) > 32 {
 		return ErrDisplayNameLength
 	}
+	*name = trimmed
 	return nil
 }
 

@@ -36,7 +36,8 @@ type UpdateParams struct {
 	BannerKey   *string
 }
 
-// ValidateName checks that a non-nil name is between 1 and 100 characters after trimming whitespace.
+// ValidateName checks that a non-nil name is between 1 and 100 characters after trimming whitespace. On success the
+// pointed-to value is replaced with the trimmed result.
 func ValidateName(name *string) error {
 	if name == nil {
 		return nil
@@ -45,6 +46,7 @@ func ValidateName(name *string) error {
 	if len(trimmed) < 1 || len(trimmed) > 100 {
 		return ErrNameLength
 	}
+	*name = trimmed
 	return nil
 }
 
