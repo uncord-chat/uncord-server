@@ -55,6 +55,43 @@ func (r *Resolver) HasPermission(ctx context.Context, userID, channelID uuid.UUI
 	return effective.Has(perm), nil
 }
 
+// ResolveServer returns the effective server-level permissions for a user. Only steps 1 (owner bypass) and 2 (role
+// union) apply; channel and category overrides are not relevant at the server level.
+func (r *Resolver) ResolveServer(ctx context.Context, userID uuid.UUID) (permissions.Permission, error) {
+	isOwner, err := r.store.IsOwner(ctx, userID)
+	if err != nil {
+		return 0, fmt.Errorf("check owner: %w", err)
+	}
+	if isOwner {
+		return permissions.AllPermissions, nil
+	}
+
+	roleEntries, err := r.store.RolePermissions(ctx, userID)
+	if err != nil {
+		return 0, fmt.Errorf("get role permissions: %w", err)
+	}
+
+	var base permissions.Permission
+	for _, entry := range roleEntries {
+		base = base.Add(entry.Permissions)
+	}
+
+	if base.Has(permissions.ManageServer) {
+		return permissions.AllPermissions, nil
+	}
+
+	return base, nil
+}
+
+// HasServerPermission checks whether a user has a specific server-level permission.
+func (r *Resolver) HasServerPermission(ctx context.Context, userID uuid.UUID, perm permissions.Permission) (bool, error) {
+	effective, err := r.ResolveServer(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	return effective.Has(perm), nil
+}
+
 // compute runs the 4-step permission algorithm.
 func (r *Resolver) compute(ctx context.Context, userID, channelID uuid.UUID) (permissions.Permission, error) {
 	// Step 1: Owner bypass

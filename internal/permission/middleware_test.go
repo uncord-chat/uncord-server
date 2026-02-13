@@ -192,6 +192,119 @@ func TestMiddlewareResolverError(t *testing.T) {
 	}
 }
 
+// --- RequireServerPermission tests ---
+
+func TestServerMiddlewareAllowed(t *testing.T) {
+	t.Parallel()
+	userID := uuid.New()
+	store := &fakeStore{
+		roleEntries: []RolePermEntry{
+			{RoleID: uuid.New(), Permissions: permissions.ManageServer},
+		},
+	}
+	resolver := NewResolver(store, newFakeCache(), zerolog.Nop())
+
+	app := fiber.New()
+	app.Use(func(c fiber.Ctx) error {
+		c.Locals("userID", userID)
+		return c.Next()
+	})
+	app.Get("/server", RequireServerPermission(resolver, permissions.ManageServer), func(c fiber.Ctx) error {
+		return c.SendStatus(200)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/server", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test() error = %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != 200 {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+}
+
+func TestServerMiddlewareDenied(t *testing.T) {
+	t.Parallel()
+	userID := uuid.New()
+	store := &fakeStore{
+		roleEntries: []RolePermEntry{
+			{RoleID: uuid.New(), Permissions: permissions.ViewChannels},
+		},
+	}
+	resolver := NewResolver(store, newFakeCache(), zerolog.Nop())
+
+	app := fiber.New()
+	app.Use(func(c fiber.Ctx) error {
+		c.Locals("userID", userID)
+		return c.Next()
+	})
+	app.Get("/server", RequireServerPermission(resolver, permissions.ManageServer), func(c fiber.Ctx) error {
+		return c.SendStatus(200)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/server", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test() error = %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusForbidden)
+	}
+
+	code := readErrCode(t, resp)
+	if code != string(apierrors.MissingPermissions) {
+		t.Errorf("error code = %q, want %q", code, apierrors.MissingPermissions)
+	}
+}
+
+func TestServerMiddlewareNoAuth(t *testing.T) {
+	t.Parallel()
+	store := &fakeStore{}
+	resolver := NewResolver(store, newFakeCache(), zerolog.Nop())
+
+	app := fiber.New()
+	app.Get("/server", RequireServerPermission(resolver, permissions.ManageServer), func(c fiber.Ctx) error {
+		return c.SendStatus(200)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/server", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test() error = %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusUnauthorized)
+	}
+}
+
+func TestServerMiddlewareResolverError(t *testing.T) {
+	t.Parallel()
+	store := &fakeStore{isOwnerErr: fmt.Errorf("db down")}
+	resolver := NewResolver(store, newFakeCache(), zerolog.Nop())
+
+	app := fiber.New()
+	app.Use(func(c fiber.Ctx) error {
+		c.Locals("userID", uuid.New())
+		return c.Next()
+	})
+	app.Get("/server", RequireServerPermission(resolver, permissions.ManageServer), func(c fiber.Ctx) error {
+		return c.SendStatus(200)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/server", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test() error = %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != fiber.StatusInternalServerError {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusInternalServerError)
+	}
+}
+
 func readErrCode(t *testing.T, resp *http.Response) string {
 	t.Helper()
 	bodyBytes, err := io.ReadAll(resp.Body)

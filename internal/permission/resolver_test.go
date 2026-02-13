@@ -583,3 +583,127 @@ func TestHasPermission(t *testing.T) {
 		t.Error("should not have ManageRoles")
 	}
 }
+
+// --- ResolveServer tests ---
+
+func TestResolveServer_OwnerBypass(t *testing.T) {
+	t.Parallel()
+	store := &fakeStore{isOwner: true}
+	cache := newFakeCache()
+	r := NewResolver(store, cache, zerolog.Nop())
+
+	perm, err := r.ResolveServer(context.Background(), uuid.New())
+	if err != nil {
+		t.Fatalf("ResolveServer() error = %v", err)
+	}
+	if perm != permissions.AllPermissions {
+		t.Errorf("owner permissions = %d, want AllPermissions (%d)", perm, permissions.AllPermissions)
+	}
+}
+
+func TestResolveServer_ManageServerGivesAll(t *testing.T) {
+	t.Parallel()
+	store := &fakeStore{
+		roleEntries: []RolePermEntry{
+			{RoleID: uuid.New(), Permissions: permissions.ManageServer},
+		},
+	}
+	cache := newFakeCache()
+	r := NewResolver(store, cache, zerolog.Nop())
+
+	perm, err := r.ResolveServer(context.Background(), uuid.New())
+	if err != nil {
+		t.Fatalf("ResolveServer() error = %v", err)
+	}
+	if perm != permissions.AllPermissions {
+		t.Errorf("ManageServer permissions = %d, want AllPermissions", perm)
+	}
+}
+
+func TestResolveServer_RoleUnion(t *testing.T) {
+	t.Parallel()
+	store := &fakeStore{
+		roleEntries: []RolePermEntry{
+			{RoleID: uuid.New(), Permissions: permissions.ViewChannels | permissions.SendMessages},
+			{RoleID: uuid.New(), Permissions: permissions.AddReactions | permissions.EmbedLinks},
+		},
+	}
+	cache := newFakeCache()
+	r := NewResolver(store, cache, zerolog.Nop())
+
+	perm, err := r.ResolveServer(context.Background(), uuid.New())
+	if err != nil {
+		t.Fatalf("ResolveServer() error = %v", err)
+	}
+
+	expected := permissions.ViewChannels | permissions.SendMessages | permissions.AddReactions | permissions.EmbedLinks
+	if perm != expected {
+		t.Errorf("role union = %d, want %d", perm, expected)
+	}
+}
+
+func TestResolveServer_NoRoles(t *testing.T) {
+	t.Parallel()
+	store := &fakeStore{}
+	cache := newFakeCache()
+	r := NewResolver(store, cache, zerolog.Nop())
+
+	perm, err := r.ResolveServer(context.Background(), uuid.New())
+	if err != nil {
+		t.Fatalf("ResolveServer() error = %v", err)
+	}
+	if perm != 0 {
+		t.Errorf("no-role permissions = %d, want 0", perm)
+	}
+}
+
+func TestResolveServer_StoreError(t *testing.T) {
+	t.Parallel()
+	store := &fakeStore{isOwnerErr: fmt.Errorf("db down")}
+	cache := newFakeCache()
+	r := NewResolver(store, cache, zerolog.Nop())
+
+	_, err := r.ResolveServer(context.Background(), uuid.New())
+	if err == nil {
+		t.Fatal("ResolveServer() should propagate store error")
+	}
+}
+
+func TestResolveServer_RolePermissionsError(t *testing.T) {
+	t.Parallel()
+	store := &fakeStore{roleErr: fmt.Errorf("db error")}
+	cache := newFakeCache()
+	r := NewResolver(store, cache, zerolog.Nop())
+
+	_, err := r.ResolveServer(context.Background(), uuid.New())
+	if err == nil {
+		t.Fatal("ResolveServer() should propagate role permissions error")
+	}
+}
+
+func TestHasServerPermission(t *testing.T) {
+	t.Parallel()
+	store := &fakeStore{
+		roleEntries: []RolePermEntry{
+			{RoleID: uuid.New(), Permissions: permissions.ViewChannels | permissions.SendMessages},
+		},
+	}
+	cache := newFakeCache()
+	r := NewResolver(store, cache, zerolog.Nop())
+
+	has, err := r.HasServerPermission(context.Background(), uuid.New(), permissions.ViewChannels)
+	if err != nil {
+		t.Fatalf("HasServerPermission() error = %v", err)
+	}
+	if !has {
+		t.Error("should have ViewChannels")
+	}
+
+	has, err = r.HasServerPermission(context.Background(), uuid.New(), permissions.ManageRoles)
+	if err != nil {
+		t.Fatalf("HasServerPermission() error = %v", err)
+	}
+	if has {
+		t.Error("should not have ManageRoles")
+	}
+}

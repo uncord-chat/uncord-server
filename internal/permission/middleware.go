@@ -46,3 +46,30 @@ func RequirePermission(resolver *Resolver, perm permissions.Permission) fiber.Ha
 		return c.Next()
 	}
 }
+
+// RequireServerPermission returns Fiber middleware that checks whether the authenticated user has the given
+// server-level permission. Unlike RequirePermission, no channel ID is needed.
+func RequireServerPermission(resolver *Resolver, perm permissions.Permission) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		userIDVal := c.Locals("userID")
+		if userIDVal == nil {
+			return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Authentication required")
+		}
+
+		userID, ok := userIDVal.(uuid.UUID)
+		if !ok {
+			return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Invalid user identity")
+		}
+
+		allowed, err := resolver.HasServerPermission(c, userID, perm)
+		if err != nil {
+			return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "Failed to check permissions")
+		}
+
+		if !allowed {
+			return httputil.Fail(c, fiber.StatusForbidden, apierrors.MissingPermissions, "You do not have the required permissions")
+		}
+
+		return c.Next()
+	}
+}

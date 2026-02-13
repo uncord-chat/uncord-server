@@ -1,0 +1,101 @@
+package api
+
+import (
+	"errors"
+	"time"
+
+	"github.com/gofiber/fiber/v3"
+	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
+	apierrors "github.com/uncord-chat/uncord-protocol/errors"
+	"github.com/uncord-chat/uncord-protocol/models"
+
+	"github.com/uncord-chat/uncord-server/internal/httputil"
+	"github.com/uncord-chat/uncord-server/internal/server"
+)
+
+// ServerHandler serves server configuration endpoints.
+type ServerHandler struct {
+	servers server.Repository
+}
+
+// NewServerHandler creates a new server handler.
+func NewServerHandler(servers server.Repository) *ServerHandler {
+	return &ServerHandler{servers: servers}
+}
+
+// Get handles GET /api/v1/server.
+func (h *ServerHandler) Get(c fiber.Ctx) error {
+	_, ok := c.Locals("userID").(uuid.UUID)
+	if !ok {
+		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	}
+
+	cfg, err := h.servers.Get(c)
+	if err != nil {
+		return mapServerError(c, err)
+	}
+
+	return httputil.Success(c, toServerConfigModel(cfg))
+}
+
+// Update handles PATCH /api/v1/server.
+func (h *ServerHandler) Update(c fiber.Ctx) error {
+	_, ok := c.Locals("userID").(uuid.UUID)
+	if !ok {
+		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	}
+
+	var body models.UpdateServerConfigRequest
+	if err := c.Bind().Body(&body); err != nil {
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "Invalid request body")
+	}
+
+	if err := server.ValidateName(body.Name); err != nil {
+		return mapServerError(c, err)
+	}
+	if err := server.ValidateDescription(body.Description); err != nil {
+		return mapServerError(c, err)
+	}
+
+	cfg, err := h.servers.Update(c, server.UpdateParams{
+		Name:        body.Name,
+		Description: body.Description,
+		IconKey:     body.IconKey,
+		BannerKey:   body.BannerKey,
+	})
+	if err != nil {
+		return mapServerError(c, err)
+	}
+
+	return httputil.Success(c, toServerConfigModel(cfg))
+}
+
+// toServerConfigModel converts the internal server config to the protocol response type.
+func toServerConfigModel(cfg *server.Config) models.ServerConfig {
+	return models.ServerConfig{
+		ID:          cfg.ID.String(),
+		Name:        cfg.Name,
+		Description: cfg.Description,
+		IconKey:     cfg.IconKey,
+		BannerKey:   cfg.BannerKey,
+		OwnerID:     cfg.OwnerID.String(),
+		CreatedAt:   cfg.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:   cfg.UpdatedAt.Format(time.RFC3339),
+	}
+}
+
+// mapServerError converts server-layer errors to appropriate HTTP responses.
+func mapServerError(c fiber.Ctx, err error) error {
+	switch {
+	case errors.Is(err, server.ErrNotFound):
+		return httputil.Fail(c, fiber.StatusNotFound, apierrors.NotFound, "Server config not found")
+	case errors.Is(err, server.ErrNameLength):
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, err.Error())
+	case errors.Is(err, server.ErrDescriptionLength):
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, err.Error())
+	default:
+		log.Error().Err(err).Str("handler", "server").Msg("unhandled server service error")
+		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
+	}
+}

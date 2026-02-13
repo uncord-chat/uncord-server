@@ -31,9 +31,12 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 	"github.com/uncord-chat/uncord-server/internal/permission"
 	"github.com/uncord-chat/uncord-server/internal/postgres"
+	servercfg "github.com/uncord-chat/uncord-server/internal/server"
 	"github.com/uncord-chat/uncord-server/internal/typesense"
 	"github.com/uncord-chat/uncord-server/internal/user"
 	"github.com/uncord-chat/uncord-server/internal/valkey"
+
+	"github.com/uncord-chat/uncord-protocol/permissions"
 )
 
 // Build metadata injected via ldflags at compile time.
@@ -50,6 +53,7 @@ type server struct {
 	rdb           *redis.Client
 	userRepo      user.Repository
 	authService   *auth.Service
+	serverRepo    servercfg.Repository
 	permResolver  *permission.Resolver
 	permPublisher *permission.Publisher
 }
@@ -176,8 +180,9 @@ func run() error {
 		}
 	}()
 
-	// Initialise user repository and auth service
+	// Initialise repositories and services
 	userRepo := user.NewPGRepository(db, log.Logger)
+	serverRepo := servercfg.NewPGRepository(db, log.Logger)
 	authService := auth.NewService(userRepo, rdb, cfg, blocklist, log.Logger)
 
 	// Create Fiber app
@@ -231,6 +236,7 @@ func run() error {
 		db:            db,
 		rdb:           rdb,
 		userRepo:      userRepo,
+		serverRepo:    serverRepo,
 		authService:   authService,
 		permResolver:  permResolver,
 		permPublisher: permPublisher,
@@ -296,9 +302,12 @@ func (s *server) registerRoutes(app *fiber.App) {
 	userGroup.Get("/@me", userHandler.GetMe)
 	userGroup.Patch("/@me", userHandler.UpdateMe)
 
-	// Permission-protected routes will use:
-	//   permission.RequirePermission(s.permResolver, perm) per-route
-	_ = s.permResolver  // wired into protected route groups as they are built
+	// Server config routes (authenticated, PATCH requires ManageServer)
+	serverHandler := api.NewServerHandler(s.serverRepo)
+	serverGroup := app.Group("/api/v1/server", auth.RequireAuth(s.cfg.JWTSecret, s.cfg.ServerURL))
+	serverGroup.Get("/", serverHandler.Get)
+	serverGroup.Patch("/", permission.RequireServerPermission(s.permResolver, permissions.ManageServer), serverHandler.Update)
+
 	_ = s.permPublisher // used by handlers that mutate permissions
 }
 
