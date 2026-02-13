@@ -2,6 +2,10 @@ module github.com/uncord-chat/uncord-server
 
 go 1.26.0
 
+// NOTE: Remove this replace directive before tagging a release. It points to the local protocol repo for development
+// convenience. Production builds must reference a tagged version of uncord-protocol.
+// replace github.com/uncord-chat/uncord-protocol => ../uncord-protocol
+
 require (
 	github.com/alexedwards/argon2id v1.0.0
 	github.com/alicebob/miniredis/v2 v2.36.1
