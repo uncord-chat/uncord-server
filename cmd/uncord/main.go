@@ -109,13 +109,18 @@ func run() error {
 	}
 
 	// Typesense collection (best-effort)
-	created, err := typesense.EnsureMessagesCollection(ctx, cfg.TypesenseURL, cfg.TypesenseAPIKey)
+	result, err := typesense.EnsureMessagesCollection(ctx, cfg.TypesenseURL, cfg.TypesenseAPIKey)
 	if err != nil {
-		log.Warn().Err(err).Msg("Typesense collection setup failed (non-fatal)")
-	} else if created {
-		log.Info().Msg("Typesense messages collection created")
+		log.Warn().Err(err).Msg("Typesense collection setup failed")
 	} else {
-		log.Info().Msg("Typesense messages collection already exists")
+		switch result {
+		case typesense.ResultCreated:
+			log.Info().Msg("Typesense messages collection created")
+		case typesense.ResultRecreated:
+			log.Warn().Msg("Typesense messages collection recreated due to schema change")
+		case typesense.ResultUnchanged:
+			log.Info().Msg("Typesense messages collection already exists")
+		}
 	}
 
 	// Initialise disposable email blocklist and prefetch asynchronously so the first registration request does not
