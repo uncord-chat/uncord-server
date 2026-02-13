@@ -48,6 +48,7 @@ type server struct {
 	cfg           *config.Config
 	db            *pgxpool.Pool
 	rdb           *redis.Client
+	userRepo      user.Repository
 	authService   *auth.Service
 	permResolver  *permission.Resolver
 	permPublisher *permission.Publisher
@@ -229,6 +230,7 @@ func run() error {
 		cfg:           cfg,
 		db:            db,
 		rdb:           rdb,
+		userRepo:      userRepo,
 		authService:   authService,
 		permResolver:  permResolver,
 		permPublisher: permPublisher,
@@ -288,8 +290,13 @@ func (s *server) registerRoutes(app *fiber.App) {
 	authGroup.Post("/refresh", authHandler.Refresh)
 	authGroup.Post("/verify-email", authHandler.VerifyEmail)
 
-	// Protected routes will use:
-	//   auth.RequireAuth(s.cfg.JWTSecret, s.cfg.ServerURL) middleware group
+	// User profile routes (authenticated, no permission checks)
+	userHandler := api.NewUserHandler(s.userRepo)
+	userGroup := app.Group("/api/v1/users", auth.RequireAuth(s.cfg.JWTSecret, s.cfg.ServerURL))
+	userGroup.Get("/@me", userHandler.GetMe)
+	userGroup.Patch("/@me", userHandler.UpdateMe)
+
+	// Permission-protected routes will use:
 	//   permission.RequirePermission(s.permResolver, perm) per-route
 	_ = s.permResolver  // wired into protected route groups as they are built
 	_ = s.permPublisher // used by handlers that mutate permissions

@@ -65,6 +65,30 @@ func (r *fakeRepo) VerifyEmail(_ context.Context, token string) (uuid.UUID, erro
 	return uuid.Nil, user.ErrInvalidToken
 }
 
+func (r *fakeRepo) GetByID(_ context.Context, id uuid.UUID) (*user.User, error) {
+	for _, u := range r.users {
+		if u.ID == id {
+			return u, nil
+		}
+	}
+	return nil, user.ErrNotFound
+}
+
+func (r *fakeRepo) Update(_ context.Context, id uuid.UUID, params user.UpdateParams) (*user.User, error) {
+	for _, u := range r.users {
+		if u.ID == id {
+			if params.DisplayName != nil {
+				u.DisplayName = params.DisplayName
+			}
+			if params.AvatarKey != nil {
+				u.AvatarKey = params.AvatarKey
+			}
+			return u, nil
+		}
+	}
+	return nil, user.ErrNotFound
+}
+
 func (r *fakeRepo) RecordLoginAttempt(context.Context, string, string, bool) error { return nil }
 func (r *fakeRepo) UpdatePasswordHash(context.Context, uuid.UUID, string) error    { return nil }
 

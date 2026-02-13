@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -68,14 +69,31 @@ func (r *PGRepository) Create(ctx context.Context, params CreateParams) (uuid.UU
 	return userID, nil
 }
 
+// GetByID returns the user matching the given ID.
+func (r *PGRepository) GetByID(ctx context.Context, id uuid.UUID) (*User, error) {
+	var u User
+	err := r.db.QueryRow(ctx,
+		`SELECT id, email, password_hash, username, display_name, avatar_key, mfa_enabled, email_verified
+		 FROM users WHERE id = $1`,
+		id,
+	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Username, &u.DisplayName, &u.AvatarKey, &u.MFAEnabled, &u.EmailVerified)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("query user by id: %w", err)
+	}
+	return &u, nil
+}
+
 // GetByEmail returns the user matching the given email address.
 func (r *PGRepository) GetByEmail(ctx context.Context, email string) (*User, error) {
 	var u User
 	err := r.db.QueryRow(ctx,
-		`SELECT id, email, password_hash, username, mfa_enabled, email_verified
+		`SELECT id, email, password_hash, username, display_name, avatar_key, mfa_enabled, email_verified
 		 FROM users WHERE email = $1`,
 		email,
-	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Username, &u.MFAEnabled, &u.EmailVerified)
+	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Username, &u.DisplayName, &u.AvatarKey, &u.MFAEnabled, &u.EmailVerified)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -150,6 +168,48 @@ func (r *PGRepository) UpdatePasswordHash(ctx context.Context, userID uuid.UUID,
 		return fmt.Errorf("update password hash: %w", err)
 	}
 	return nil
+}
+
+// Update applies the non-nil fields in params to the user row and returns the updated user. Returns ErrNotFound if no
+// row matches the given ID.
+func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdateParams) (*User, error) {
+	setClauses := make([]string, 0, 2)
+	args := make([]any, 0, 3)
+	argPos := 1
+
+	if params.DisplayName != nil {
+		setClauses = append(setClauses, fmt.Sprintf("display_name = $%d", argPos))
+		args = append(args, *params.DisplayName)
+		argPos++
+	}
+	if params.AvatarKey != nil {
+		setClauses = append(setClauses, fmt.Sprintf("avatar_key = $%d", argPos))
+		args = append(args, *params.AvatarKey)
+		argPos++
+	}
+
+	// When no fields are provided, fetch and return the current row unchanged.
+	if len(setClauses) == 0 {
+		return r.GetByID(ctx, id)
+	}
+
+	query := fmt.Sprintf(
+		`UPDATE users SET %s WHERE id = $%d
+		 RETURNING id, email, password_hash, username, display_name, avatar_key, mfa_enabled, email_verified`,
+		strings.Join(setClauses, ", "), argPos,
+	)
+	args = append(args, id)
+
+	var u User
+	err := r.db.QueryRow(ctx, query, args...).
+		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Username, &u.DisplayName, &u.AvatarKey, &u.MFAEnabled, &u.EmailVerified)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("update user: %w", err)
+	}
+	return &u, nil
 }
 
 func isUniqueViolation(err error) bool {

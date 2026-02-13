@@ -79,6 +79,30 @@ func (r *fakeRepository) RecordLoginAttempt(_ context.Context, email, ip string,
 	return nil
 }
 
+func (r *fakeRepository) GetByID(_ context.Context, id uuid.UUID) (*user.User, error) {
+	for _, u := range r.users {
+		if u.ID == id {
+			return u, nil
+		}
+	}
+	return nil, user.ErrNotFound
+}
+
+func (r *fakeRepository) Update(_ context.Context, id uuid.UUID, params user.UpdateParams) (*user.User, error) {
+	for _, u := range r.users {
+		if u.ID == id {
+			if params.DisplayName != nil {
+				u.DisplayName = params.DisplayName
+			}
+			if params.AvatarKey != nil {
+				u.AvatarKey = params.AvatarKey
+			}
+			return u, nil
+		}
+	}
+	return nil, user.ErrNotFound
+}
+
 func (r *fakeRepository) UpdatePasswordHash(_ context.Context, userID uuid.UUID, hash string) error {
 	for _, u := range r.users {
 		if u.ID == userID {

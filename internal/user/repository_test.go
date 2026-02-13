@@ -2,6 +2,7 @@ package user
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -68,6 +69,7 @@ func TestSentinelErrors(t *testing.T) {
 		{"ErrNotFound", ErrNotFound},
 		{"ErrAlreadyExists", ErrAlreadyExists},
 		{"ErrInvalidToken", ErrInvalidToken},
+		{"ErrDisplayNameLength", ErrDisplayNameLength},
 	}
 
 	for i, a := range sentinels {
@@ -96,6 +98,39 @@ func TestCreateParamsZeroValue(t *testing.T) {
 		t.Error("CreateParams zero value should have zero time")
 	}
 }
+
+func TestValidateDisplayName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		input   *string
+		wantErr bool
+	}{
+		{"nil is valid", nil, false},
+		{"single char", ptr("A"), false},
+		{"32 chars", ptr(strings.Repeat("a", 32)), false},
+		{"33 chars", ptr(strings.Repeat("a", 33)), true},
+		{"empty string", ptr(""), true},
+		{"whitespace only", ptr("   "), true},
+		{"trimmed to valid", ptr("  Bob  "), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := ValidateDisplayName(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateDisplayName() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if err != nil && !errors.Is(err, ErrDisplayNameLength) {
+				t.Errorf("ValidateDisplayName() error = %v, want ErrDisplayNameLength", err)
+			}
+		})
+	}
+}
+
+func ptr(s string) *string { return &s }
 
 // wrappedPgError returns a PgError wrapped with fmt.Errorf to test errors.As unwrapping.
 func wrappedPgError(code string) error {
