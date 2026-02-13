@@ -6,7 +6,7 @@ RUN apk add --no-cache git ca-certificates
 WORKDIR /src
 
 COPY . .
-RUN sed -i '/^replace /d' go.mod && go mod tidy
+RUN go mod edit -dropreplace=github.com/uncord-chat/uncord-protocol && go mod tidy
 
 ARG VERSION=dev
 RUN CGO_ENABLED=0 GOOS=linux go build \
