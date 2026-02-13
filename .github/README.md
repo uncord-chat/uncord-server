@@ -41,6 +41,10 @@ make fmt                # format source files
 
 See the [Makefile](../Makefile) for the full list of targets.
 
+#### Email testing
+
+Docker Compose includes [Mailpit](https://mailpit.axigen.com/), a local SMTP server that catches all outgoing email. When `SERVER_ENV=development` the server automatically routes SMTP through Mailpit with no manual configuration required. View caught emails at [http://localhost:8025](http://localhost:8025).
+
 ### Project structure
 
 ```

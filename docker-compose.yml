@@ -59,6 +59,12 @@ services:
       timeout: 3s
       retries: 5
 
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "8025:8025"
+    restart: unless-stopped
+
   # Optional: Garage for S3 storage (uncomment when STORAGE_BACKEND=s3)
   # garage:
   #   image: dxflrs/garage:latest

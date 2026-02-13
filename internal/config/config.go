@@ -151,6 +151,17 @@ func Load() (*Config, error) {
 		return nil, parseErr
 	}
 
+	// In development mode, override defaults so that everything works out of the box with Docker Compose. SMTP is
+	// routed through Mailpit (the local mail catcher) and ServerURL points to the local server so that verification
+	// links in emails resolve correctly.
+	if cfg.IsDevelopment() {
+		cfg.SMTPHost = "mailpit"
+		cfg.SMTPPort = 1025
+		cfg.SMTPUsername = ""
+		cfg.SMTPPassword = ""
+		cfg.ServerURL = fmt.Sprintf("http://localhost:%d", cfg.ServerPort)
+	}
+
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}

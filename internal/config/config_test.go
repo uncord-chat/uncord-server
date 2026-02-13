@@ -392,6 +392,98 @@ func TestLoadSMTPValidation(t *testing.T) {
 	}
 }
 
+func TestLoadDevelopmentOverrides(t *testing.T) {
+	tests := []struct {
+		name          string
+		serverEnv     string
+		serverPort    string
+		smtpHost      string
+		wantHost      string
+		wantPort      int
+		wantUsername  string
+		wantPassword  string
+		wantServerURL string
+	}{
+		{
+			name:          "development mode overrides SMTP and ServerURL",
+			serverEnv:     "development",
+			serverPort:    "",
+			smtpHost:      "",
+			wantHost:      "mailpit",
+			wantPort:      1025,
+			wantUsername:  "",
+			wantPassword:  "",
+			wantServerURL: "http://localhost:8080",
+		},
+		{
+			name:          "development mode uses configured port in ServerURL",
+			serverEnv:     "development",
+			serverPort:    "9090",
+			smtpHost:      "",
+			wantHost:      "mailpit",
+			wantPort:      1025,
+			wantUsername:  "",
+			wantPassword:  "",
+			wantServerURL: "http://localhost:9090",
+		},
+		{
+			name:          "production mode leaves SMTP and ServerURL unchanged",
+			serverEnv:     "production",
+			serverPort:    "",
+			smtpHost:      "mail.example.com",
+			wantHost:      "mail.example.com",
+			wantPort:      587,
+			wantUsername:  "user@example.com",
+			wantPassword:  "secret",
+			wantServerURL: "https://chat.example.com",
+		},
+		{
+			name:          "development mode overrides explicit SMTP settings",
+			serverEnv:     "development",
+			serverPort:    "",
+			smtpHost:      "mail.example.com",
+			wantHost:      "mailpit",
+			wantPort:      1025,
+			wantUsername:  "",
+			wantPassword:  "",
+			wantServerURL: "http://localhost:8080",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+			t.Setenv("SERVER_ENV", tt.serverEnv)
+			t.Setenv("SERVER_PORT", tt.serverPort)
+			t.Setenv("SMTP_HOST", tt.smtpHost)
+			t.Setenv("SMTP_PORT", "587")
+			t.Setenv("SMTP_USERNAME", "user@example.com")
+			t.Setenv("SMTP_PASSWORD", "secret")
+			t.Setenv("SMTP_FROM", "noreply@example.com")
+
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load() returned unexpected error: %v", err)
+			}
+
+			if cfg.SMTPHost != tt.wantHost {
+				t.Errorf("SMTPHost = %q, want %q", cfg.SMTPHost, tt.wantHost)
+			}
+			if cfg.SMTPPort != tt.wantPort {
+				t.Errorf("SMTPPort = %d, want %d", cfg.SMTPPort, tt.wantPort)
+			}
+			if cfg.SMTPUsername != tt.wantUsername {
+				t.Errorf("SMTPUsername = %q, want %q", cfg.SMTPUsername, tt.wantUsername)
+			}
+			if cfg.SMTPPassword != tt.wantPassword {
+				t.Errorf("SMTPPassword = %q, want %q", cfg.SMTPPassword, tt.wantPassword)
+			}
+			if cfg.ServerURL != tt.wantServerURL {
+				t.Errorf("ServerURL = %q, want %q", cfg.ServerURL, tt.wantServerURL)
+			}
+		})
+	}
+}
+
 func TestSMTPConfigured(t *testing.T) {
 	tests := []struct {
 		host string

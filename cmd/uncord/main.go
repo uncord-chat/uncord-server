@@ -191,6 +191,9 @@ func run() error {
 			log.Info().Str("host", cfg.SMTPHost).Int("port", cfg.SMTPPort).Msg("SMTP connection verified")
 		}
 		emailSender = emailClient
+		if cfg.IsDevelopment() {
+			log.Info().Msg("SMTP routed to Mailpit. View caught emails at http://localhost:8025")
+		}
 	} else {
 		log.Warn().Msg("SMTP_HOST is not configured. Email verification will only work in development mode (token logged to console).")
 	}
