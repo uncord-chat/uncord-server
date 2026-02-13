@@ -188,7 +188,8 @@ func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdatePa
 		argPos++
 	}
 
-	// When no fields are provided, fetch and return the current row unchanged.
+	// No fields to update. Return the current row without issuing an UPDATE so the database trigger does not bump
+	// updated_at. A no-op PATCH should not alter the modification timestamp.
 	if len(setClauses) == 0 {
 		return r.GetByID(ctx, id)
 	}

@@ -65,6 +65,8 @@ func (r *PGRepository) Update(ctx context.Context, params UpdateParams) (*Config
 		args = append(args, *params.BannerKey)
 	}
 
+	// No fields to update. Return the current row without issuing an UPDATE so the database trigger does not bump
+	// updated_at. A no-op PATCH should not alter the modification timestamp.
 	if len(setClauses) == 0 {
 		return r.Get(ctx)
 	}
