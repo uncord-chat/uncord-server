@@ -95,6 +95,7 @@ func RunFirstInit(ctx context.Context, db *pgxpool.Pool, cfg *config.Config, log
 	if err != nil {
 		return fmt.Errorf("insert owner user: %w", err)
 	}
+	logger.Debug().Str("username", username).Str("email", ownerEmail).Msg("Created owner account")
 
 	// Insert server_config
 	_, err = tx.Exec(ctx,
@@ -105,6 +106,7 @@ func RunFirstInit(ctx context.Context, db *pgxpool.Pool, cfg *config.Config, log
 	if err != nil {
 		return fmt.Errorf("insert server_config: %w", err)
 	}
+	logger.Debug().Str("name", cfg.ServerName).Msg("Created server configuration")
 
 	// Insert @everyone role
 	var everyoneRoleID uuid.UUID
@@ -117,6 +119,7 @@ func RunFirstInit(ctx context.Context, db *pgxpool.Pool, cfg *config.Config, log
 	if err != nil {
 		return fmt.Errorf("insert @everyone role: %w", err)
 	}
+	logger.Debug().Msg("Created @everyone role")
 
 	// Insert owner as member
 	_, err = tx.Exec(ctx,
@@ -135,6 +138,7 @@ func RunFirstInit(ctx context.Context, db *pgxpool.Pool, cfg *config.Config, log
 	if err != nil {
 		return fmt.Errorf("insert owner member_roles: %w", err)
 	}
+	logger.Debug().Msg("Registered owner as member with @everyone role")
 
 	// Insert #general channel
 	_, err = tx.Exec(ctx,
@@ -152,6 +156,7 @@ func RunFirstInit(ctx context.Context, db *pgxpool.Pool, cfg *config.Config, log
 	if err != nil {
 		return fmt.Errorf("insert #welcome channel: %w", err)
 	}
+	logger.Debug().Msg("Created #general and #welcome channels")
 
 	// Insert onboarding_config
 	_, err = tx.Exec(ctx,
@@ -173,6 +178,7 @@ func RunFirstInit(ctx context.Context, db *pgxpool.Pool, cfg *config.Config, log
 	if err != nil {
 		return fmt.Errorf("insert onboarding_config: %w", err)
 	}
+	logger.Debug().Msg("Created onboarding configuration")
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit init transaction: %w", err)
