@@ -29,11 +29,11 @@ var testTimeout = fiber.TestConfig{Timeout: 5 * time.Second}
 
 // fakeRepo implements user.Repository for handler tests.
 type fakeRepo struct {
-	users map[string]*user.User
+	users map[string]*user.Credentials
 }
 
 func newFakeRepo() *fakeRepo {
-	return &fakeRepo{users: make(map[string]*user.User)}
+	return &fakeRepo{users: make(map[string]*user.Credentials)}
 }
 
 func (r *fakeRepo) Create(_ context.Context, params user.CreateParams) (uuid.UUID, error) {
@@ -41,21 +41,23 @@ func (r *fakeRepo) Create(_ context.Context, params user.CreateParams) (uuid.UUI
 		return uuid.Nil, user.ErrAlreadyExists
 	}
 	id := uuid.New()
-	r.users[params.Email] = &user.User{
-		ID:           id,
-		Email:        params.Email,
-		Username:     params.Username,
+	r.users[params.Email] = &user.Credentials{
+		User: user.User{
+			ID:       id,
+			Email:    params.Email,
+			Username: params.Username,
+		},
 		PasswordHash: params.PasswordHash,
 	}
 	return id, nil
 }
 
-func (r *fakeRepo) GetByEmail(_ context.Context, email string) (*user.User, error) {
-	u, ok := r.users[email]
+func (r *fakeRepo) GetByEmail(_ context.Context, email string) (*user.Credentials, error) {
+	c, ok := r.users[email]
 	if !ok {
 		return nil, user.ErrNotFound
 	}
-	return u, nil
+	return c, nil
 }
 
 func (r *fakeRepo) VerifyEmail(_ context.Context, token string) (uuid.UUID, error) {
@@ -66,25 +68,27 @@ func (r *fakeRepo) VerifyEmail(_ context.Context, token string) (uuid.UUID, erro
 }
 
 func (r *fakeRepo) GetByID(_ context.Context, id uuid.UUID) (*user.User, error) {
-	for _, u := range r.users {
-		if u.ID == id {
-			return u, nil
+	for _, c := range r.users {
+		if c.ID == id {
+			cpy := c.User
+			return &cpy, nil
 		}
 	}
 	return nil, user.ErrNotFound
 }
 
 func (r *fakeRepo) Update(_ context.Context, id uuid.UUID, params user.UpdateParams) (*user.User, error) {
-	for _, u := range r.users {
-		if u.ID == id {
+	for _, c := range r.users {
+		if c.ID == id {
 			if params.DisplayName != nil {
 				trimmed := strings.TrimSpace(*params.DisplayName)
-				u.DisplayName = &trimmed
+				c.DisplayName = &trimmed
 			}
 			if params.AvatarKey != nil {
-				u.AvatarKey = params.AvatarKey
+				c.AvatarKey = params.AvatarKey
 			}
-			return u, nil
+			cpy := c.User
+			return &cpy, nil
 		}
 	}
 	return nil, user.ErrNotFound

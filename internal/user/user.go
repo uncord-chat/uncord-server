@@ -23,11 +23,17 @@ type User struct {
 	ID            uuid.UUID
 	Email         string
 	Username      string
-	PasswordHash  string
 	DisplayName   *string
 	AvatarKey     *string
 	MFAEnabled    bool
 	EmailVerified bool
+}
+
+// Credentials extends User with the password hash. Only repository methods that serve the authentication path return
+// this type; all other read methods return *User to prevent credential leakage at the type level.
+type Credentials struct {
+	User
+	PasswordHash string
 }
 
 // CreateParams groups the inputs for creating a new user. When VerifyToken is non-empty, an email_verifications row is
@@ -64,7 +70,7 @@ func ValidateDisplayName(name *string) error {
 type Repository interface {
 	Create(ctx context.Context, params CreateParams) (uuid.UUID, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*User, error)
-	GetByEmail(ctx context.Context, email string) (*User, error)
+	GetByEmail(ctx context.Context, email string) (*Credentials, error)
 	VerifyEmail(ctx context.Context, token string) (uuid.UUID, error)
 	RecordLoginAttempt(ctx context.Context, email, ipAddress string, success bool) error
 	UpdatePasswordHash(ctx context.Context, userID uuid.UUID, hash string) error

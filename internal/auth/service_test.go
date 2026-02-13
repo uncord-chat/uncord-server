@@ -19,7 +19,7 @@ import (
 
 // fakeRepository implements user.Repository for unit tests.
 type fakeRepository struct {
-	users         map[string]*user.User // keyed by email
+	users         map[string]*user.Credentials // keyed by email
 	createErr     error
 	getByEmailErr error
 	verifyErr     error
@@ -33,7 +33,7 @@ type loginAttempt struct {
 }
 
 func newFakeRepository() *fakeRepository {
-	return &fakeRepository{users: make(map[string]*user.User)}
+	return &fakeRepository{users: make(map[string]*user.Credentials)}
 }
 
 func (r *fakeRepository) Create(_ context.Context, params user.CreateParams) (uuid.UUID, error) {
@@ -44,24 +44,26 @@ func (r *fakeRepository) Create(_ context.Context, params user.CreateParams) (uu
 		return uuid.Nil, user.ErrAlreadyExists
 	}
 	id := uuid.New()
-	r.users[params.Email] = &user.User{
-		ID:           id,
-		Email:        params.Email,
-		Username:     params.Username,
+	r.users[params.Email] = &user.Credentials{
+		User: user.User{
+			ID:       id,
+			Email:    params.Email,
+			Username: params.Username,
+		},
 		PasswordHash: params.PasswordHash,
 	}
 	return id, nil
 }
 
-func (r *fakeRepository) GetByEmail(_ context.Context, email string) (*user.User, error) {
+func (r *fakeRepository) GetByEmail(_ context.Context, email string) (*user.Credentials, error) {
 	if r.getByEmailErr != nil {
 		return nil, r.getByEmailErr
 	}
-	u, ok := r.users[email]
+	c, ok := r.users[email]
 	if !ok {
 		return nil, user.ErrNotFound
 	}
-	return u, nil
+	return c, nil
 }
 
 func (r *fakeRepository) VerifyEmail(_ context.Context, token string) (uuid.UUID, error) {
@@ -80,33 +82,35 @@ func (r *fakeRepository) RecordLoginAttempt(_ context.Context, email, ip string,
 }
 
 func (r *fakeRepository) GetByID(_ context.Context, id uuid.UUID) (*user.User, error) {
-	for _, u := range r.users {
-		if u.ID == id {
-			return u, nil
+	for _, c := range r.users {
+		if c.ID == id {
+			cpy := c.User
+			return &cpy, nil
 		}
 	}
 	return nil, user.ErrNotFound
 }
 
 func (r *fakeRepository) Update(_ context.Context, id uuid.UUID, params user.UpdateParams) (*user.User, error) {
-	for _, u := range r.users {
-		if u.ID == id {
+	for _, c := range r.users {
+		if c.ID == id {
 			if params.DisplayName != nil {
-				u.DisplayName = params.DisplayName
+				c.DisplayName = params.DisplayName
 			}
 			if params.AvatarKey != nil {
-				u.AvatarKey = params.AvatarKey
+				c.AvatarKey = params.AvatarKey
 			}
-			return u, nil
+			cpy := c.User
+			return &cpy, nil
 		}
 	}
 	return nil, user.ErrNotFound
 }
 
 func (r *fakeRepository) UpdatePasswordHash(_ context.Context, userID uuid.UUID, hash string) error {
-	for _, u := range r.users {
-		if u.ID == userID {
-			u.PasswordHash = hash
+	for _, c := range r.users {
+		if c.ID == userID {
+			c.PasswordHash = hash
 			return nil
 		}
 	}

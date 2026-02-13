@@ -16,14 +16,16 @@ import (
 func seedUser(repo *fakeRepo) *user.User {
 	id := uuid.New()
 	displayName := "Alice"
-	u := &user.User{
-		ID:          id,
-		Email:       "alice@example.com",
-		Username:    "alice",
-		DisplayName: &displayName,
+	c := &user.Credentials{
+		User: user.User{
+			ID:          id,
+			Email:       "alice@example.com",
+			Username:    "alice",
+			DisplayName: &displayName,
+		},
 	}
-	repo.users[u.Email] = u
-	return u
+	repo.users[c.Email] = c
+	return &c.User
 }
 
 func testUserApp(t *testing.T, repo *fakeRepo, userID uuid.UUID) *fiber.App {

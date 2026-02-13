@@ -73,10 +73,10 @@ func (r *PGRepository) Create(ctx context.Context, params CreateParams) (uuid.UU
 func (r *PGRepository) GetByID(ctx context.Context, id uuid.UUID) (*User, error) {
 	var u User
 	err := r.db.QueryRow(ctx,
-		`SELECT id, email, password_hash, username, display_name, avatar_key, mfa_enabled, email_verified
+		`SELECT id, email, username, display_name, avatar_key, mfa_enabled, email_verified
 		 FROM users WHERE id = $1`,
 		id,
-	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Username, &u.DisplayName, &u.AvatarKey, &u.MFAEnabled, &u.EmailVerified)
+	).Scan(&u.ID, &u.Email, &u.Username, &u.DisplayName, &u.AvatarKey, &u.MFAEnabled, &u.EmailVerified)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -86,21 +86,22 @@ func (r *PGRepository) GetByID(ctx context.Context, id uuid.UUID) (*User, error)
 	return &u, nil
 }
 
-// GetByEmail returns the user matching the given email address.
-func (r *PGRepository) GetByEmail(ctx context.Context, email string) (*User, error) {
-	var u User
+// GetByEmail returns the user with credentials matching the given email address. This is the only read method that
+// returns credentials, since it serves the authentication path.
+func (r *PGRepository) GetByEmail(ctx context.Context, email string) (*Credentials, error) {
+	var c Credentials
 	err := r.db.QueryRow(ctx,
 		`SELECT id, email, password_hash, username, display_name, avatar_key, mfa_enabled, email_verified
 		 FROM users WHERE email = $1`,
 		email,
-	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Username, &u.DisplayName, &u.AvatarKey, &u.MFAEnabled, &u.EmailVerified)
+	).Scan(&c.ID, &c.Email, &c.PasswordHash, &c.Username, &c.DisplayName, &c.AvatarKey, &c.MFAEnabled, &c.EmailVerified)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("query user by email: %w", err)
 	}
-	return &u, nil
+	return &c, nil
 }
 
 // VerifyEmail consumes a verification token and marks the user as verified, all within a single transaction.
@@ -196,14 +197,14 @@ func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdatePa
 
 	query := fmt.Sprintf(
 		`UPDATE users SET %s WHERE id = $%d
-		 RETURNING id, email, password_hash, username, display_name, avatar_key, mfa_enabled, email_verified`,
+		 RETURNING id, email, username, display_name, avatar_key, mfa_enabled, email_verified`,
 		strings.Join(setClauses, ", "), argPos,
 	)
 	args = append(args, id)
 
 	var u User
 	err := r.db.QueryRow(ctx, query, args...).
-		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Username, &u.DisplayName, &u.AvatarKey, &u.MFAEnabled, &u.EmailVerified)
+		Scan(&u.ID, &u.Email, &u.Username, &u.DisplayName, &u.AvatarKey, &u.MFAEnabled, &u.EmailVerified)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
