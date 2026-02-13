@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -123,10 +124,9 @@ func run() error {
 		}
 	}
 
-	// Initialise disposable email blocklist and prefetch asynchronously so the first registration request does not
-	// block on a network call.
+	// Initialise disposable email blocklist with periodic refresh so newly added disposable domains are picked up
+	// without requiring a server restart.
 	blocklist := disposable.NewBlocklist(cfg.DisposableEmailBlocklistURL, cfg.DisposableEmailBlocklistEnabled, log.Logger)
-	go blocklist.Prefetch(ctx)
 
 	// Initialise permission engine
 	permStore := permission.NewPGStore(db)
@@ -134,8 +134,16 @@ func run() error {
 	permResolver := permission.NewResolver(permStore, permCache, log.Logger)
 	permPublisher := permission.NewPublisher(rdb)
 
-	// Start permission cache invalidation subscriber with reconnection.
+	// Start background services with a shared cancellable context.
 	subCtx, subCancel := context.WithCancel(ctx)
+
+	go func() {
+		if err := blocklist.Run(subCtx, cfg.DisposableEmailBlocklistRefreshInterval); err != nil {
+			log.Error().Err(err).Msg("Disposable email blocklist refresh stopped")
+		}
+	}()
+
+	// Start permission cache invalidation subscriber with reconnection.
 	defer subCancel()
 	permSub := permission.NewSubscriber(permCache, rdb, log.Logger)
 	go func() {
@@ -226,6 +234,17 @@ func run() error {
 	// Listen
 	addr := fmt.Sprintf(":%d", cfg.ServerPort)
 	log.Info().Str("addr", addr).Msg("Server listening")
+
+	var mem runtime.MemStats
+	runtime.ReadMemStats(&mem)
+	log.Debug().
+		Uint64("alloc_mb", mem.Alloc/1024/1024).
+		Uint64("sys_mb", mem.Sys/1024/1024).
+		Uint64("heap_inuse_mb", mem.HeapInuse/1024/1024).
+		Uint64("stack_inuse_mb", mem.StackInuse/1024/1024).
+		Uint32("num_gc", mem.NumGC).
+		Msg("Runtime memory stats")
+
 	if err := app.Listen(addr); err != nil {
 		return fmt.Errorf("server error: %w", err)
 	}

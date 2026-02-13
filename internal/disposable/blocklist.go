@@ -56,6 +56,42 @@ func (b *Blocklist) Prefetch(ctx context.Context) {
 	b.log.Info().Int("domains", len(domains)).Msg("Disposable email blocklist loaded")
 }
 
+// Run performs an initial fetch of the blocklist, then periodically re-fetches it at the given interval to pick up
+// newly added disposable domains. It blocks until the context is cancelled and is designed to be called in a goroutine.
+// On refresh failure the existing cached list remains valid and a warning is logged.
+func (b *Blocklist) Run(ctx context.Context, interval time.Duration) error {
+	if !b.enabled {
+		<-ctx.Done()
+		return nil
+	}
+
+	// Initial fetch.
+	b.Prefetch(ctx)
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			domains, err := fetchDomains(ctx, b.url)
+			if err != nil {
+				b.log.Warn().Err(err).Msg("Failed to refresh disposable email blocklist, using cached list")
+				continue
+			}
+
+			b.mu.Lock()
+			b.domains = domains
+			b.loaded = true
+			b.mu.Unlock()
+
+			b.log.Info().Int("domains", len(domains)).Msg("Disposable email blocklist refreshed")
+		}
+	}
+}
+
 // IsBlocked returns true if the given domain appears in the disposable email blocklist. Returns false immediately if
 // the blocklist is disabled.
 func (b *Blocklist) IsBlocked(ctx context.Context, domain string) (bool, error) {

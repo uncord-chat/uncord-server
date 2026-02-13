@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/rs/zerolog"
 )
@@ -166,4 +167,109 @@ func TestPrefetchDisabledNoop(t *testing.T) {
 	t.Parallel()
 	bl := NewBlocklist("http://unused", false, zerolog.Nop())
 	bl.Prefetch(context.Background()) // should not panic or fetch
+}
+
+func TestRunPeriodicRefresh(t *testing.T) {
+	t.Parallel()
+	var fetchCount atomic.Int32
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fetchCount.Add(1)
+		_, _ = w.Write([]byte("mailinator.com\n"))
+	}))
+	defer srv.Close()
+
+	bl := NewBlocklist(srv.URL, true, zerolog.Nop())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		_ = bl.Run(ctx, 50*time.Millisecond)
+		close(done)
+	}()
+
+	// Wait long enough for at least one refresh tick beyond the initial prefetch.
+	time.Sleep(200 * time.Millisecond)
+
+	cancel()
+	<-done
+
+	count := fetchCount.Load()
+	if count < 2 {
+		t.Errorf("fetch count = %d, want >= 2 (initial + at least one refresh)", count)
+	}
+
+	blocked, err := bl.IsBlocked(context.Background(), "mailinator.com")
+	if err != nil {
+		t.Fatalf("IsBlocked() error = %v", err)
+	}
+	if !blocked {
+		t.Error("IsBlocked(mailinator.com) = false after Run, want true")
+	}
+}
+
+func TestRunContextCancellation(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("mailinator.com\n"))
+	}))
+	defer srv.Close()
+
+	bl := NewBlocklist(srv.URL, true, zerolog.Nop())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	done := make(chan struct{})
+	go func() {
+		_ = bl.Run(ctx, 24*time.Hour)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Run exited promptly as expected.
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run did not exit promptly after context cancellation")
+	}
+}
+
+func TestRunRefreshFailureContinues(t *testing.T) {
+	t.Parallel()
+	var fetchCount atomic.Int32
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := fetchCount.Add(1)
+		if n > 1 {
+			// Fail all refreshes after the initial prefetch.
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write([]byte("mailinator.com\n"))
+	}))
+	defer srv.Close()
+
+	bl := NewBlocklist(srv.URL, true, zerolog.Nop())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		_ = bl.Run(ctx, 50*time.Millisecond)
+		close(done)
+	}()
+
+	// Wait for at least one failed refresh attempt.
+	time.Sleep(200 * time.Millisecond)
+
+	cancel()
+	<-done
+
+	// The cached domains from the initial fetch should still be valid.
+	blocked, err := bl.IsBlocked(context.Background(), "mailinator.com")
+	if err != nil {
+		t.Fatalf("IsBlocked() error = %v", err)
+	}
+	if !blocked {
+		t.Error("IsBlocked(mailinator.com) = false after failed refresh, want true (cached list should persist)")
+	}
 }

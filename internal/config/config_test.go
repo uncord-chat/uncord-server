@@ -3,6 +3,7 @@ package config
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestLoadDefaults is not t.Parallel because it mutates process-wide environment variables.
@@ -15,6 +16,7 @@ func TestLoadDefaults(t *testing.T) {
 		"ARGON2_MEMORY", "ARGON2_ITERATIONS", "ARGON2_PARALLELISM", "ARGON2_SALT_LENGTH", "ARGON2_KEY_LENGTH",
 		"JWT_SECRET", "JWT_ACCESS_TTL", "JWT_REFRESH_TTL",
 		"ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_ENABLED", "ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_URL",
+		"ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_REFRESH_INTERVAL",
 		"TYPESENSE_URL", "TYPESENSE_API_KEY",
 		"INIT_OWNER_EMAIL", "INIT_OWNER_PASSWORD",
 		"ONBOARDING_REQUIRE_RULES", "ONBOARDING_REQUIRE_EMAIL_VERIFICATION",
@@ -83,6 +85,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.DisposableEmailBlocklistURL == "" {
 		t.Error("DisposableEmailBlocklistURL is empty, want default URL")
 	}
+	if cfg.DisposableEmailBlocklistRefreshInterval != 24*time.Hour {
+		t.Errorf("DisposableEmailBlocklistRefreshInterval = %v, want 24h", cfg.DisposableEmailBlocklistRefreshInterval)
+	}
 
 	// Onboarding defaults
 	if !cfg.OnboardingRequireRules {
@@ -134,6 +139,7 @@ func TestLoadOverrides(t *testing.T) {
 	t.Setenv("JWT_ACCESS_TTL", "1800")
 	t.Setenv("JWT_REFRESH_TTL", "86400")
 	t.Setenv("ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_ENABLED", "false")
+	t.Setenv("ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_REFRESH_INTERVAL", "12h")
 
 	cfg, err := Load()
 	if err != nil {
@@ -173,6 +179,9 @@ func TestLoadOverrides(t *testing.T) {
 	if cfg.DisposableEmailBlocklistEnabled {
 		t.Error("DisposableEmailBlocklistEnabled = true, want false")
 	}
+	if cfg.DisposableEmailBlocklistRefreshInterval != 12*time.Hour {
+		t.Errorf("DisposableEmailBlocklistRefreshInterval = %v, want 12h", cfg.DisposableEmailBlocklistRefreshInterval)
+	}
 }
 
 func TestLoadInvalidInt(t *testing.T) {
@@ -199,6 +208,18 @@ func TestLoadInvalidBool(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "ONBOARDING_REQUIRE_RULES") {
 		t.Errorf("error %q does not mention ONBOARDING_REQUIRE_RULES", err.Error())
+	}
+}
+
+func TestLoadInvalidDuration(t *testing.T) {
+	t.Setenv("ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_REFRESH_INTERVAL", "not-a-duration")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() returned nil error, want parse error")
+	}
+	if !strings.Contains(err.Error(), "ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_REFRESH_INTERVAL") {
+		t.Errorf("error %q does not mention ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_REFRESH_INTERVAL", err.Error())
 	}
 }
 

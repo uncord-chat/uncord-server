@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 )
 
 // Config holds application configuration populated from environment variables.
@@ -37,8 +38,9 @@ type Config struct {
 	JWTRefreshTTL int
 
 	// Abuse / Disposable Email
-	DisposableEmailBlocklistEnabled bool
-	DisposableEmailBlocklistURL     string
+	DisposableEmailBlocklistEnabled         bool
+	DisposableEmailBlocklistURL             string
+	DisposableEmailBlocklistRefreshInterval time.Duration
 
 	// Typesense
 	TypesenseURL    string
@@ -93,8 +95,9 @@ func Load() (*Config, error) {
 		JWTAccessTTL:  p.int("JWT_ACCESS_TTL", 900),
 		JWTRefreshTTL: p.int("JWT_REFRESH_TTL", 604800),
 
-		DisposableEmailBlocklistEnabled: p.bool("ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_ENABLED", true),
-		DisposableEmailBlocklistURL:     envStr("ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_URL", "https://raw.githubusercontent.com/disposable-email-domains/disposable-email-domains/master/disposable_email_blocklist.conf"),
+		DisposableEmailBlocklistEnabled:         p.bool("ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_ENABLED", true),
+		DisposableEmailBlocklistURL:             envStr("ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_URL", "https://raw.githubusercontent.com/disposable-email-domains/disposable-email-domains/master/disposable_email_blocklist.conf"),
+		DisposableEmailBlocklistRefreshInterval: p.duration("ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_REFRESH_INTERVAL", 24*time.Hour),
 
 		TypesenseURL:    envStr("TYPESENSE_URL", "http://typesense:8108"),
 		TypesenseAPIKey: envStr("TYPESENSE_API_KEY", "change-me-in-production"),
@@ -241,6 +244,19 @@ func (p *parser) uint8(key string, fallback uint8) uint8 {
 		return fallback
 	}
 	return uint8(n)
+}
+
+func (p *parser) duration(key string, fallback time.Duration) time.Duration {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		p.errs = append(p.errs, fmt.Errorf("invalid value for %s: %q (expected duration like \"24h\" or \"30m\")", key, v))
+		return fallback
+	}
+	return d
 }
 
 func envStr(key, fallback string) string {
