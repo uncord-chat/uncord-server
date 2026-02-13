@@ -42,6 +42,16 @@ var (
 	date    = "unknown"
 )
 
+// server holds the shared dependencies used by route handlers and middleware.
+type server struct {
+	cfg           *config.Config
+	db            *pgxpool.Pool
+	rdb           *redis.Client
+	authService   *auth.Service
+	permResolver  *permission.Resolver
+	permPublisher *permission.Publisher
+}
+
 func main() {
 	log.Logger = zerolog.New(os.Stderr).With().Timestamp().Logger()
 
@@ -214,7 +224,15 @@ func run() error {
 	}))
 
 	// Register routes
-	registerRoutes(app, cfg, db, rdb, authService, permResolver, permPublisher)
+	srv := &server{
+		cfg:           cfg,
+		db:            db,
+		rdb:           rdb,
+		authService:   authService,
+		permResolver:  permResolver,
+		permPublisher: permPublisher,
+	}
+	srv.registerRoutes(app)
 
 	// Graceful shutdown
 	quit := make(chan os.Signal, 1)
@@ -252,25 +270,17 @@ func run() error {
 	return nil
 }
 
-func registerRoutes(
-	app *fiber.App,
-	cfg *config.Config,
-	db *pgxpool.Pool,
-	rdb *redis.Client,
-	authService *auth.Service,
-	permResolver *permission.Resolver,
-	permPublisher *permission.Publisher,
-) {
-	health := api.NewHealthHandler(db, redisPinger{client: rdb})
+func (s *server) registerRoutes(app *fiber.App) {
+	health := api.NewHealthHandler(s.db, redisPinger{client: s.rdb})
 	app.Get("/api/v1/health", health.Health)
 
-	authHandler := api.NewAuthHandler(authService)
+	authHandler := api.NewAuthHandler(s.authService)
 
 	// Auth routes with stricter rate limiting
 	authGroup := app.Group("/api/v1/auth")
 	authGroup.Use(limiter.New(limiter.Config{
-		Max:        cfg.RateLimitAuthCount,
-		Expiration: time.Duration(cfg.RateLimitAuthWindowSeconds) * time.Second,
+		Max:        s.cfg.RateLimitAuthCount,
+		Expiration: time.Duration(s.cfg.RateLimitAuthWindowSeconds) * time.Second,
 	}))
 	authGroup.Post("/register", authHandler.Register)
 	authGroup.Post("/login", authHandler.Login)
@@ -278,10 +288,10 @@ func registerRoutes(
 	authGroup.Post("/verify-email", authHandler.VerifyEmail)
 
 	// Protected routes will use:
-	//   auth.RequireAuth(cfg.JWTSecret, cfg.ServerURL) middleware group
-	//   permission.RequirePermission(permResolver, perm) per-route
-	_ = permResolver  // wired into protected route groups as they are built
-	_ = permPublisher // used by handlers that mutate permissions
+	//   auth.RequireAuth(s.cfg.JWTSecret, s.cfg.ServerURL) middleware group
+	//   permission.RequirePermission(s.permResolver, perm) per-route
+	_ = s.permResolver  // wired into protected route groups as they are built
+	_ = s.permPublisher // used by handlers that mutate permissions
 }
 
 // redisPinger adapts *redis.Client to the api.Pinger interface.
