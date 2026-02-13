@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 )
@@ -36,26 +37,28 @@ type UpdateParams struct {
 	BannerKey   *string
 }
 
-// ValidateName checks that a non-nil name is between 1 and 100 characters after trimming whitespace. On success the
+// ValidateName checks that a non-nil name is between 1 and 100 characters (runes) after trimming whitespace. A nil
+// pointer means "no change" (useful for PATCH semantics); a non-nil pointer is always validated. On success the
 // pointed-to value is replaced with the trimmed result.
 func ValidateName(name *string) error {
 	if name == nil {
 		return nil
 	}
 	trimmed := strings.TrimSpace(*name)
-	if len(trimmed) < 1 || len(trimmed) > 100 {
+	if utf8.RuneCountInString(trimmed) < 1 || utf8.RuneCountInString(trimmed) > 100 {
 		return ErrNameLength
 	}
 	*name = trimmed
 	return nil
 }
 
-// ValidateDescription checks that a non-nil description is 1024 characters or fewer.
+// ValidateDescription checks that a non-nil description is 1024 characters (runes) or fewer. A nil pointer means "no
+// change" (useful for PATCH semantics); a pointer to an empty string means "clear the description."
 func ValidateDescription(desc *string) error {
 	if desc == nil {
 		return nil
 	}
-	if len(*desc) > 1024 {
+	if utf8.RuneCountInString(*desc) > 1024 {
 		return ErrDescriptionLength
 	}
 	return nil
