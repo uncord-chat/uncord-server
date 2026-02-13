@@ -140,6 +140,8 @@ func (c *Config) validate() error {
 
 	if c.JWTSecret == "" {
 		errs = append(errs, fmt.Errorf("JWT_SECRET is required"))
+	} else if len(c.JWTSecret) < 32 {
+		errs = append(errs, fmt.Errorf("JWT_SECRET must be at least 32 characters"))
 	}
 
 	if c.ServerPort < 1 || c.ServerPort > 65535 {

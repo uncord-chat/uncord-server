@@ -27,7 +27,7 @@ func TestLoadDefaults(t *testing.T) {
 	}
 
 	// JWT_SECRET is required by validation
-	t.Setenv("JWT_SECRET", "test-secret-for-defaults")
+	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
 
 	cfg, err := Load()
 	if err != nil {
@@ -127,6 +127,18 @@ func TestLoadValidationRequiresJWTSecret(t *testing.T) {
 	}
 }
 
+func TestLoadValidationJWTSecretTooShort(t *testing.T) {
+	t.Setenv("JWT_SECRET", "short")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() returned nil error, want validation error for short JWT_SECRET")
+	}
+	if !strings.Contains(err.Error(), "JWT_SECRET must be at least 32 characters") {
+		t.Errorf("error %q does not mention minimum length", err.Error())
+	}
+}
+
 func TestLoadOverrides(t *testing.T) {
 	t.Setenv("SERVER_NAME", "Test Server")
 	t.Setenv("SERVER_PORT", "9090")
@@ -135,7 +147,7 @@ func TestLoadOverrides(t *testing.T) {
 	t.Setenv("ARGON2_MEMORY", "131072")
 	t.Setenv("ONBOARDING_REQUIRE_RULES", "false")
 	t.Setenv("INIT_OWNER_EMAIL", "test@example.com")
-	t.Setenv("JWT_SECRET", "test-secret-key")
+	t.Setenv("JWT_SECRET", "test-secret-key-that-is-32-chars!")
 	t.Setenv("JWT_ACCESS_TTL", "1800")
 	t.Setenv("JWT_REFRESH_TTL", "86400")
 	t.Setenv("ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_ENABLED", "false")
@@ -167,8 +179,8 @@ func TestLoadOverrides(t *testing.T) {
 	if cfg.InitOwnerEmail != "test@example.com" {
 		t.Errorf("InitOwnerEmail = %q, want %q", cfg.InitOwnerEmail, "test@example.com")
 	}
-	if cfg.JWTSecret != "test-secret-key" {
-		t.Errorf("JWTSecret = %q, want %q", cfg.JWTSecret, "test-secret-key")
+	if cfg.JWTSecret != "test-secret-key-that-is-32-chars!" {
+		t.Errorf("JWTSecret = %q, want %q", cfg.JWTSecret, "test-secret-key-that-is-32-chars!")
 	}
 	if cfg.JWTAccessTTL != 1800 {
 		t.Errorf("JWTAccessTTL = %d, want 1800", cfg.JWTAccessTTL)
