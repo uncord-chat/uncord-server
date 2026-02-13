@@ -59,7 +59,8 @@ CREATE TABLE members (
     joined_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     onboarded_at    TIMESTAMPTZ,
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (user_id)
+    PRIMARY KEY (user_id),
+    CONSTRAINT chk_members_status CHECK (status IN ('pending', 'active', 'timed_out'))
 );
 
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON members
@@ -92,7 +93,8 @@ CREATE TABLE channels (
     slowmode_seconds INTEGER NOT NULL DEFAULT 0,
     nsfw            BOOLEAN NOT NULL DEFAULT false,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_channels_type CHECK (type IN ('text', 'voice', 'announcement', 'forum', 'stage'))
 );
 
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON channels
@@ -211,7 +213,9 @@ CREATE TABLE permission_overrides (
     allow           BIGINT NOT NULL DEFAULT 0,
     deny            BIGINT NOT NULL DEFAULT 0,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_permission_overrides_target_type CHECK (target_type IN ('channel', 'category')),
+    CONSTRAINT chk_permission_overrides_principal_type CHECK (principal_type IN ('role', 'user'))
 );
 
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON permission_overrides
@@ -221,6 +225,39 @@ CREATE UNIQUE INDEX idx_overrides_unique
     ON permission_overrides (target_type, target_id, principal_type, principal_id);
 CREATE INDEX idx_overrides_target ON permission_overrides (target_type, target_id);
 
+-- Orphan cleanup triggers for permission_overrides polymorphic foreign keys
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION clean_permission_overrides_target()
+RETURNS TRIGGER AS $$
+BEGIN
+    DELETE FROM permission_overrides WHERE target_type = TG_ARGV[0] AND target_id = OLD.id;
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+-- +goose StatementEnd
+
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION clean_permission_overrides_principal()
+RETURNS TRIGGER AS $$
+BEGIN
+    DELETE FROM permission_overrides WHERE principal_type = TG_ARGV[0] AND principal_id = OLD.id;
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+-- +goose StatementEnd
+
+CREATE TRIGGER trg_channels_clean_overrides AFTER DELETE ON channels
+    FOR EACH ROW EXECUTE FUNCTION clean_permission_overrides_target('channel');
+
+CREATE TRIGGER trg_categories_clean_overrides AFTER DELETE ON categories
+    FOR EACH ROW EXECUTE FUNCTION clean_permission_overrides_target('category');
+
+CREATE TRIGGER trg_roles_clean_overrides AFTER DELETE ON roles
+    FOR EACH ROW EXECUTE FUNCTION clean_permission_overrides_principal('role');
+
+CREATE TRIGGER trg_users_clean_overrides AFTER DELETE ON users
+    FOR EACH ROW EXECUTE FUNCTION clean_permission_overrides_principal('user');
+
 -- DM Channels
 
 CREATE TABLE dm_channels (
@@ -229,7 +266,8 @@ CREATE TABLE dm_channels (
     name            TEXT,
     owner_id        UUID REFERENCES users(id) ON DELETE SET NULL,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_dm_channels_type CHECK (type IN ('dm', 'group_dm'))
 );
 
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON dm_channels
@@ -285,7 +323,8 @@ CREATE TABLE webhooks (
     url             TEXT,  -- outgoing webhook target URL
     creator_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_webhooks_type CHECK (type IN ('incoming', 'outgoing'))
 );
 
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON webhooks
@@ -329,7 +368,8 @@ CREATE TABLE reports (
     resolved_by     UUID REFERENCES users(id),
     resolution_note TEXT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_reports_status CHECK (status IN ('open', 'resolved', 'dismissed'))
 );
 
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON reports
@@ -409,7 +449,9 @@ CREATE TABLE abuse_flags (
     status          TEXT NOT NULL DEFAULT 'pending',  -- pending, confirmed, dismissed
     reviewed_by     UUID REFERENCES users(id),
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_abuse_flags_reason CHECK (reason IN ('shared_ip', 'shared_device', 'behavioral', 'manual')),
+    CONSTRAINT chk_abuse_flags_status CHECK (status IN ('pending', 'confirmed', 'dismissed'))
 );
 
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON abuse_flags
@@ -430,13 +472,17 @@ CREATE TABLE registered_plugins (
     slash_commands      JSONB,
     status              TEXT NOT NULL DEFAULT 'active',  -- active, disabled, error
     registered_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_registered_plugins_status CHECK (status IN ('active', 'disabled', 'error'))
 );
 
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON registered_plugins
     FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
 
 -- +goose Down
+
+DROP FUNCTION IF EXISTS clean_permission_overrides_target();
+DROP FUNCTION IF EXISTS clean_permission_overrides_principal();
 
 DROP TABLE IF EXISTS registered_plugins CASCADE;
 DROP TABLE IF EXISTS abuse_flags CASCADE;
