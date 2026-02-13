@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/alexedwards/argon2id"
+	"github.com/rs/zerolog/log"
 )
 
 // HashPassword hashes a password using argon2id with the given parameters.
@@ -36,6 +37,7 @@ func VerifyPassword(password, hash string) (bool, error) {
 func NeedsRehash(hash string, memory, iterations uint32, parallelism uint8, saltLen, keyLen uint32) bool {
 	params, salt, key, err := argon2id.DecodeHash(hash)
 	if err != nil {
+		log.Warn().Err(err).Msg("Failed to decode password hash for rehash check; possible corruption")
 		return false
 	}
 	return params.Memory != memory ||
