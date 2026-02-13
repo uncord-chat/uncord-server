@@ -78,7 +78,8 @@ func (r *fakeRepo) Update(_ context.Context, id uuid.UUID, params user.UpdatePar
 	for _, u := range r.users {
 		if u.ID == id {
 			if params.DisplayName != nil {
-				u.DisplayName = params.DisplayName
+				trimmed := strings.TrimSpace(*params.DisplayName)
+				u.DisplayName = &trimmed
 			}
 			if params.AvatarKey != nil {
 				u.AvatarKey = params.AvatarKey
