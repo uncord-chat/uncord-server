@@ -32,6 +32,7 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/disposable"
 	"github.com/uncord-chat/uncord-server/internal/email"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
+	"github.com/uncord-chat/uncord-server/internal/page"
 	"github.com/uncord-chat/uncord-server/internal/permission"
 	"github.com/uncord-chat/uncord-server/internal/postgres"
 	servercfg "github.com/uncord-chat/uncord-server/internal/server"
@@ -309,6 +310,13 @@ func run() error {
 }
 
 func (s *server) registerRoutes(app *fiber.App) {
+	// Browser-facing email verification page (outside /api/v1/ because users click this link directly from email)
+	verifyHandler := page.NewVerifyHandler(s.authService, s.cfg.ServerName)
+	app.Get("/verify-email", limiter.New(limiter.Config{
+		Max:        s.cfg.RateLimitAuthCount,
+		Expiration: time.Duration(s.cfg.RateLimitAuthWindowSeconds) * time.Second,
+	}), verifyHandler.VerifyEmail)
+
 	health := api.NewHealthHandler(s.db, redisPinger{client: s.rdb})
 	app.Get("/api/v1/health", health.Health)
 
@@ -373,6 +381,13 @@ func (s *server) registerRoutes(app *fiber.App) {
 		categoryHandler.DeleteCategory)
 
 	_ = s.permPublisher // used by handlers that mutate permissions
+
+	// Catch-all handler returns 404 for any request that does not match a defined route. Fiber v3 treats app.Use()
+	// middleware as route matches, so without this terminal handler the router considers unmatched requests "handled"
+	// and returns the default 200 status with an empty body.
+	app.Use(func(_ fiber.Ctx) error {
+		return fiber.ErrNotFound
+	})
 }
 
 // redisPinger adapts *redis.Client to the api.Pinger interface.

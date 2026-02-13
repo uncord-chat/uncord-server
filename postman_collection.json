@@ -34,6 +34,10 @@
 		{
 			"key": "category_id",
 			"value": ""
+		},
+		{
+			"key": "verify_token",
+			"value": ""
 		}
 	],
 	"item": [
@@ -161,7 +165,7 @@
 					}
 				},
 				{
-					"name": "Verify Email",
+					"name": "Verify Email (API)",
 					"request": {
 						"auth": { "type": "noauth" },
 						"method": "POST",
@@ -176,6 +180,27 @@
 							"raw": "{{base_url}}/auth/verify-email",
 							"host": ["{{base_url}}"],
 							"path": ["auth", "verify-email"]
+						}
+					}
+				},
+				{
+					"name": "Verify Email (Browser)",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8080/verify-email?token={{verify_token}}",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8080",
+							"path": ["verify-email"],
+							"query": [
+								{
+									"key": "token",
+									"value": "{{verify_token}}"
+								}
+							]
 						}
 					}
 				}
