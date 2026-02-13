@@ -66,6 +66,10 @@ type Config struct {
 	// Upload Limits
 	MaxUploadSizeMB int
 
+	// Entity Limits
+	MaxChannels   int
+	MaxCategories int
+
 	// CORS
 	CORSAllowOrigins string
 }
@@ -120,6 +124,9 @@ func Load() (*Config, error) {
 		RateLimitAuthWindowSeconds: p.int("RATE_LIMIT_AUTH_WINDOW_SECONDS", 300),
 
 		MaxUploadSizeMB: p.int("MAX_UPLOAD_SIZE_MB", 100),
+
+		MaxChannels:   p.int("MAX_CHANNELS", 500),
+		MaxCategories: p.int("MAX_CATEGORIES", 50),
 
 		CORSAllowOrigins: envStr("CORS_ALLOW_ORIGINS", "*"),
 	}
@@ -188,6 +195,13 @@ func (c *Config) validate() error {
 
 	if c.MaxUploadSizeMB < 1 {
 		errs = append(errs, fmt.Errorf("MAX_UPLOAD_SIZE_MB must be at least 1"))
+	}
+
+	if c.MaxChannels < 1 {
+		errs = append(errs, fmt.Errorf("MAX_CHANNELS must be at least 1"))
+	}
+	if c.MaxCategories < 1 {
+		errs = append(errs, fmt.Errorf("MAX_CATEGORIES must be at least 1"))
 	}
 
 	if c.RateLimitAPIRequests < 1 {

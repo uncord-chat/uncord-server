@@ -22,6 +22,7 @@ func TestLoadDefaults(t *testing.T) {
 		"ONBOARDING_REQUIRE_RULES", "ONBOARDING_REQUIRE_EMAIL_VERIFICATION",
 		"ONBOARDING_MIN_ACCOUNT_AGE", "ONBOARDING_REQUIRE_PHONE", "ONBOARDING_REQUIRE_CAPTCHA",
 		"MAX_UPLOAD_SIZE_MB",
+		"MAX_CHANNELS", "MAX_CATEGORIES",
 	}
 	for _, k := range keys {
 		t.Setenv(k, "")
@@ -119,6 +120,14 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.MaxUploadSizeMB != 100 {
 		t.Errorf("MaxUploadSizeMB = %d, want 100", cfg.MaxUploadSizeMB)
 	}
+
+	// Entity limit defaults
+	if cfg.MaxChannels != 500 {
+		t.Errorf("MaxChannels = %d, want 500", cfg.MaxChannels)
+	}
+	if cfg.MaxCategories != 50 {
+		t.Errorf("MaxCategories = %d, want 50", cfg.MaxCategories)
+	}
 }
 
 func TestLoadValidationRequiresJWTSecret(t *testing.T) {
@@ -159,6 +168,8 @@ func TestLoadOverrides(t *testing.T) {
 	t.Setenv("ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_ENABLED", "false")
 	t.Setenv("ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_REFRESH_INTERVAL", "12h")
 	t.Setenv("MAX_UPLOAD_SIZE_MB", "50")
+	t.Setenv("MAX_CHANNELS", "100")
+	t.Setenv("MAX_CATEGORIES", "25")
 
 	cfg, err := Load()
 	if err != nil {
@@ -203,6 +214,12 @@ func TestLoadOverrides(t *testing.T) {
 	}
 	if cfg.MaxUploadSizeMB != 50 {
 		t.Errorf("MaxUploadSizeMB = %d, want 50", cfg.MaxUploadSizeMB)
+	}
+	if cfg.MaxChannels != 100 {
+		t.Errorf("MaxChannels = %d, want 100", cfg.MaxChannels)
+	}
+	if cfg.MaxCategories != 25 {
+		t.Errorf("MaxCategories = %d, want 25", cfg.MaxCategories)
 	}
 }
 

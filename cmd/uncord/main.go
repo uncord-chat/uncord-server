@@ -26,6 +26,8 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/api"
 	"github.com/uncord-chat/uncord-server/internal/auth"
 	"github.com/uncord-chat/uncord-server/internal/bootstrap"
+	"github.com/uncord-chat/uncord-server/internal/category"
+	"github.com/uncord-chat/uncord-server/internal/channel"
 	"github.com/uncord-chat/uncord-server/internal/config"
 	"github.com/uncord-chat/uncord-server/internal/disposable"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
@@ -54,6 +56,8 @@ type server struct {
 	userRepo      user.Repository
 	authService   *auth.Service
 	serverRepo    servercfg.Repository
+	channelRepo   channel.Repository
+	categoryRepo  category.Repository
 	permResolver  *permission.Resolver
 	permPublisher *permission.Publisher
 }
@@ -183,6 +187,8 @@ func run() error {
 	// Initialise repositories and services
 	userRepo := user.NewPGRepository(db, log.Logger)
 	serverRepo := servercfg.NewPGRepository(db, log.Logger)
+	channelRepo := channel.NewPGRepository(db, log.Logger)
+	categoryRepo := category.NewPGRepository(db, log.Logger)
 	authService, err := auth.NewService(userRepo, rdb, cfg, blocklist, log.Logger)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create auth service")
@@ -240,6 +246,8 @@ func run() error {
 		rdb:           rdb,
 		userRepo:      userRepo,
 		serverRepo:    serverRepo,
+		channelRepo:   channelRepo,
+		categoryRepo:  categoryRepo,
 		authService:   authService,
 		permResolver:  permResolver,
 		permPublisher: permPublisher,
@@ -310,6 +318,41 @@ func (s *server) registerRoutes(app *fiber.App) {
 	serverGroup := app.Group("/api/v1/server", auth.RequireAuth(s.cfg.JWTSecret, s.cfg.ServerURL))
 	serverGroup.Get("/", serverHandler.Get)
 	serverGroup.Patch("/", permission.RequireServerPermission(s.permResolver, permissions.ManageServer), serverHandler.Update)
+
+	// Channel routes
+	channelHandler := api.NewChannelHandler(s.channelRepo, s.permResolver, s.cfg.MaxChannels)
+	serverGroup.Get("/channels", channelHandler.ListChannels)
+	serverGroup.Post("/channels",
+		permission.RequireServerPermission(s.permResolver, permissions.ManageChannels),
+		channelHandler.CreateChannel)
+
+	channelGroup := app.Group("/api/v1/channels",
+		auth.RequireAuth(s.cfg.JWTSecret, s.cfg.ServerURL))
+	channelGroup.Get("/:channelID",
+		permission.RequirePermission(s.permResolver, permissions.ViewChannels),
+		channelHandler.GetChannel)
+	channelGroup.Patch("/:channelID",
+		permission.RequirePermission(s.permResolver, permissions.ManageChannels),
+		channelHandler.UpdateChannel)
+	channelGroup.Delete("/:channelID",
+		permission.RequirePermission(s.permResolver, permissions.ManageChannels),
+		channelHandler.DeleteChannel)
+
+	// Category routes
+	categoryHandler := api.NewCategoryHandler(s.categoryRepo, s.cfg.MaxCategories)
+	serverGroup.Get("/categories", categoryHandler.ListCategories)
+	serverGroup.Post("/categories",
+		permission.RequireServerPermission(s.permResolver, permissions.ManageCategories),
+		categoryHandler.CreateCategory)
+
+	categoryGroup := app.Group("/api/v1/categories",
+		auth.RequireAuth(s.cfg.JWTSecret, s.cfg.ServerURL))
+	categoryGroup.Patch("/:categoryID",
+		permission.RequireServerPermission(s.permResolver, permissions.ManageCategories),
+		categoryHandler.UpdateCategory)
+	categoryGroup.Delete("/:categoryID",
+		permission.RequireServerPermission(s.permResolver, permissions.ManageCategories),
+		categoryHandler.DeleteCategory)
 
 	_ = s.permPublisher // used by handlers that mutate permissions
 }
