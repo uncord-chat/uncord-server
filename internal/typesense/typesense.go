@@ -127,7 +127,7 @@ func getCollection(ctx context.Context, client *http.Client, baseURL, apiKey str
 	if err != nil {
 		return nil, fmt.Errorf("get request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, nil
@@ -162,7 +162,7 @@ func deleteCollection(ctx context.Context, client *http.Client, baseURL, apiKey 
 	if err != nil {
 		return fmt.Errorf("delete request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("typesense returned status %d on delete", resp.StatusCode)
@@ -195,7 +195,7 @@ func createCollection(ctx context.Context, client *http.Client, baseURL, apiKey 
 	if err != nil {
 		return fmt.Errorf("create request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("typesense returned status %d on create", resp.StatusCode)

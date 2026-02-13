@@ -22,7 +22,7 @@ func Connect(ctx context.Context, url string) (*redis.Client, error) {
 	client := redis.NewClient(opts)
 
 	if err := client.Ping(ctx).Err(); err != nil {
-		client.Close()
+		_ = client.Close()
 		return nil, fmt.Errorf("ping valkey: %w", err)
 	}
 

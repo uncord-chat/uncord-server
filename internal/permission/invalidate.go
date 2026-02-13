@@ -65,7 +65,7 @@ func NewSubscriber(cache Cache, client *redis.Client, logger zerolog.Logger) *Su
 // and should be called in a goroutine.
 func (s *Subscriber) Run(ctx context.Context) error {
 	sub := s.client.Subscribe(ctx, InvalidateChannel)
-	defer sub.Close()
+	defer func() { _ = sub.Close() }()
 
 	ch := sub.Channel()
 	for {

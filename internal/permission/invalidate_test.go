@@ -185,7 +185,7 @@ func TestPublisherInvalidateUser(t *testing.T) {
 
 	// Subscribe first
 	sub := rdb.Subscribe(ctx, InvalidateChannel)
-	defer sub.Close()
+	defer func() { _ = sub.Close() }()
 	ch := sub.Channel()
 
 	err := pub.InvalidateUser(ctx, userID)
@@ -216,7 +216,7 @@ func TestPublisherInvalidateChannel(t *testing.T) {
 	channelID := uuid.New()
 
 	sub := rdb.Subscribe(ctx, InvalidateChannel)
-	defer sub.Close()
+	defer func() { _ = sub.Close() }()
 	ch := sub.Channel()
 
 	err := pub.InvalidateChannel(ctx, channelID)
@@ -248,7 +248,7 @@ func TestPublisherInvalidateUserChannel(t *testing.T) {
 	channelID := uuid.New()
 
 	sub := rdb.Subscribe(ctx, InvalidateChannel)
-	defer sub.Close()
+	defer func() { _ = sub.Close() }()
 	ch := sub.Channel()
 
 	err := pub.InvalidateUserChannel(ctx, userID, channelID)

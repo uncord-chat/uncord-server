@@ -1,13 +1,11 @@
-run:
-  timeout: 5m
+version: "2"
 
 linters:
+  default: none
   enable:
     - bodyclose
     - errcheck
     - goconst
-    - gofmt
-    - gosimple
     - govet
     - ineffassign
     - misspell
@@ -15,27 +13,34 @@ linters:
     - revive
     - sqlclosecheck
     - staticcheck
-    - typecheck
     - unconvert
     - unused
     - whitespace
-
-linters-settings:
-  goconst:
-    min-occurrences: 3
-    ignore-tests: true
-  misspell:
-    locale: UK
-    ignore-words:
-      - fiber
-  revive:
+  settings:
+    goconst:
+      min-occurrences: 3
+    misspell:
+      locale: UK
+      ignore-rules:
+        - fiber
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: error-return
+        - name: increment-decrement
+        - name: var-declaration
+        - name: unexported-return
+  exclusions:
     rules:
-      - name: blank-imports
-      - name: context-as-argument
-      - name: error-return
-      - name: increment-decrement
-      - name: var-declaration
-      - name: unexported-return
+      - path: _test\.go
+        linters:
+          - bodyclose
+          - goconst
+
+formatters:
+  enable:
+    - gofmt
 
 issues:
   max-issues-per-linter: 0

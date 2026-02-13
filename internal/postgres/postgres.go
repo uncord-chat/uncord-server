@@ -51,7 +51,7 @@ func Migrate(dsn string, logger zerolog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("open sql connection for migrations: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	goose.SetBaseFS(migrations.FS)
 	goose.SetLogger(gooseLogger{log: logger})

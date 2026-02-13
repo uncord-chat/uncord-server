@@ -44,7 +44,7 @@ func TestMiddlewareAllowed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		t.Errorf("status = %d, want 200", resp.StatusCode)
 	}
@@ -79,7 +79,7 @@ func TestMiddlewareDenied(t *testing.T) {
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != fiber.StatusForbidden {
 		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusForbidden)
 	}
@@ -106,7 +106,7 @@ func TestMiddlewareNoAuth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != fiber.StatusUnauthorized {
 		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusUnauthorized)
 	}
@@ -131,7 +131,7 @@ func TestMiddlewareInvalidChannelID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != fiber.StatusBadRequest {
 		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusBadRequest)
 	}
@@ -157,7 +157,7 @@ func TestMiddlewareMissingChannelID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != fiber.StatusBadRequest {
 		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusBadRequest)
 	}
@@ -186,7 +186,7 @@ func TestMiddlewareResolverError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != fiber.StatusInternalServerError {
 		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusInternalServerError)
 	}

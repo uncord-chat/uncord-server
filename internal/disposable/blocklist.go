@@ -142,7 +142,7 @@ func fetchDomains(ctx context.Context, url string) (map[string]struct{}, error) 
 	if err != nil {
 		return nil, fmt.Errorf("fetch blocklist: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("blocklist returned status %d", resp.StatusCode)

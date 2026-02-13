@@ -221,8 +221,8 @@ func TestServiceRegisterDisposableEmailBlocked(t *testing.T) {
 
 	// Serve a blocklist containing "throwaway.email" so the blocklist can load it.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "throwaway.email")
-		fmt.Fprintln(w, "fakeinbox.com")
+		_, _ = fmt.Fprintln(w, "throwaway.email")
+		_, _ = fmt.Fprintln(w, "fakeinbox.com")
 	}))
 	t.Cleanup(srv.Close)
 

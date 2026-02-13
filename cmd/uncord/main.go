@@ -103,7 +103,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("connect valkey: %w", err)
 	}
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 	log.Info().Msg("Valkey connected")
 
 	// Check first-run and seed if needed
