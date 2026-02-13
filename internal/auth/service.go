@@ -220,15 +220,12 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*AuthResult, err
 
 // Refresh rotates a refresh token and issues a new access token.
 func (s *Service) Refresh(ctx context.Context, oldToken string) (*TokenPair, error) {
-	refreshTTL := time.Duration(s.config.JWTRefreshTTL) * time.Second
-	accessTTL := time.Duration(s.config.JWTAccessTTL) * time.Second
-
-	newRefresh, userID, err := RotateRefreshToken(ctx, s.redis, oldToken, refreshTTL)
+	newRefresh, userID, err := RotateRefreshToken(ctx, s.redis, oldToken, s.config.JWTRefreshTTL)
 	if err != nil {
 		return nil, err // ErrRefreshTokenReused passes through
 	}
 
-	accessToken, err := NewAccessToken(userID, s.config.JWTSecret, accessTTL, s.config.ServerURL)
+	accessToken, err := NewAccessToken(userID, s.config.JWTSecret, s.config.JWTAccessTTL, s.config.ServerURL)
 	if err != nil {
 		return nil, fmt.Errorf("create access token: %w", err)
 	}
@@ -253,15 +250,12 @@ func (s *Service) VerifyEmail(ctx context.Context, token string) error {
 }
 
 func (s *Service) issueTokens(ctx context.Context, userID uuid.UUID) (*TokenPair, error) {
-	accessTTL := time.Duration(s.config.JWTAccessTTL) * time.Second
-	refreshTTL := time.Duration(s.config.JWTRefreshTTL) * time.Second
-
-	accessToken, err := NewAccessToken(userID, s.config.JWTSecret, accessTTL, s.config.ServerURL)
+	accessToken, err := NewAccessToken(userID, s.config.JWTSecret, s.config.JWTAccessTTL, s.config.ServerURL)
 	if err != nil {
 		return nil, fmt.Errorf("create access token: %w", err)
 	}
 
-	refreshToken, err := CreateRefreshToken(ctx, s.redis, userID, refreshTTL)
+	refreshToken, err := CreateRefreshToken(ctx, s.redis, userID, s.config.JWTRefreshTTL)
 	if err != nil {
 		return nil, fmt.Errorf("create refresh token: %w", err)
 	}

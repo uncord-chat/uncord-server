@@ -71,11 +71,11 @@ func TestLoadDefaults(t *testing.T) {
 	}
 
 	// JWT defaults
-	if cfg.JWTAccessTTL != 900 {
-		t.Errorf("JWTAccessTTL = %d, want 900", cfg.JWTAccessTTL)
+	if cfg.JWTAccessTTL != 15*time.Minute {
+		t.Errorf("JWTAccessTTL = %v, want 15m", cfg.JWTAccessTTL)
 	}
-	if cfg.JWTRefreshTTL != 604800 {
-		t.Errorf("JWTRefreshTTL = %d, want 604800", cfg.JWTRefreshTTL)
+	if cfg.JWTRefreshTTL != 7*24*time.Hour {
+		t.Errorf("JWTRefreshTTL = %v, want 168h", cfg.JWTRefreshTTL)
 	}
 
 	// Abuse defaults
@@ -148,8 +148,8 @@ func TestLoadOverrides(t *testing.T) {
 	t.Setenv("ONBOARDING_REQUIRE_RULES", "false")
 	t.Setenv("INIT_OWNER_EMAIL", "test@example.com")
 	t.Setenv("JWT_SECRET", "test-secret-key-that-is-32-chars!")
-	t.Setenv("JWT_ACCESS_TTL", "1800")
-	t.Setenv("JWT_REFRESH_TTL", "86400")
+	t.Setenv("JWT_ACCESS_TTL", "30m")
+	t.Setenv("JWT_REFRESH_TTL", "24h")
 	t.Setenv("ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_ENABLED", "false")
 	t.Setenv("ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_REFRESH_INTERVAL", "12h")
 
@@ -182,11 +182,11 @@ func TestLoadOverrides(t *testing.T) {
 	if cfg.JWTSecret != "test-secret-key-that-is-32-chars!" {
 		t.Errorf("JWTSecret = %q, want %q", cfg.JWTSecret, "test-secret-key-that-is-32-chars!")
 	}
-	if cfg.JWTAccessTTL != 1800 {
-		t.Errorf("JWTAccessTTL = %d, want 1800", cfg.JWTAccessTTL)
+	if cfg.JWTAccessTTL != 30*time.Minute {
+		t.Errorf("JWTAccessTTL = %v, want 30m", cfg.JWTAccessTTL)
 	}
-	if cfg.JWTRefreshTTL != 86400 {
-		t.Errorf("JWTRefreshTTL = %d, want 86400", cfg.JWTRefreshTTL)
+	if cfg.JWTRefreshTTL != 24*time.Hour {
+		t.Errorf("JWTRefreshTTL = %v, want 24h", cfg.JWTRefreshTTL)
 	}
 	if cfg.DisposableEmailBlocklistEnabled {
 		t.Error("DisposableEmailBlocklistEnabled = true, want false")

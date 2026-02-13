@@ -34,8 +34,8 @@ type Config struct {
 
 	// JWT
 	JWTSecret     string
-	JWTAccessTTL  int
-	JWTRefreshTTL int
+	JWTAccessTTL  time.Duration
+	JWTRefreshTTL time.Duration
 
 	// Abuse / Disposable Email
 	DisposableEmailBlocklistEnabled         bool
@@ -92,8 +92,8 @@ func Load() (*Config, error) {
 		Argon2KeyLength:   p.uint32("ARGON2_KEY_LENGTH", 32),
 
 		JWTSecret:     envStr("JWT_SECRET", ""),
-		JWTAccessTTL:  p.int("JWT_ACCESS_TTL", 900),
-		JWTRefreshTTL: p.int("JWT_REFRESH_TTL", 604800),
+		JWTAccessTTL:  p.duration("JWT_ACCESS_TTL", 15*time.Minute),
+		JWTRefreshTTL: p.duration("JWT_REFRESH_TTL", 7*24*time.Hour),
 
 		DisposableEmailBlocklistEnabled:         p.bool("ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_ENABLED", true),
 		DisposableEmailBlocklistURL:             envStr("ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_URL", "https://raw.githubusercontent.com/disposable-email-domains/disposable-email-domains/master/disposable_email_blocklist.conf"),
@@ -158,11 +158,11 @@ func (c *Config) validate() error {
 		errs = append(errs, fmt.Errorf("DATABASE_MIN_CONNS (%d) must not exceed DATABASE_MAX_CONNS (%d)", c.DatabaseMinConn, c.DatabaseMaxConn))
 	}
 
-	if c.JWTAccessTTL < 1 {
-		errs = append(errs, fmt.Errorf("JWT_ACCESS_TTL must be at least 1"))
+	if c.JWTAccessTTL < time.Second {
+		errs = append(errs, fmt.Errorf("JWT_ACCESS_TTL must be at least 1s"))
 	}
-	if c.JWTRefreshTTL < 1 {
-		errs = append(errs, fmt.Errorf("JWT_REFRESH_TTL must be at least 1"))
+	if c.JWTRefreshTTL < time.Second {
+		errs = append(errs, fmt.Errorf("JWT_REFRESH_TTL must be at least 1s"))
 	}
 
 	if c.Argon2Memory == 0 {

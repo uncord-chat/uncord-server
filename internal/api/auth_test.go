@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gofiber/fiber/v2"
@@ -72,8 +73,8 @@ func testAuthHandler(t *testing.T) (*AuthHandler, *fiber.App) {
 		ServerURL:         "https://test.example.com",
 		ServerEnv:         "production",
 		JWTSecret:         "test-secret-at-least-32-chars-long!!",
-		JWTAccessTTL:      900,
-		JWTRefreshTTL:     604800,
+		JWTAccessTTL:      15 * time.Minute,
+		JWTRefreshTTL:     7 * 24 * time.Hour,
 		Argon2Memory:      64 * 1024,
 		Argon2Iterations:  1,
 		Argon2Parallelism: 1,

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
@@ -93,8 +94,8 @@ func testConfig() *config.Config {
 		ServerURL:         "https://test.example.com",
 		ServerEnv:         "production",
 		JWTSecret:         "test-secret-at-least-32-chars-long!!",
-		JWTAccessTTL:      900,
-		JWTRefreshTTL:     604800,
+		JWTAccessTTL:      15 * time.Minute,
+		JWTRefreshTTL:     7 * 24 * time.Hour,
 		Argon2Memory:      64 * 1024,
 		Argon2Iterations:  1, // fast for tests
 		Argon2Parallelism: 1,
