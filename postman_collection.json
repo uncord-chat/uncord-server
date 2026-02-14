@@ -38,6 +38,10 @@
 		{
 			"key": "verify_token",
 			"value": ""
+		},
+		{
+			"key": "mfa_ticket",
+			"value": ""
 		}
 	],
 	"item": [
@@ -106,8 +110,12 @@
 								"exec": [
 									"if (pm.response.code === 200) {",
 									"    const data = pm.response.json().data;",
-									"    pm.collectionVariables.set('token', data.access_token);",
-									"    pm.collectionVariables.set('refresh_token', data.refresh_token);",
+									"    if (data.mfa_required) {",
+									"        pm.collectionVariables.set('mfa_ticket', data.ticket);",
+									"    } else {",
+									"        pm.collectionVariables.set('token', data.access_token);",
+									"        pm.collectionVariables.set('refresh_token', data.refresh_token);",
+									"    }",
 									"}"
 								]
 							}
@@ -201,6 +209,117 @@
 									"value": "{{verify_token}}"
 								}
 							]
+						}
+					}
+				},
+				{
+					"name": "MFA Verify",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const data = pm.response.json().data;",
+									"    pm.collectionVariables.set('token', data.access_token);",
+									"    pm.collectionVariables.set('refresh_token', data.refresh_token);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ticket\": \"{{mfa_ticket}}\",\n  \"code\": \"123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/mfa/verify",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "mfa", "verify"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "MFA",
+			"item": [
+				{
+					"name": "Enable MFA",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"password\": \"SecurePass123!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/users/@me/mfa/enable",
+							"host": ["{{base_url}}"],
+							"path": ["users", "@me", "mfa", "enable"]
+						}
+					}
+				},
+				{
+					"name": "Confirm MFA",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"code\": \"123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/users/@me/mfa/confirm",
+							"host": ["{{base_url}}"],
+							"path": ["users", "@me", "mfa", "confirm"]
+						}
+					}
+				},
+				{
+					"name": "Disable MFA",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"password\": \"SecurePass123!\",\n  \"code\": \"123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/users/@me/mfa/disable",
+							"host": ["{{base_url}}"],
+							"path": ["users", "@me", "mfa", "disable"]
+						}
+					}
+				},
+				{
+					"name": "Regenerate Recovery Codes",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"password\": \"SecurePass123!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/users/@me/mfa/recovery-codes",
+							"host": ["{{base_url}}"],
+							"path": ["users", "@me", "mfa", "recovery-codes"]
 						}
 					}
 				}

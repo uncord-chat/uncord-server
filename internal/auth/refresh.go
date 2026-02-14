@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -111,7 +112,7 @@ func CreateRefreshToken(ctx context.Context, rdb *redis.Client, userID uuid.UUID
 // ValidateRefreshToken checks whether a refresh token exists in Valkey and returns the associated user ID.
 func ValidateRefreshToken(ctx context.Context, rdb *redis.Client, token string) (uuid.UUID, error) {
 	val, err := rdb.Get(ctx, refreshKey(token)).Result()
-	if err == redis.Nil {
+	if errors.Is(err, redis.Nil) {
 		return uuid.Nil, ErrRefreshTokenNotFound
 	}
 	if err != nil {
@@ -136,7 +137,7 @@ func RotateRefreshToken(ctx context.Context, rdb *redis.Client, oldToken string,
 		oldToken, newToken, int(ttl.Seconds()),
 	).Text()
 
-	if err == redis.Nil {
+	if errors.Is(err, redis.Nil) {
 		return "", uuid.Nil, ErrRefreshTokenReused
 	}
 	if err != nil {

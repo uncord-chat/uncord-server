@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/pquerna/otp/totp"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 	"github.com/uncord-chat/uncord-protocol/models"
@@ -72,11 +73,26 @@ type LoginRequest struct {
 	IP       string
 }
 
-// AuthResult is the output for Register and Login.
+// AuthResult is the output for Register and successful logins (with or without MFA).
 type AuthResult struct {
 	User         models.User
 	AccessToken  string
 	RefreshToken string
+}
+
+// LoginResult is the output for Login. When MFARequired is true, the Auth field is nil and Ticket contains the
+// single-use ticket that the client must present to the MFA verify endpoint.
+type LoginResult struct {
+	MFARequired bool
+	Ticket      string
+	Auth        *AuthResult
+}
+
+// MFASetupResult is the output for BeginMFASetup, containing the TOTP provisioning data the client needs to register
+// the secret in an authenticator app.
+type MFASetupResult struct {
+	Secret string
+	URI    string
 }
 
 // TokenPair is the output for Refresh.
@@ -165,6 +181,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*AuthResul
 			Username:      req.Username,
 			DisplayName:   nil,
 			AvatarKey:     nil,
+			MFAEnabled:    false,
 			EmailVerified: false,
 		},
 		AccessToken:  tokens.AccessToken,
@@ -172,8 +189,9 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*AuthResul
 	}, nil
 }
 
-// Login verifies credentials, records the attempt, and returns auth tokens.
-func (s *Service) Login(ctx context.Context, req LoginRequest) (*AuthResult, error) {
+// Login verifies credentials, records the attempt, and returns either auth tokens (for non-MFA users) or an MFA ticket
+// (for MFA-enabled users).
+func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResult, error) {
 	email, _, err := ValidateEmail(req.Email)
 	if err != nil {
 		return nil, err
@@ -201,7 +219,12 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*AuthResult, err
 	}
 
 	if u.MFAEnabled {
-		return nil, ErrMFARequired
+		ticket, err := CreateMFATicket(ctx, s.redis, u.ID, s.config.MFATicketTTL)
+		if err != nil {
+			return nil, fmt.Errorf("create MFA ticket: %w", err)
+		}
+		s.recordLoginAttempt(ctx, email, req.IP, true)
+		return &LoginResult{MFARequired: true, Ticket: ticket}, nil
 	}
 
 	// Lazy hash rotation: rehash with current parameters if the stored hash was generated with older settings.
@@ -226,17 +249,20 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*AuthResult, err
 		return nil, err
 	}
 
-	return &AuthResult{
-		User: models.User{
-			ID:            u.ID.String(),
-			Email:         email,
-			Username:      u.Username,
-			DisplayName:   u.DisplayName,
-			AvatarKey:     u.AvatarKey,
-			EmailVerified: u.EmailVerified,
+	return &LoginResult{
+		Auth: &AuthResult{
+			User: models.User{
+				ID:            u.ID.String(),
+				Email:         email,
+				Username:      u.Username,
+				DisplayName:   u.DisplayName,
+				AvatarKey:     u.AvatarKey,
+				MFAEnabled:    u.MFAEnabled,
+				EmailVerified: u.EmailVerified,
+			},
+			AccessToken:  tokens.AccessToken,
+			RefreshToken: tokens.RefreshToken,
 		},
-		AccessToken:  tokens.AccessToken,
-		RefreshToken: tokens.RefreshToken,
 	}, nil
 }
 
@@ -269,6 +295,277 @@ func (s *Service) VerifyEmail(ctx context.Context, token string) error {
 	}
 	s.log.Debug().Str("user_id", userID.String()).Msg("User email verified")
 	return nil
+}
+
+// VerifyMFA consumes an MFA ticket, loads the user's credentials, validates the provided TOTP or recovery code, and
+// issues auth tokens on success.
+func (s *Service) VerifyMFA(ctx context.Context, ticket, code string) (*AuthResult, error) {
+	userID, err := ConsumeMFATicket(ctx, s.redis, ticket)
+	if err != nil {
+		return nil, err
+	}
+
+	creds, err := s.users.GetCredentialsByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get credentials for MFA verify: %w", err)
+	}
+
+	if creds.MFASecret == nil {
+		return nil, ErrMFANotEnabled
+	}
+
+	if !s.config.MFAConfigured() {
+		return nil, ErrMFANotConfigured
+	}
+
+	secret, err := DecryptTOTPSecret(*creds.MFASecret, s.config.MFAEncryptionKey)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt MFA secret: %w", err)
+	}
+
+	if totp.Validate(code, secret) {
+		return s.completeMFALogin(ctx, creds)
+	}
+
+	// The code did not match TOTP; try recovery codes.
+	if err := s.tryRecoveryCode(ctx, userID, code); err != nil {
+		return nil, ErrInvalidMFACode
+	}
+
+	return s.completeMFALogin(ctx, creds)
+}
+
+// BeginMFASetup verifies the user's password, generates a new TOTP key, encrypts and stores it in Valkey as a pending
+// secret, and returns the provisioning data. The caller must present a valid TOTP code via ConfirmMFASetup to activate
+// MFA.
+func (s *Service) BeginMFASetup(ctx context.Context, userID uuid.UUID, password string) (*MFASetupResult, error) {
+	if !s.config.MFAConfigured() {
+		return nil, ErrMFANotConfigured
+	}
+
+	creds, err := s.users.GetCredentialsByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get credentials for MFA setup: %w", err)
+	}
+
+	match, err := VerifyPassword(password, creds.PasswordHash)
+	if err != nil {
+		return nil, fmt.Errorf("verify password for MFA setup: %w", err)
+	}
+	if !match {
+		return nil, ErrInvalidCredentials
+	}
+
+	if creds.MFAEnabled {
+		return nil, ErrMFAAlreadyEnabled
+	}
+
+	key, err := totp.Generate(totp.GenerateOpts{
+		Issuer:      s.config.ServerName,
+		AccountName: creds.Email,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("generate TOTP key: %w", err)
+	}
+
+	encrypted, err := EncryptTOTPSecret(key.Secret(), s.config.MFAEncryptionKey)
+	if err != nil {
+		return nil, fmt.Errorf("encrypt TOTP secret: %w", err)
+	}
+
+	if err := StorePendingMFASecret(ctx, s.redis, userID, encrypted); err != nil {
+		return nil, err
+	}
+
+	return &MFASetupResult{
+		Secret: key.Secret(),
+		URI:    key.URL(),
+	}, nil
+}
+
+// ConfirmMFASetup consumes the pending TOTP secret, validates the provided code against it, generates recovery codes,
+// and persists everything to enable MFA. If the code is invalid, the pending secret is re-stored so the user can retry
+// without restarting the setup flow.
+func (s *Service) ConfirmMFASetup(ctx context.Context, userID uuid.UUID, code string) ([]string, error) {
+	if !s.config.MFAConfigured() {
+		return nil, ErrMFANotConfigured
+	}
+
+	encrypted, err := ConsumePendingMFASecret(ctx, s.redis, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	secret, err := DecryptTOTPSecret(encrypted, s.config.MFAEncryptionKey)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt pending MFA secret: %w", err)
+	}
+
+	if !totp.Validate(code, secret) {
+		// Re-store so the user can retry.
+		if storeErr := StorePendingMFASecret(ctx, s.redis, userID, encrypted); storeErr != nil {
+			s.log.Error().Err(storeErr).Str("user_id", userID.String()).Msg("Failed to re-store pending MFA secret")
+		}
+		return nil, ErrInvalidMFACode
+	}
+
+	codes, err := GenerateRecoveryCodes()
+	if err != nil {
+		return nil, fmt.Errorf("generate recovery codes: %w", err)
+	}
+
+	hashes := make([]string, len(codes))
+	for i, c := range codes {
+		h, err := HashRecoveryCode(c, s.config.Argon2Memory, s.config.Argon2Iterations, s.config.Argon2Parallelism, s.config.Argon2SaltLength, s.config.Argon2KeyLength)
+		if err != nil {
+			return nil, fmt.Errorf("hash recovery code: %w", err)
+		}
+		hashes[i] = h
+	}
+
+	if err := s.users.EnableMFA(ctx, userID, encrypted, hashes); err != nil {
+		return nil, fmt.Errorf("enable MFA: %w", err)
+	}
+
+	s.log.Debug().Str("user_id", userID.String()).Msg("MFA enabled")
+	return codes, nil
+}
+
+// DisableMFA verifies the user's password and MFA code (TOTP or recovery code), disables MFA, and revokes all refresh
+// tokens so the user must re-authenticate.
+func (s *Service) DisableMFA(ctx context.Context, userID uuid.UUID, password, code string) error {
+	creds, err := s.users.GetCredentialsByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("get credentials for MFA disable: %w", err)
+	}
+
+	match, err := VerifyPassword(password, creds.PasswordHash)
+	if err != nil {
+		return fmt.Errorf("verify password for MFA disable: %w", err)
+	}
+	if !match {
+		return ErrInvalidCredentials
+	}
+
+	if !creds.MFAEnabled || creds.MFASecret == nil {
+		return ErrMFANotEnabled
+	}
+
+	if !s.config.MFAConfigured() {
+		return ErrMFANotConfigured
+	}
+
+	secret, err := DecryptTOTPSecret(*creds.MFASecret, s.config.MFAEncryptionKey)
+	if err != nil {
+		return fmt.Errorf("decrypt MFA secret: %w", err)
+	}
+
+	if !totp.Validate(code, secret) {
+		// The code did not match TOTP; try recovery codes.
+		if err := s.tryRecoveryCode(ctx, userID, code); err != nil {
+			return ErrInvalidMFACode
+		}
+	}
+
+	if err := s.users.DisableMFA(ctx, userID); err != nil {
+		return fmt.Errorf("disable MFA: %w", err)
+	}
+
+	if err := RevokeAllRefreshTokens(ctx, s.redis, userID); err != nil {
+		s.log.Warn().Err(err).Str("user_id", userID.String()).Msg("Failed to revoke refresh tokens after MFA disable")
+	}
+
+	s.log.Debug().Str("user_id", userID.String()).Msg("MFA disabled")
+	return nil
+}
+
+// RegenerateRecoveryCodes verifies the user's password, generates a new set of recovery codes, and replaces the
+// existing ones in the database.
+func (s *Service) RegenerateRecoveryCodes(ctx context.Context, userID uuid.UUID, password string) ([]string, error) {
+	creds, err := s.users.GetCredentialsByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get credentials for recovery code regeneration: %w", err)
+	}
+
+	match, err := VerifyPassword(password, creds.PasswordHash)
+	if err != nil {
+		return nil, fmt.Errorf("verify password for recovery code regeneration: %w", err)
+	}
+	if !match {
+		return nil, ErrInvalidCredentials
+	}
+
+	if !creds.MFAEnabled {
+		return nil, ErrMFANotEnabled
+	}
+
+	codes, err := GenerateRecoveryCodes()
+	if err != nil {
+		return nil, fmt.Errorf("generate recovery codes: %w", err)
+	}
+
+	hashes := make([]string, len(codes))
+	for i, c := range codes {
+		h, err := HashRecoveryCode(c, s.config.Argon2Memory, s.config.Argon2Iterations, s.config.Argon2Parallelism, s.config.Argon2SaltLength, s.config.Argon2KeyLength)
+		if err != nil {
+			return nil, fmt.Errorf("hash recovery code: %w", err)
+		}
+		hashes[i] = h
+	}
+
+	if err := s.users.ReplaceRecoveryCodes(ctx, userID, hashes); err != nil {
+		return nil, fmt.Errorf("replace recovery codes: %w", err)
+	}
+
+	s.log.Debug().Str("user_id", userID.String()).Msg("Recovery codes regenerated")
+	return codes, nil
+}
+
+// completeMFALogin issues tokens and builds an AuthResult with MFAEnabled set to true.
+func (s *Service) completeMFALogin(ctx context.Context, creds *user.Credentials) (*AuthResult, error) {
+	tokens, err := s.issueTokens(ctx, creds.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &AuthResult{
+		User: models.User{
+			ID:            creds.ID.String(),
+			Email:         creds.Email,
+			Username:      creds.Username,
+			DisplayName:   creds.DisplayName,
+			AvatarKey:     creds.AvatarKey,
+			MFAEnabled:    true,
+			EmailVerified: creds.EmailVerified,
+		},
+		AccessToken:  tokens.AccessToken,
+		RefreshToken: tokens.RefreshToken,
+	}, nil
+}
+
+// tryRecoveryCode checks the provided code against all unused recovery codes for the user. If a match is found, the
+// code is marked as used and nil is returned. Otherwise, ErrInvalidMFACode is returned.
+func (s *Service) tryRecoveryCode(ctx context.Context, userID uuid.UUID, code string) error {
+	codes, err := s.users.GetUnusedRecoveryCodes(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("get recovery codes: %w", err)
+	}
+
+	for _, rc := range codes {
+		match, err := VerifyRecoveryCode(code, rc.CodeHash)
+		if err != nil {
+			s.log.Warn().Err(err).Str("user_id", userID.String()).Msg("Recovery code verification error")
+			continue
+		}
+		if match {
+			if err := s.users.UseRecoveryCode(ctx, rc.ID); err != nil {
+				return fmt.Errorf("mark recovery code used: %w", err)
+			}
+			return nil
+		}
+	}
+
+	return ErrInvalidMFACode
 }
 
 func (s *Service) issueTokens(ctx context.Context, userID uuid.UUID) (*TokenPair, error) {

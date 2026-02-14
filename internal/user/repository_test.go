@@ -160,16 +160,16 @@ func TestValidateDisplayName(t *testing.T) {
 func TestNormalizeAndValidateDisplayName(t *testing.T) {
 	t.Parallel()
 
-	t.Run("whitespace only rejects after normalize", func(t *testing.T) {
+	t.Run("whitespace only rejects after trim", func(t *testing.T) {
 		t.Parallel()
 		name := ptr("   ")
 		NormalizeDisplayName(name)
 		if err := ValidateDisplayName(name); !errors.Is(err, ErrDisplayNameLength) {
-			t.Errorf("expected ErrDisplayNameLength after normalizing whitespace-only input, got %v", err)
+			t.Errorf("expected ErrDisplayNameLength after trimming whitespace-only input, got %v", err)
 		}
 	})
 
-	t.Run("padded value passes after normalize", func(t *testing.T) {
+	t.Run("padded value passes after trim", func(t *testing.T) {
 		t.Parallel()
 		name := ptr("  Bob  ")
 		NormalizeDisplayName(name)

@@ -75,6 +75,7 @@ func toUserModel(u *user.User) models.User {
 		Username:      u.Username,
 		DisplayName:   u.DisplayName,
 		AvatarKey:     u.AvatarKey,
+		MFAEnabled:    u.MFAEnabled,
 		EmailVerified: u.EmailVerified,
 	}
 }

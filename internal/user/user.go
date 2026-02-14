@@ -29,11 +29,19 @@ type User struct {
 	EmailVerified bool
 }
 
-// Credentials extends User with the password hash. Only repository methods that serve the authentication path return
-// this type; all other read methods return *User to prevent credential leakage at the type level.
+// Credentials extends User with the password hash and optional MFA secret. Only repository methods that serve the
+// authentication path return this type; all other read methods return *User to prevent credential leakage at the type
+// level.
 type Credentials struct {
 	User
 	PasswordHash string
+	MFASecret    *string
+}
+
+// MFARecoveryCode represents a single unused recovery code stored in the database.
+type MFARecoveryCode struct {
+	ID       uuid.UUID
+	CodeHash string
 }
 
 // CreateParams groups the inputs for creating a new user. When VerifyToken is non-empty, an email_verifications row is
@@ -76,8 +84,14 @@ type Repository interface {
 	Create(ctx context.Context, params CreateParams) (uuid.UUID, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*Credentials, error)
+	GetCredentialsByID(ctx context.Context, id uuid.UUID) (*Credentials, error)
 	VerifyEmail(ctx context.Context, token string) (uuid.UUID, error)
 	RecordLoginAttempt(ctx context.Context, email, ipAddress string, success bool) error
 	UpdatePasswordHash(ctx context.Context, userID uuid.UUID, hash string) error
 	Update(ctx context.Context, id uuid.UUID, params UpdateParams) (*User, error)
+	EnableMFA(ctx context.Context, userID uuid.UUID, encryptedSecret string, codeHashes []string) error
+	DisableMFA(ctx context.Context, userID uuid.UUID) error
+	GetUnusedRecoveryCodes(ctx context.Context, userID uuid.UUID) ([]MFARecoveryCode, error)
+	UseRecoveryCode(ctx context.Context, codeID uuid.UUID) error
+	ReplaceRecoveryCodes(ctx context.Context, userID uuid.UUID, codeHashes []string) error
 }

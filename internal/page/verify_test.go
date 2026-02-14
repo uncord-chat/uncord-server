@@ -95,6 +95,23 @@ func (r *fakeRepo) Update(_ context.Context, id uuid.UUID, params user.UpdatePar
 func (r *fakeRepo) RecordLoginAttempt(context.Context, string, string, bool) error { return nil }
 func (r *fakeRepo) UpdatePasswordHash(context.Context, uuid.UUID, string) error    { return nil }
 
+func (r *fakeRepo) GetCredentialsByID(_ context.Context, id uuid.UUID) (*user.Credentials, error) {
+	for _, c := range r.users {
+		if c.ID == id {
+			return c, nil
+		}
+	}
+	return nil, user.ErrNotFound
+}
+
+func (r *fakeRepo) EnableMFA(context.Context, uuid.UUID, string, []string) error { return nil }
+func (r *fakeRepo) DisableMFA(context.Context, uuid.UUID) error                  { return nil }
+func (r *fakeRepo) GetUnusedRecoveryCodes(context.Context, uuid.UUID) ([]user.MFARecoveryCode, error) {
+	return nil, nil
+}
+func (r *fakeRepo) UseRecoveryCode(context.Context, uuid.UUID) error                { return nil }
+func (r *fakeRepo) ReplaceRecoveryCodes(context.Context, uuid.UUID, []string) error { return nil }
+
 func testVerifyHandler(t *testing.T) *fiber.App {
 	t.Helper()
 	mr := miniredis.RunT(t)
@@ -112,6 +129,7 @@ func testVerifyHandler(t *testing.T) *fiber.App {
 		Argon2Parallelism: 1,
 		Argon2SaltLength:  16,
 		Argon2KeyLength:   32,
+		MFATicketTTL:      5 * time.Minute,
 	}
 
 	bl := disposable.NewBlocklist("", false, zerolog.Nop())

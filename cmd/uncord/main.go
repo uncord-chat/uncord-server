@@ -332,12 +332,21 @@ func (s *server) registerRoutes(app *fiber.App) {
 	authGroup.Post("/login", authHandler.Login)
 	authGroup.Post("/refresh", authHandler.Refresh)
 	authGroup.Post("/verify-email", authHandler.VerifyEmail)
+	authGroup.Post("/mfa/verify", authHandler.MFAVerify)
 
 	// User profile routes (authenticated, no permission checks)
 	userHandler := api.NewUserHandler(s.userRepo, log.Logger)
 	userGroup := app.Group("/api/v1/users", auth.RequireAuth(s.cfg.JWTSecret, s.cfg.ServerURL))
 	userGroup.Get("/@me", userHandler.GetMe)
 	userGroup.Patch("/@me", userHandler.UpdateMe)
+
+	// MFA management routes (authenticated)
+	mfaHandler := api.NewMFAHandler(s.authService, log.Logger)
+	mfaGroup := userGroup.Group("/@me/mfa")
+	mfaGroup.Post("/enable", mfaHandler.Enable)
+	mfaGroup.Post("/confirm", mfaHandler.Confirm)
+	mfaGroup.Post("/disable", mfaHandler.Disable)
+	mfaGroup.Post("/recovery-codes", mfaHandler.RegenerateCodes)
 
 	// Server config routes (authenticated, PATCH requires ManageServer)
 	serverHandler := api.NewServerHandler(s.serverRepo, log.Logger)

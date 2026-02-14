@@ -24,8 +24,8 @@ import (
 )
 
 // testTimeout extends the default app.Test() deadline so that argon2 hashing under the race detector does not trigger
-// a spurious i/o timeout.
-var testTimeout = fiber.TestConfig{Timeout: 5 * time.Second}
+// a spurious i/o timeout. MFA operations hash multiple recovery codes, requiring a wider margin.
+var testTimeout = fiber.TestConfig{Timeout: 30 * time.Second}
 
 // fakeRepo implements user.Repository for handler tests.
 type fakeRepo struct {
@@ -97,12 +97,48 @@ func (r *fakeRepo) Update(_ context.Context, id uuid.UUID, params user.UpdatePar
 func (r *fakeRepo) RecordLoginAttempt(context.Context, string, string, bool) error { return nil }
 func (r *fakeRepo) UpdatePasswordHash(context.Context, uuid.UUID, string) error    { return nil }
 
-func testAuthHandler(t *testing.T) (*AuthHandler, *fiber.App) {
-	t.Helper()
-	mr := miniredis.RunT(t)
-	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+func (r *fakeRepo) GetCredentialsByID(_ context.Context, id uuid.UUID) (*user.Credentials, error) {
+	for _, c := range r.users {
+		if c.ID == id {
+			return c, nil
+		}
+	}
+	return nil, user.ErrNotFound
+}
 
-	cfg := &config.Config{
+func (r *fakeRepo) EnableMFA(_ context.Context, userID uuid.UUID, encryptedSecret string, _ []string) error {
+	for _, c := range r.users {
+		if c.ID == userID {
+			c.MFAEnabled = true
+			c.MFASecret = &encryptedSecret
+			return nil
+		}
+	}
+	return user.ErrNotFound
+}
+
+func (r *fakeRepo) DisableMFA(_ context.Context, userID uuid.UUID) error {
+	for _, c := range r.users {
+		if c.ID == userID {
+			c.MFAEnabled = false
+			c.MFASecret = nil
+			return nil
+		}
+	}
+	return user.ErrNotFound
+}
+
+func (r *fakeRepo) GetUnusedRecoveryCodes(context.Context, uuid.UUID) ([]user.MFARecoveryCode, error) {
+	return nil, nil
+}
+
+func (r *fakeRepo) UseRecoveryCode(context.Context, uuid.UUID) error { return nil }
+
+func (r *fakeRepo) ReplaceRecoveryCodes(context.Context, uuid.UUID, []string) error { return nil }
+
+func testAuthConfig() *config.Config {
+	return &config.Config{
+		ServerName:        "Test Server",
 		ServerURL:         "https://test.example.com",
 		ServerEnv:         "production",
 		JWTSecret:         "test-secret-at-least-32-chars-long!!",
@@ -113,10 +149,19 @@ func testAuthHandler(t *testing.T) (*AuthHandler, *fiber.App) {
 		Argon2Parallelism: 1,
 		Argon2SaltLength:  16,
 		Argon2KeyLength:   32,
+		MFAEncryptionKey:  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		MFATicketTTL:      5 * time.Minute,
 	}
+}
 
+func testAuthHandler(t *testing.T) (*AuthHandler, *fiber.App) {
+	t.Helper()
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+
+	_ = mr
 	bl := disposable.NewBlocklist("", false, zerolog.Nop())
-	svc, err := auth.NewService(newFakeRepo(), rdb, cfg, bl, nil, zerolog.Nop())
+	svc, err := auth.NewService(newFakeRepo(), rdb, testAuthConfig(), bl, nil, zerolog.Nop())
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -127,6 +172,7 @@ func testAuthHandler(t *testing.T) (*AuthHandler, *fiber.App) {
 	app.Post("/login", handler.Login)
 	app.Post("/refresh", handler.Refresh)
 	app.Post("/verify-email", handler.VerifyEmail)
+	app.Post("/mfa/verify", handler.MFAVerify)
 
 	return handler, app
 }
@@ -502,5 +548,56 @@ func TestVerifyEmailHandler_Success(t *testing.T) {
 	}
 	if msgResp.Message == "" {
 		t.Error("message is empty")
+	}
+}
+
+// --- MFA verify handler tests ---
+
+func TestMFAVerifyHandler_InvalidJSON(t *testing.T) {
+	t.Parallel()
+	_, app := testAuthHandler(t)
+
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/mfa/verify", "not json"))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusBadRequest)
+	}
+	env := parseError(t, body)
+	if env.Error.Code != string(apierrors.InvalidBody) {
+		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.InvalidBody)
+	}
+}
+
+func TestMFAVerifyHandler_MissingFields(t *testing.T) {
+	t.Parallel()
+	_, app := testAuthHandler(t)
+
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/mfa/verify", `{"ticket":"abc"}`))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusBadRequest)
+	}
+	env := parseError(t, body)
+	if env.Error.Code != string(apierrors.InvalidBody) {
+		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.InvalidBody)
+	}
+}
+
+func TestMFAVerifyHandler_InvalidTicket(t *testing.T) {
+	t.Parallel()
+	_, app := testAuthHandler(t)
+
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/mfa/verify",
+		`{"ticket":"nonexistent","code":"123456"}`))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusBadRequest)
+	}
+	env := parseError(t, body)
+	if env.Error.Code != string(apierrors.InvalidToken) {
+		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.InvalidToken)
 	}
 }

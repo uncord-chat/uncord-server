@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/pquerna/otp/totp"
 	"github.com/rs/zerolog"
 
 	"github.com/uncord-chat/uncord-server/internal/config"
@@ -20,6 +21,7 @@ import (
 // fakeRepository implements user.Repository for unit tests.
 type fakeRepository struct {
 	users         map[string]*user.Credentials // keyed by email
+	recoveryCodes map[uuid.UUID][]user.MFARecoveryCode
 	createErr     error
 	getByEmailErr error
 	verifyErr     error
@@ -33,7 +35,10 @@ type loginAttempt struct {
 }
 
 func newFakeRepository() *fakeRepository {
-	return &fakeRepository{users: make(map[string]*user.Credentials)}
+	return &fakeRepository{
+		users:         make(map[string]*user.Credentials),
+		recoveryCodes: make(map[uuid.UUID][]user.MFARecoveryCode),
+	}
 }
 
 func (r *fakeRepository) Create(_ context.Context, params user.CreateParams) (uuid.UUID, error) {
@@ -117,8 +122,71 @@ func (r *fakeRepository) UpdatePasswordHash(_ context.Context, userID uuid.UUID,
 	return user.ErrNotFound
 }
 
+func (r *fakeRepository) GetCredentialsByID(_ context.Context, id uuid.UUID) (*user.Credentials, error) {
+	for _, c := range r.users {
+		if c.ID == id {
+			return c, nil
+		}
+	}
+	return nil, user.ErrNotFound
+}
+
+func (r *fakeRepository) EnableMFA(_ context.Context, userID uuid.UUID, encryptedSecret string, codeHashes []string) error {
+	for _, c := range r.users {
+		if c.ID == userID {
+			c.MFAEnabled = true
+			c.MFASecret = &encryptedSecret
+			codes := make([]user.MFARecoveryCode, len(codeHashes))
+			for i, h := range codeHashes {
+				codes[i] = user.MFARecoveryCode{ID: uuid.New(), CodeHash: h}
+			}
+			r.recoveryCodes[userID] = codes
+			return nil
+		}
+	}
+	return user.ErrNotFound
+}
+
+func (r *fakeRepository) DisableMFA(_ context.Context, userID uuid.UUID) error {
+	for _, c := range r.users {
+		if c.ID == userID {
+			c.MFAEnabled = false
+			c.MFASecret = nil
+			delete(r.recoveryCodes, userID)
+			return nil
+		}
+	}
+	return user.ErrNotFound
+}
+
+func (r *fakeRepository) GetUnusedRecoveryCodes(_ context.Context, userID uuid.UUID) ([]user.MFARecoveryCode, error) {
+	return r.recoveryCodes[userID], nil
+}
+
+func (r *fakeRepository) UseRecoveryCode(_ context.Context, codeID uuid.UUID) error {
+	for uid, codes := range r.recoveryCodes {
+		for i, c := range codes {
+			if c.ID == codeID {
+				r.recoveryCodes[uid] = append(codes[:i], codes[i+1:]...)
+				return nil
+			}
+		}
+	}
+	return nil
+}
+
+func (r *fakeRepository) ReplaceRecoveryCodes(_ context.Context, userID uuid.UUID, codeHashes []string) error {
+	codes := make([]user.MFARecoveryCode, len(codeHashes))
+	for i, h := range codeHashes {
+		codes[i] = user.MFARecoveryCode{ID: uuid.New(), CodeHash: h}
+	}
+	r.recoveryCodes[userID] = codes
+	return nil
+}
+
 func testConfig() *config.Config {
 	return &config.Config{
+		ServerName:        "Test Server",
 		ServerURL:         "https://test.example.com",
 		ServerEnv:         "production",
 		JWTSecret:         "test-secret-at-least-32-chars-long!!",
@@ -129,6 +197,8 @@ func testConfig() *config.Config {
 		Argon2Parallelism: 1,
 		Argon2SaltLength:  16,
 		Argon2KeyLength:   32,
+		MFAEncryptionKey:  testEncryptionKey,
+		MFATicketTTL:      5 * time.Minute,
 	}
 }
 
@@ -332,13 +402,19 @@ func TestServiceLoginSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Login() error = %v", err)
 	}
-	if result.User.Email != "alice@example.com" {
-		t.Errorf("Login() email = %q, want %q", result.User.Email, "alice@example.com")
+	if result.MFARequired {
+		t.Error("Login() MFARequired = true, want false")
 	}
-	if result.AccessToken == "" {
+	if result.Auth == nil {
+		t.Fatal("Login() Auth is nil")
+	}
+	if result.Auth.User.Email != "alice@example.com" {
+		t.Errorf("Login() email = %q, want %q", result.Auth.User.Email, "alice@example.com")
+	}
+	if result.Auth.AccessToken == "" {
 		t.Error("Login() returned empty access token")
 	}
-	if result.RefreshToken == "" {
+	if result.Auth.RefreshToken == "" {
 		t.Error("Login() returned empty refresh token")
 	}
 
@@ -440,13 +516,22 @@ func TestServiceLoginMFARequired(t *testing.T) {
 	}
 	repo.users["alice@example.com"].MFAEnabled = true
 
-	_, err = svc.Login(ctx, LoginRequest{
+	result, err := svc.Login(ctx, LoginRequest{
 		Email:    "alice@example.com",
 		Password: "strongpassword",
 		IP:       "127.0.0.1",
 	})
-	if !errors.Is(err, ErrMFARequired) {
-		t.Errorf("Login() error = %v, want ErrMFARequired", err)
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
+	if !result.MFARequired {
+		t.Error("Login() MFARequired = false, want true")
+	}
+	if result.Ticket == "" {
+		t.Error("Login() returned empty ticket")
+	}
+	if result.Auth != nil {
+		t.Error("Login() Auth should be nil when MFA is required")
 	}
 }
 
@@ -798,5 +883,527 @@ func TestServiceRegisterNilSenderSkipsEmail(t *testing.T) {
 	}
 	if result.User.Email != "alice@example.com" {
 		t.Errorf("Register() email = %q, want %q", result.User.Email, "alice@example.com")
+	}
+}
+
+// --- MFA tests ---
+
+// registerMFAUser is a test helper that registers a user and runs the full MFA setup flow, returning the TOTP secret
+// for generating valid codes in tests.
+func registerMFAUser(t *testing.T, svc *Service, repo *fakeRepository, email, password string) string {
+	t.Helper()
+	ctx := context.Background()
+
+	_, err := svc.Register(ctx, RegisterRequest{
+		Email:    email,
+		Username: "mfauser",
+		Password: password,
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	userID := repo.users[email].ID
+	setup, err := svc.BeginMFASetup(ctx, userID, password)
+	if err != nil {
+		t.Fatalf("BeginMFASetup() error = %v", err)
+	}
+
+	code, err := totp.GenerateCode(setup.Secret, time.Now())
+	if err != nil {
+		t.Fatalf("totp.GenerateCode() error = %v", err)
+	}
+
+	_, err = svc.ConfirmMFASetup(ctx, userID, code)
+	if err != nil {
+		t.Fatalf("ConfirmMFASetup() error = %v", err)
+	}
+
+	return setup.Secret
+}
+
+func TestServiceBeginMFASetupSuccess(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	svc := newTestService(t, repo)
+	ctx := context.Background()
+
+	_, err := svc.Register(ctx, RegisterRequest{
+		Email:    "alice@example.com",
+		Username: "alice",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	userID := repo.users["alice@example.com"].ID
+	result, err := svc.BeginMFASetup(ctx, userID, "strongpassword")
+	if err != nil {
+		t.Fatalf("BeginMFASetup() error = %v", err)
+	}
+	if result.Secret == "" {
+		t.Error("BeginMFASetup() returned empty secret")
+	}
+	if result.URI == "" {
+		t.Error("BeginMFASetup() returned empty URI")
+	}
+}
+
+func TestServiceBeginMFASetupWrongPassword(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	svc := newTestService(t, repo)
+	ctx := context.Background()
+
+	_, err := svc.Register(ctx, RegisterRequest{
+		Email:    "alice@example.com",
+		Username: "alice",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	userID := repo.users["alice@example.com"].ID
+	_, err = svc.BeginMFASetup(ctx, userID, "wrongpassword")
+	if !errors.Is(err, ErrInvalidCredentials) {
+		t.Errorf("BeginMFASetup() error = %v, want ErrInvalidCredentials", err)
+	}
+}
+
+func TestServiceBeginMFASetupAlreadyEnabled(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	svc := newTestService(t, repo)
+	ctx := context.Background()
+
+	registerMFAUser(t, svc, repo, "alice@example.com", "strongpassword")
+
+	userID := repo.users["alice@example.com"].ID
+	_, err := svc.BeginMFASetup(ctx, userID, "strongpassword")
+	if !errors.Is(err, ErrMFAAlreadyEnabled) {
+		t.Errorf("BeginMFASetup() error = %v, want ErrMFAAlreadyEnabled", err)
+	}
+}
+
+func TestServiceConfirmMFASetupSuccess(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	svc := newTestService(t, repo)
+	ctx := context.Background()
+
+	_, err := svc.Register(ctx, RegisterRequest{
+		Email:    "alice@example.com",
+		Username: "alice",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	userID := repo.users["alice@example.com"].ID
+	setup, err := svc.BeginMFASetup(ctx, userID, "strongpassword")
+	if err != nil {
+		t.Fatalf("BeginMFASetup() error = %v", err)
+	}
+
+	code, err := totp.GenerateCode(setup.Secret, time.Now())
+	if err != nil {
+		t.Fatalf("totp.GenerateCode() error = %v", err)
+	}
+
+	codes, err := svc.ConfirmMFASetup(ctx, userID, code)
+	if err != nil {
+		t.Fatalf("ConfirmMFASetup() error = %v", err)
+	}
+	if len(codes) != recoveryCodeCount {
+		t.Errorf("ConfirmMFASetup() returned %d codes, want %d", len(codes), recoveryCodeCount)
+	}
+	if !repo.users["alice@example.com"].MFAEnabled {
+		t.Error("ConfirmMFASetup() did not enable MFA on user")
+	}
+}
+
+func TestServiceConfirmMFASetupInvalidCode(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	svc := newTestService(t, repo)
+	ctx := context.Background()
+
+	_, err := svc.Register(ctx, RegisterRequest{
+		Email:    "alice@example.com",
+		Username: "alice",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	userID := repo.users["alice@example.com"].ID
+	_, err = svc.BeginMFASetup(ctx, userID, "strongpassword")
+	if err != nil {
+		t.Fatalf("BeginMFASetup() error = %v", err)
+	}
+
+	_, err = svc.ConfirmMFASetup(ctx, userID, "000000")
+	if !errors.Is(err, ErrInvalidMFACode) {
+		t.Errorf("ConfirmMFASetup() error = %v, want ErrInvalidMFACode", err)
+	}
+}
+
+func TestServiceVerifyMFAWithTOTP(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	svc := newTestService(t, repo)
+	ctx := context.Background()
+
+	secret := registerMFAUser(t, svc, repo, "alice@example.com", "strongpassword")
+
+	result, err := svc.Login(ctx, LoginRequest{
+		Email:    "alice@example.com",
+		Password: "strongpassword",
+		IP:       "127.0.0.1",
+	})
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
+	if !result.MFARequired {
+		t.Fatal("Login() MFARequired = false, want true")
+	}
+
+	code, err := totp.GenerateCode(secret, time.Now())
+	if err != nil {
+		t.Fatalf("totp.GenerateCode() error = %v", err)
+	}
+
+	authResult, err := svc.VerifyMFA(ctx, result.Ticket, code)
+	if err != nil {
+		t.Fatalf("VerifyMFA() error = %v", err)
+	}
+	if authResult.AccessToken == "" {
+		t.Error("VerifyMFA() returned empty access token")
+	}
+	if !authResult.User.MFAEnabled {
+		t.Error("VerifyMFA() user MFAEnabled = false, want true")
+	}
+}
+
+func TestServiceVerifyMFAWithRecoveryCode(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	svc := newTestService(t, repo)
+	ctx := context.Background()
+
+	_ = registerMFAUser(t, svc, repo, "alice@example.com", "strongpassword")
+
+	// Get a recovery code from the repo
+	userID := repo.users["alice@example.com"].ID
+	codes := repo.recoveryCodes[userID]
+	if len(codes) == 0 {
+		t.Fatal("no recovery codes found")
+	}
+
+	// We need the plaintext code, but the repo only has hashes. Instead, generate new codes through the service and
+	// use one of those.
+	plainCodes, err := svc.RegenerateRecoveryCodes(ctx, userID, "strongpassword")
+	if err != nil {
+		t.Fatalf("RegenerateRecoveryCodes() error = %v", err)
+	}
+
+	result, err := svc.Login(ctx, LoginRequest{
+		Email:    "alice@example.com",
+		Password: "strongpassword",
+		IP:       "127.0.0.1",
+	})
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
+
+	authResult, err := svc.VerifyMFA(ctx, result.Ticket, plainCodes[0])
+	if err != nil {
+		t.Fatalf("VerifyMFA() with recovery code error = %v", err)
+	}
+	if authResult.AccessToken == "" {
+		t.Error("VerifyMFA() returned empty access token")
+	}
+}
+
+func TestServiceVerifyMFAInvalidTicket(t *testing.T) {
+	t.Parallel()
+	svc := newTestService(t, newFakeRepository())
+	ctx := context.Background()
+
+	_, err := svc.VerifyMFA(ctx, "nonexistent-ticket", "123456")
+	if !errors.Is(err, ErrInvalidToken) {
+		t.Errorf("VerifyMFA() error = %v, want ErrInvalidToken", err)
+	}
+}
+
+func TestServiceVerifyMFAInvalidCode(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	svc := newTestService(t, repo)
+	ctx := context.Background()
+
+	_ = registerMFAUser(t, svc, repo, "alice@example.com", "strongpassword")
+
+	result, err := svc.Login(ctx, LoginRequest{
+		Email:    "alice@example.com",
+		Password: "strongpassword",
+		IP:       "127.0.0.1",
+	})
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
+
+	_, err = svc.VerifyMFA(ctx, result.Ticket, "000000")
+	if !errors.Is(err, ErrInvalidMFACode) {
+		t.Errorf("VerifyMFA() error = %v, want ErrInvalidMFACode", err)
+	}
+}
+
+func TestServiceDisableMFASuccess(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	svc := newTestService(t, repo)
+	ctx := context.Background()
+
+	secret := registerMFAUser(t, svc, repo, "alice@example.com", "strongpassword")
+	userID := repo.users["alice@example.com"].ID
+
+	code, err := totp.GenerateCode(secret, time.Now())
+	if err != nil {
+		t.Fatalf("totp.GenerateCode() error = %v", err)
+	}
+
+	err = svc.DisableMFA(ctx, userID, "strongpassword", code)
+	if err != nil {
+		t.Fatalf("DisableMFA() error = %v", err)
+	}
+	if repo.users["alice@example.com"].MFAEnabled {
+		t.Error("DisableMFA() did not clear MFAEnabled")
+	}
+}
+
+func TestServiceDisableMFAWithRecoveryCode(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	svc := newTestService(t, repo)
+	ctx := context.Background()
+
+	_ = registerMFAUser(t, svc, repo, "alice@example.com", "strongpassword")
+	userID := repo.users["alice@example.com"].ID
+
+	plainCodes, err := svc.RegenerateRecoveryCodes(ctx, userID, "strongpassword")
+	if err != nil {
+		t.Fatalf("RegenerateRecoveryCodes() error = %v", err)
+	}
+
+	err = svc.DisableMFA(ctx, userID, "strongpassword", plainCodes[0])
+	if err != nil {
+		t.Fatalf("DisableMFA() with recovery code error = %v", err)
+	}
+	if repo.users["alice@example.com"].MFAEnabled {
+		t.Error("DisableMFA() did not clear MFAEnabled")
+	}
+}
+
+func TestServiceDisableMFAWrongPassword(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	svc := newTestService(t, repo)
+	ctx := context.Background()
+
+	secret := registerMFAUser(t, svc, repo, "alice@example.com", "strongpassword")
+	userID := repo.users["alice@example.com"].ID
+
+	code, err := totp.GenerateCode(secret, time.Now())
+	if err != nil {
+		t.Fatalf("totp.GenerateCode() error = %v", err)
+	}
+
+	err = svc.DisableMFA(ctx, userID, "wrongpassword", code)
+	if !errors.Is(err, ErrInvalidCredentials) {
+		t.Errorf("DisableMFA() error = %v, want ErrInvalidCredentials", err)
+	}
+}
+
+func TestServiceDisableMFAWrongCode(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	svc := newTestService(t, repo)
+	ctx := context.Background()
+
+	_ = registerMFAUser(t, svc, repo, "alice@example.com", "strongpassword")
+	userID := repo.users["alice@example.com"].ID
+
+	err := svc.DisableMFA(ctx, userID, "strongpassword", "000000")
+	if !errors.Is(err, ErrInvalidMFACode) {
+		t.Errorf("DisableMFA() error = %v, want ErrInvalidMFACode", err)
+	}
+}
+
+func TestServiceDisableMFANotEnabled(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	svc := newTestService(t, repo)
+	ctx := context.Background()
+
+	_, err := svc.Register(ctx, RegisterRequest{
+		Email:    "alice@example.com",
+		Username: "alice",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	userID := repo.users["alice@example.com"].ID
+	err = svc.DisableMFA(ctx, userID, "strongpassword", "123456")
+	if !errors.Is(err, ErrMFANotEnabled) {
+		t.Errorf("DisableMFA() error = %v, want ErrMFANotEnabled", err)
+	}
+}
+
+func TestServiceRegenerateRecoveryCodesSuccess(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	svc := newTestService(t, repo)
+	ctx := context.Background()
+
+	_ = registerMFAUser(t, svc, repo, "alice@example.com", "strongpassword")
+	userID := repo.users["alice@example.com"].ID
+
+	codes, err := svc.RegenerateRecoveryCodes(ctx, userID, "strongpassword")
+	if err != nil {
+		t.Fatalf("RegenerateRecoveryCodes() error = %v", err)
+	}
+	if len(codes) != recoveryCodeCount {
+		t.Errorf("RegenerateRecoveryCodes() returned %d codes, want %d", len(codes), recoveryCodeCount)
+	}
+}
+
+func TestServiceRegenerateRecoveryCodesNotEnabled(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	svc := newTestService(t, repo)
+	ctx := context.Background()
+
+	_, err := svc.Register(ctx, RegisterRequest{
+		Email:    "alice@example.com",
+		Username: "alice",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	userID := repo.users["alice@example.com"].ID
+	_, err = svc.RegenerateRecoveryCodes(ctx, userID, "strongpassword")
+	if !errors.Is(err, ErrMFANotEnabled) {
+		t.Errorf("RegenerateRecoveryCodes() error = %v, want ErrMFANotEnabled", err)
+	}
+}
+
+func TestServiceBeginMFASetupNotConfigured(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	_, rdb := setupMiniredis(t)
+	bl := disposable.NewBlocklist("", false, zerolog.Nop())
+	cfg := testConfig()
+	cfg.MFAEncryptionKey = "" // simulate unconfigured MFA
+	svc, err := NewService(repo, rdb, cfg, bl, nil, zerolog.Nop())
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	_, err = svc.Register(context.Background(), RegisterRequest{
+		Email:    "alice@example.com",
+		Username: "alice",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	userID := repo.users["alice@example.com"].ID
+	_, err = svc.BeginMFASetup(context.Background(), userID, "strongpassword")
+	if !errors.Is(err, ErrMFANotConfigured) {
+		t.Errorf("BeginMFASetup() error = %v, want ErrMFANotConfigured", err)
+	}
+}
+
+func TestServiceVerifyMFANotConfigured(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	svc := newTestService(t, repo)
+	ctx := context.Background()
+
+	_ = registerMFAUser(t, svc, repo, "alice@example.com", "strongpassword")
+
+	result, err := svc.Login(ctx, LoginRequest{
+		Email:    "alice@example.com",
+		Password: "strongpassword",
+		IP:       "127.0.0.1",
+	})
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
+
+	// Simulate removing the encryption key after users have enrolled.
+	svc.config.MFAEncryptionKey = ""
+
+	_, err = svc.VerifyMFA(ctx, result.Ticket, "123456")
+	if !errors.Is(err, ErrMFANotConfigured) {
+		t.Errorf("VerifyMFA() error = %v, want ErrMFANotConfigured", err)
+	}
+}
+
+func TestServiceConfirmMFASetupNotConfigured(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	svc := newTestService(t, repo)
+	ctx := context.Background()
+
+	_, err := svc.Register(ctx, RegisterRequest{
+		Email:    "alice@example.com",
+		Username: "alice",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	userID := repo.users["alice@example.com"].ID
+	_, err = svc.BeginMFASetup(ctx, userID, "strongpassword")
+	if err != nil {
+		t.Fatalf("BeginMFASetup() error = %v", err)
+	}
+
+	// Simulate removing the encryption key after the setup flow has begun.
+	svc.config.MFAEncryptionKey = ""
+
+	_, err = svc.ConfirmMFASetup(ctx, userID, "123456")
+	if !errors.Is(err, ErrMFANotConfigured) {
+		t.Errorf("ConfirmMFASetup() error = %v, want ErrMFANotConfigured", err)
+	}
+}
+
+func TestServiceDisableMFANotConfigured(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	svc := newTestService(t, repo)
+	ctx := context.Background()
+
+	_ = registerMFAUser(t, svc, repo, "alice@example.com", "strongpassword")
+	userID := repo.users["alice@example.com"].ID
+
+	// Simulate removing the encryption key after users have enrolled.
+	svc.config.MFAEncryptionKey = ""
+
+	err := svc.DisableMFA(ctx, userID, "strongpassword", "123456")
+	if !errors.Is(err, ErrMFANotConfigured) {
+		t.Errorf("DisableMFA() error = %v, want ErrMFANotConfigured", err)
 	}
 }

@@ -85,20 +85,38 @@ func (r *PGRepository) GetByID(ctx context.Context, id uuid.UUID) (*User, error)
 	return &u, nil
 }
 
-// GetByEmail returns the user with credentials matching the given email address. This is the only read method that
-// returns credentials, since it serves the authentication path.
+// GetByEmail returns the user with credentials matching the given email address. This is one of two methods that return
+// credentials, since it serves the authentication path.
 func (r *PGRepository) GetByEmail(ctx context.Context, email string) (*Credentials, error) {
 	var c Credentials
 	err := r.db.QueryRow(ctx,
-		`SELECT id, email, password_hash, username, display_name, avatar_key, mfa_enabled, email_verified
+		`SELECT id, email, password_hash, username, display_name, avatar_key, mfa_enabled, mfa_secret, email_verified
 		 FROM users WHERE email = $1`,
 		email,
-	).Scan(&c.ID, &c.Email, &c.PasswordHash, &c.Username, &c.DisplayName, &c.AvatarKey, &c.MFAEnabled, &c.EmailVerified)
+	).Scan(&c.ID, &c.Email, &c.PasswordHash, &c.Username, &c.DisplayName, &c.AvatarKey, &c.MFAEnabled, &c.MFASecret, &c.EmailVerified)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("query user by email: %w", err)
+	}
+	return &c, nil
+}
+
+// GetCredentialsByID returns the user with credentials matching the given ID. Used by MFA flows that need the password
+// hash and MFA secret after ticket-based user identification.
+func (r *PGRepository) GetCredentialsByID(ctx context.Context, id uuid.UUID) (*Credentials, error) {
+	var c Credentials
+	err := r.db.QueryRow(ctx,
+		`SELECT id, email, password_hash, username, display_name, avatar_key, mfa_enabled, mfa_secret, email_verified
+		 FROM users WHERE id = $1`,
+		id,
+	).Scan(&c.ID, &c.Email, &c.PasswordHash, &c.Username, &c.DisplayName, &c.AvatarKey, &c.MFAEnabled, &c.MFASecret, &c.EmailVerified)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("query credentials by id: %w", err)
 	}
 	return &c, nil
 }
@@ -209,6 +227,151 @@ func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdatePa
 		return nil, fmt.Errorf("update user: %w", err)
 	}
 	return &u, nil
+}
+
+// EnableMFA atomically sets the user's MFA secret and enabled flag, and inserts the initial set of recovery code
+// hashes. All operations run in a single transaction.
+func (r *PGRepository) EnableMFA(ctx context.Context, userID uuid.UUID, encryptedSecret string, codeHashes []string) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin enable MFA tx: %w", err)
+	}
+	defer func() {
+		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			r.log.Warn().Err(err).Msg("tx rollback failed")
+		}
+	}()
+
+	_, err = tx.Exec(ctx,
+		`UPDATE users SET mfa_secret = $1, mfa_enabled = true WHERE id = $2`,
+		encryptedSecret, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("update MFA columns: %w", err)
+	}
+
+	if err := copyRecoveryCodes(ctx, tx, userID, codeHashes); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit enable MFA tx: %w", err)
+	}
+	return nil
+}
+
+// DisableMFA atomically clears the user's MFA secret and enabled flag, and deletes all recovery codes.
+func (r *PGRepository) DisableMFA(ctx context.Context, userID uuid.UUID) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin disable MFA tx: %w", err)
+	}
+	defer func() {
+		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			r.log.Warn().Err(err).Msg("tx rollback failed")
+		}
+	}()
+
+	_, err = tx.Exec(ctx,
+		`UPDATE users SET mfa_secret = NULL, mfa_enabled = false WHERE id = $1`,
+		userID,
+	)
+	if err != nil {
+		return fmt.Errorf("clear MFA columns: %w", err)
+	}
+
+	_, err = tx.Exec(ctx,
+		`DELETE FROM mfa_recovery_codes WHERE user_id = $1`,
+		userID,
+	)
+	if err != nil {
+		return fmt.Errorf("delete recovery codes: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit disable MFA tx: %w", err)
+	}
+	return nil
+}
+
+// GetUnusedRecoveryCodes returns all recovery codes for the user that have not been consumed.
+func (r *PGRepository) GetUnusedRecoveryCodes(ctx context.Context, userID uuid.UUID) ([]MFARecoveryCode, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT id, code_hash FROM mfa_recovery_codes WHERE user_id = $1 AND used_at IS NULL`,
+		userID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query unused recovery codes: %w", err)
+	}
+	defer rows.Close()
+
+	var codes []MFARecoveryCode
+	for rows.Next() {
+		var c MFARecoveryCode
+		if err := rows.Scan(&c.ID, &c.CodeHash); err != nil {
+			return nil, fmt.Errorf("scan recovery code: %w", err)
+		}
+		codes = append(codes, c)
+	}
+	return codes, rows.Err()
+}
+
+// UseRecoveryCode marks a recovery code as consumed by setting its used_at timestamp.
+func (r *PGRepository) UseRecoveryCode(ctx context.Context, codeID uuid.UUID) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE mfa_recovery_codes SET used_at = NOW() WHERE id = $1`,
+		codeID,
+	)
+	if err != nil {
+		return fmt.Errorf("mark recovery code used: %w", err)
+	}
+	return nil
+}
+
+// ReplaceRecoveryCodes deletes all existing recovery codes for the user and inserts new ones in a single transaction.
+func (r *PGRepository) ReplaceRecoveryCodes(ctx context.Context, userID uuid.UUID, codeHashes []string) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin replace recovery codes tx: %w", err)
+	}
+	defer func() {
+		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			r.log.Warn().Err(err).Msg("tx rollback failed")
+		}
+	}()
+
+	_, err = tx.Exec(ctx, `DELETE FROM mfa_recovery_codes WHERE user_id = $1`, userID)
+	if err != nil {
+		return fmt.Errorf("delete old recovery codes: %w", err)
+	}
+
+	if err := copyRecoveryCodes(ctx, tx, userID, codeHashes); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit replace recovery codes tx: %w", err)
+	}
+	return nil
+}
+
+// copyRecoveryCodes bulk-inserts recovery code hashes using CopyFrom, collapsing all rows into a single round trip.
+func copyRecoveryCodes(ctx context.Context, tx pgx.Tx, userID uuid.UUID, codeHashes []string) error {
+	rows := make([][]any, len(codeHashes))
+	for i, hash := range codeHashes {
+		rows[i] = []any{userID, hash}
+	}
+
+	_, err := tx.CopyFrom(
+		ctx,
+		pgx.Identifier{"mfa_recovery_codes"},
+		[]string{"user_id", "code_hash"},
+		pgx.CopyFromRows(rows),
+	)
+	if err != nil {
+		return fmt.Errorf("copy recovery codes: %w", err)
+	}
+	return nil
 }
 
 func isUniqueViolation(err error) bool {

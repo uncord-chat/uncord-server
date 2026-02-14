@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/mail"
@@ -79,6 +80,10 @@ type Config struct {
 	SMTPPassword string
 	SMTPFrom     string
 
+	// MFA
+	MFAEncryptionKey string
+	MFATicketTTL     time.Duration
+
 	// CORS
 	CORSAllowOrigins string
 }
@@ -144,6 +149,9 @@ func Load() (*Config, error) {
 		SMTPPassword: envStr("SMTP_PASSWORD", ""),
 		SMTPFrom:     envStr("SMTP_FROM", "noreply@chat.example.com"),
 
+		MFAEncryptionKey: envStr("MFA_ENCRYPTION_KEY", ""),
+		MFATicketTTL:     p.duration("MFA_TICKET_TTL", 5*time.Minute),
+
 		CORSAllowOrigins: envStr("CORS_ALLOW_ORIGINS", "*"),
 	}
 
@@ -177,6 +185,11 @@ func (c *Config) IsDevelopment() bool {
 // SMTPConfigured returns true when an SMTP host is set, indicating that the server should attempt to send emails.
 func (c *Config) SMTPConfigured() bool {
 	return c.SMTPHost != ""
+}
+
+// MFAConfigured returns true when the MFA encryption key is set, indicating that TOTP-based MFA is available.
+func (c *Config) MFAConfigured() bool {
+	return c.MFAEncryptionKey != ""
 }
 
 // BodyLimitBytes returns the maximum request body size in bytes, derived from MaxUploadSizeMB with a small margin for
@@ -247,6 +260,17 @@ func (c *Config) validate() error {
 	}
 	if c.RateLimitAuthWindowSeconds < 1 {
 		errs = append(errs, fmt.Errorf("RATE_LIMIT_AUTH_WINDOW_SECONDS must be at least 1"))
+	}
+
+	if c.MFAEncryptionKey != "" {
+		b, err := hex.DecodeString(c.MFAEncryptionKey)
+		if err != nil || len(b) != 32 {
+			errs = append(errs, fmt.Errorf("MFA_ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes)"))
+		}
+	}
+
+	if c.MFATicketTTL < time.Second {
+		errs = append(errs, fmt.Errorf("MFA_TICKET_TTL must be at least 1s"))
 	}
 
 	if c.SMTPHost != "" {

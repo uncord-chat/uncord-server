@@ -2,6 +2,7 @@ package permission
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -50,7 +51,7 @@ func NewValkeyCache(client *redis.Client) *ValkeyCache {
 
 func (c *ValkeyCache) Get(ctx context.Context, userID, channelID uuid.UUID) (permissions.Permission, bool, error) {
 	val, err := c.client.Get(ctx, cacheKey(userID, channelID)).Result()
-	if err == redis.Nil {
+	if errors.Is(err, redis.Nil) {
 		return 0, false, nil
 	}
 	if err != nil {

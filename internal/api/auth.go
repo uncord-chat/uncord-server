@@ -67,6 +67,31 @@ func (h *AuthHandler) Login(c fiber.Ctx) error {
 		return h.mapAuthError(c, err)
 	}
 
+	if result.MFARequired {
+		return httputil.Success(c, models.MFARequiredResponse{
+			MFARequired: true,
+			Ticket:      result.Ticket,
+		})
+	}
+
+	return httputil.Success(c, toAuthResponse(result.Auth))
+}
+
+// MFAVerify handles POST /api/v1/auth/mfa/verify.
+func (h *AuthHandler) MFAVerify(c fiber.Ctx) error {
+	var body models.MFAVerifyRequest
+	if err := c.Bind().Body(&body); err != nil {
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "Invalid request body")
+	}
+	if body.Ticket == "" || body.Code == "" {
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "ticket and code are required")
+	}
+
+	result, err := h.auth.VerifyMFA(c, body.Ticket, body.Code)
+	if err != nil {
+		return h.mapAuthError(c, err)
+	}
+
 	return httputil.Success(c, toAuthResponse(result))
 }
 
@@ -112,6 +137,12 @@ func (h *AuthHandler) VerifyEmail(c fiber.Ctx) error {
 
 // mapAuthError converts auth-layer errors to appropriate HTTP responses.
 func (h *AuthHandler) mapAuthError(c fiber.Ctx, err error) error {
+	return mapAuthServiceError(c, err, h.log, "auth")
+}
+
+// mapAuthServiceError maps auth service sentinel errors to HTTP responses. All handlers that call auth.Service methods
+// delegate to this function so that error-to-status mappings are defined in a single place.
+func mapAuthServiceError(c fiber.Ctx, err error, log zerolog.Logger, handler string) error {
 	switch {
 	// Validation errors
 	case errors.Is(err, auth.ErrInvalidEmail):
@@ -130,15 +161,21 @@ func (h *AuthHandler) mapAuthError(c fiber.Ctx, err error) error {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidEmail, "Unable to register with the provided email")
 	case errors.Is(err, auth.ErrInvalidCredentials):
 		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.InvalidCredentials, err.Error())
-	case errors.Is(err, auth.ErrMFARequired):
-		return httputil.Fail(c, fiber.StatusForbidden, apierrors.MFARequired, err.Error())
+	case errors.Is(err, auth.ErrInvalidMFACode):
+		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.InvalidMFACode, err.Error())
+	case errors.Is(err, auth.ErrMFANotEnabled):
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.MFANotEnabled, err.Error())
+	case errors.Is(err, auth.ErrMFAAlreadyEnabled):
+		return httputil.Fail(c, fiber.StatusConflict, apierrors.MFAAlreadyEnabled, err.Error())
+	case errors.Is(err, auth.ErrMFANotConfigured):
+		return httputil.Fail(c, fiber.StatusServiceUnavailable, apierrors.ServiceUnavailable, "MFA is not configured on this server")
 	case errors.Is(err, auth.ErrRefreshTokenReused):
 		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.TokenReused, "Refresh token has already been used")
 	case errors.Is(err, auth.ErrInvalidToken):
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidToken, err.Error())
 
 	default:
-		h.log.Error().Err(err).Str("handler", "auth").Msg("unhandled auth service error")
+		log.Error().Err(err).Str("handler", handler).Msg("unhandled auth service error")
 		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
 	}
 }

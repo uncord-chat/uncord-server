@@ -33,6 +33,17 @@ CREATE TABLE users (
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON users
     FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
 
+-- MFA Recovery Codes
+
+CREATE TABLE mfa_recovery_codes (
+    id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    code_hash TEXT NOT NULL,
+    used_at   TIMESTAMPTZ
+);
+
+CREATE INDEX idx_mfa_recovery_codes_user ON mfa_recovery_codes (user_id) WHERE used_at IS NULL;
+
 -- Server (single row)
 
 CREATE TABLE server_config (
@@ -541,5 +552,6 @@ DROP TABLE IF EXISTS channels CASCADE;
 DROP TABLE IF EXISTS categories CASCADE;
 DROP TABLE IF EXISTS members CASCADE;
 DROP TABLE IF EXISTS server_config CASCADE;
+DROP TABLE IF EXISTS mfa_recovery_codes CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 DROP FUNCTION IF EXISTS trigger_set_updated_at();

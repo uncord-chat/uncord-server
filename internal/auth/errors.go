@@ -27,4 +27,8 @@ var (
 	ErrEmailAlreadyTaken    = errors.New("email or username already taken")
 	ErrInvalidToken         = errors.New("invalid or expired token")
 	ErrRefreshTokenNotFound = errors.New("refresh token not found")
+	ErrInvalidMFACode       = errors.New("invalid MFA code")
+	ErrMFANotEnabled        = errors.New("MFA is not enabled on this account")
+	ErrMFAAlreadyEnabled    = errors.New("MFA is already enabled on this account")
+	ErrMFANotConfigured     = errors.New("MFA is not configured on this server")
 )
