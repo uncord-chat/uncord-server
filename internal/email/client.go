@@ -58,6 +58,22 @@ func (c *Client) Ping() error {
 
 // Send delivers an email with the given subject and plain text body to the specified recipient.
 func (c *Client) Send(to, subject, body string) error {
+	return c.sendMessage(to, subject, body, "text/plain; charset=UTF-8")
+}
+
+// SendVerification composes and sends an HTML email verification message containing a link the recipient must visit to
+// confirm their address.
+func (c *Client) SendVerification(to, token, serverURL, serverName string) error {
+	subject := fmt.Sprintf("Verify your email for %s", serverName)
+	body, err := verificationBody(serverName, serverURL, token)
+	if err != nil {
+		return err
+	}
+	return c.sendMessage(to, subject, body, "text/html; charset=UTF-8")
+}
+
+// sendMessage delivers an email with the given subject, body, and content type to the specified recipient.
+func (c *Client) sendMessage(to, subject, body, contentType string) error {
 	client, err := c.dial()
 	if err != nil {
 		return err
@@ -83,7 +99,7 @@ func (c *Client) Send(to, subject, body string) error {
 		return fmt.Errorf("DATA: %w", err)
 	}
 
-	msg := buildMessage(c.from.String(), to, subject, body)
+	msg := buildMessage(c.from.String(), to, subject, body, contentType)
 	if _, err := w.Write([]byte(msg)); err != nil {
 		return fmt.Errorf("write message: %w", err)
 	}
@@ -92,14 +108,6 @@ func (c *Client) Send(to, subject, body string) error {
 	}
 
 	return nil
-}
-
-// SendVerification composes and sends an email verification message containing a link the recipient must visit to
-// confirm their address.
-func (c *Client) SendVerification(to, token, serverURL, serverName string) error {
-	subject := fmt.Sprintf("Verify your email for %s", serverName)
-	body := verificationBody(serverName, serverURL, token)
-	return c.Send(to, subject, body)
 }
 
 // dial opens a TCP connection to the SMTP server, performs the EHLO handshake, and upgrades to TLS if the server
@@ -136,13 +144,13 @@ func (c *Client) addr() string {
 	return fmt.Sprintf("%s:%d", c.host, c.port)
 }
 
-func buildMessage(from, to, subject, body string) string {
+func buildMessage(from, to, subject, body, contentType string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "From: %s\r\n", from)
 	fmt.Fprintf(&b, "To: %s\r\n", to)
 	fmt.Fprintf(&b, "Subject: %s\r\n", subject)
 	b.WriteString("MIME-Version: 1.0\r\n")
-	b.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
+	fmt.Fprintf(&b, "Content-Type: %s\r\n", contentType)
 	b.WriteString("\r\n")
 	b.WriteString(body)
 	return b.String()

@@ -13,7 +13,7 @@ import (
 func TestBuildMessage(t *testing.T) {
 	t.Parallel()
 
-	msg := buildMessage("sender@example.com", "recipient@example.com", "Test Subject", "Hello, world!")
+	msg := buildMessage("sender@example.com", "recipient@example.com", "Test Subject", "Hello, world!", "text/plain; charset=UTF-8")
 
 	checks := []struct {
 		label string

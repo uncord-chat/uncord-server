@@ -35,6 +35,7 @@ func TestSendVerificationComposition(t *testing.T) {
 		want  string
 	}{
 		{"subject", "Verify your email for Test Server"},
+		{"html content type", "Content-Type: text/html; charset=UTF-8"},
 		{"verification link", "https://chat.example.com/verify-email?token=abc123"},
 		{"welcome text", "Welcome to Test Server"},
 		{"expiry note", "24 hours"},
@@ -49,15 +50,23 @@ func TestSendVerificationComposition(t *testing.T) {
 func TestVerificationBody(t *testing.T) {
 	t.Parallel()
 
-	body := verificationBody("My Server", "https://example.com", "tok123")
+	body, err := verificationBody("My Server", "https://example.com", "tok123")
+	if err != nil {
+		t.Fatalf("verificationBody() error = %v", err)
+	}
 
-	if !strings.Contains(body, "Welcome to My Server") {
-		t.Error("verificationBody missing welcome text")
+	checks := []struct {
+		label string
+		want  string
+	}{
+		{"welcome text", "Welcome to My Server"},
+		{"verification link", "https://example.com/verify-email?token=tok123"},
+		{"expiry note", "24 hours"},
+		{"html doctype", "<!DOCTYPE html>"},
 	}
-	if !strings.Contains(body, "https://example.com/verify-email?token=tok123") {
-		t.Error("verificationBody missing verification link")
-	}
-	if !strings.Contains(body, "24 hours") {
-		t.Error("verificationBody missing expiry note")
+	for _, c := range checks {
+		if !strings.Contains(body, c.want) {
+			t.Errorf("verificationBody missing %s: want substring %q", c.label, c.want)
+		}
 	}
 }
