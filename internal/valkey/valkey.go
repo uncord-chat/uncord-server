@@ -3,6 +3,7 @@ package valkey
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/redis/go-redis/v9"
@@ -10,11 +11,17 @@ import (
 
 // Connect parses the Valkey URL, connects, and pings to verify the connection. The valkey:// scheme is replaced with
 // redis:// for go-redis compatibility.
-func Connect(ctx context.Context, url string) (*redis.Client, error) {
-	// go-redis only understands redis:// scheme
-	url = strings.Replace(url, "valkey://", "redis://", 1)
+func Connect(ctx context.Context, rawURL string) (*redis.Client, error) {
+	// go-redis only understands the redis:// scheme, so replace valkey:// (case-insensitive) before parsing.
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse valkey URL: %w", err)
+	}
+	if strings.EqualFold(parsed.Scheme, "valkey") {
+		parsed.Scheme = "redis"
+	}
 
-	opts, err := redis.ParseURL(url)
+	opts, err := redis.ParseURL(parsed.String())
 	if err != nil {
 		return nil, fmt.Errorf("parse valkey URL: %w", err)
 	}
