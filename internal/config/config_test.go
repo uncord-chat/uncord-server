@@ -6,6 +6,9 @@ import (
 	"time"
 )
 
+// testServerSecret is a valid 64 hex character (32 byte) key used across config tests.
+const testServerSecret = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
 // TestLoadDefaults is not t.Parallel because it mutates process-wide environment variables.
 func TestLoadDefaults(t *testing.T) {
 	// Clear any env vars that would override defaults
@@ -24,13 +27,15 @@ func TestLoadDefaults(t *testing.T) {
 		"MAX_UPLOAD_SIZE_MB",
 		"MAX_CHANNELS", "MAX_CATEGORIES",
 		"SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM",
+		"SERVER_SECRET", "DELETION_TOMBSTONE_USERNAMES",
 	}
 	for _, k := range keys {
 		t.Setenv(k, "")
 	}
 
-	// JWT_SECRET is required by validation
+	// JWT_SECRET and SERVER_SECRET are required by validation
 	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+	t.Setenv("SERVER_SECRET", testServerSecret)
 
 	cfg, err := Load()
 	if err != nil {
@@ -140,6 +145,11 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.SMTPFrom != "noreply@chat.example.com" {
 		t.Errorf("SMTPFrom = %q, want %q", cfg.SMTPFrom, "noreply@chat.example.com")
 	}
+
+	// Account deletion defaults
+	if !cfg.DeletionTombstoneUsernames {
+		t.Error("DeletionTombstoneUsernames = false, want true")
+	}
 }
 
 func TestLoadValidationRequiresJWTSecret(t *testing.T) {
@@ -175,6 +185,7 @@ func TestLoadOverrides(t *testing.T) {
 	t.Setenv("ONBOARDING_REQUIRE_RULES", "false")
 	t.Setenv("INIT_OWNER_EMAIL", "test@example.com")
 	t.Setenv("JWT_SECRET", "test-secret-key-that-is-32-chars!")
+	t.Setenv("SERVER_SECRET", testServerSecret)
 	t.Setenv("JWT_ACCESS_TTL", "30m")
 	t.Setenv("JWT_REFRESH_TTL", "24h")
 	t.Setenv("ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_ENABLED", "false")
@@ -324,6 +335,7 @@ func TestIsDevelopment(t *testing.T) {
 
 func TestLoadSMTPOverrides(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+	t.Setenv("SERVER_SECRET", testServerSecret)
 	t.Setenv("SMTP_HOST", "mail.example.com")
 	t.Setenv("SMTP_PORT", "465")
 	t.Setenv("SMTP_USERNAME", "user@example.com")
@@ -377,6 +389,7 @@ func TestLoadSMTPValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+			t.Setenv("SERVER_SECRET", testServerSecret)
 			t.Setenv("SMTP_HOST", tt.host)
 			t.Setenv("SMTP_PORT", tt.port)
 			t.Setenv("SMTP_FROM", tt.from)
@@ -452,6 +465,7 @@ func TestLoadDevelopmentOverrides(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+			t.Setenv("SERVER_SECRET", testServerSecret)
 			t.Setenv("SERVER_ENV", tt.serverEnv)
 			t.Setenv("SERVER_PORT", tt.serverPort)
 			t.Setenv("SMTP_HOST", tt.smtpHost)
@@ -481,6 +495,72 @@ func TestLoadDevelopmentOverrides(t *testing.T) {
 				t.Errorf("ServerURL = %q, want %q", cfg.ServerURL, tt.wantServerURL)
 			}
 		})
+	}
+}
+
+func TestLoadValidationRequiresServerSecret(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+	t.Setenv("SERVER_SECRET", "")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() returned nil error, want validation error for missing SERVER_SECRET")
+	}
+	if !strings.Contains(err.Error(), "SERVER_SECRET is required") {
+		t.Errorf("error %q does not mention SERVER_SECRET", err.Error())
+	}
+}
+
+func TestLoadValidationServerSecretInvalidHex(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+	t.Setenv("SERVER_SECRET", "not-valid-hex")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() returned nil error, want validation error for invalid SERVER_SECRET")
+	}
+	if !strings.Contains(err.Error(), "SERVER_SECRET must be exactly 64 hex characters") {
+		t.Errorf("error %q does not mention expected format", err.Error())
+	}
+}
+
+func TestLoadValidationServerSecretWrongLength(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+	t.Setenv("SERVER_SECRET", "0123456789abcdef") // 16 hex chars = 8 bytes, too short
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() returned nil error, want validation error for short SERVER_SECRET")
+	}
+	if !strings.Contains(err.Error(), "SERVER_SECRET must be exactly 64 hex characters") {
+		t.Errorf("error %q does not mention expected format", err.Error())
+	}
+}
+
+func TestLoadDeletionTombstoneUsernamesDefault(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+	t.Setenv("SERVER_SECRET", testServerSecret)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() returned unexpected error: %v", err)
+	}
+	if !cfg.DeletionTombstoneUsernames {
+		t.Error("DeletionTombstoneUsernames = false, want true (default)")
+	}
+}
+
+func TestLoadDeletionTombstoneUsernamesOverride(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+	t.Setenv("SERVER_SECRET", testServerSecret)
+	t.Setenv("DELETION_TOMBSTONE_USERNAMES", "false")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() returned unexpected error: %v", err)
+	}
+	if cfg.DeletionTombstoneUsernames {
+		t.Error("DeletionTombstoneUsernames = true, want false")
 	}
 }
 

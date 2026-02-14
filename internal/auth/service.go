@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +17,8 @@ import (
 
 	"github.com/uncord-chat/uncord-server/internal/config"
 	"github.com/uncord-chat/uncord-server/internal/disposable"
+	"github.com/uncord-chat/uncord-server/internal/permission"
+	"github.com/uncord-chat/uncord-server/internal/server"
 	"github.com/uncord-chat/uncord-server/internal/user"
 )
 
@@ -27,12 +30,14 @@ type Sender interface {
 // Service implements authentication business logic, keeping HTTP handlers thin and focused on request parsing /
 // response formatting.
 type Service struct {
-	users     user.Repository
-	redis     *redis.Client
-	config    *config.Config
-	blocklist *disposable.Blocklist
-	sender    Sender
-	log       zerolog.Logger
+	users         user.Repository
+	redis         *redis.Client
+	config        *config.Config
+	blocklist     *disposable.Blocklist
+	sender        Sender
+	serverRepo    server.Repository
+	permPublisher *permission.Publisher
+	log           zerolog.Logger
 	// dummyHash is a precomputed Argon2id hash used to keep login timing constant when a user is not found,
 	// preventing email enumeration via response-time analysis.
 	dummyHash string
@@ -41,7 +46,7 @@ type Service struct {
 // NewService creates a new authentication service. The sender parameter may be nil when SMTP is not configured; in that
 // case, verification emails are silently skipped. It returns an error if the Argon2id configuration is invalid, since
 // password hashing is fundamental to every auth operation.
-func NewService(users user.Repository, rdb *redis.Client, cfg *config.Config, bl *disposable.Blocklist, sender Sender, logger zerolog.Logger) (*Service, error) {
+func NewService(users user.Repository, rdb *redis.Client, cfg *config.Config, bl *disposable.Blocklist, sender Sender, serverRepo server.Repository, permPub *permission.Publisher, logger zerolog.Logger) (*Service, error) {
 	// Generate a dummy hash at startup so VerifyPassword always runs against a real Argon2id hash even when the user
 	// does not exist. A failure here means the Argon2 parameters are broken and no password operation will succeed.
 	dummy, err := HashPassword("uncord-dummy-password", cfg.Argon2Memory, cfg.Argon2Iterations, cfg.Argon2Parallelism, cfg.Argon2SaltLength, cfg.Argon2KeyLength)
@@ -49,13 +54,15 @@ func NewService(users user.Repository, rdb *redis.Client, cfg *config.Config, bl
 		return nil, fmt.Errorf("generate dummy hash: %w", err)
 	}
 	return &Service{
-		users:     users,
-		redis:     rdb,
-		config:    cfg,
-		blocklist: bl,
-		sender:    sender,
-		log:       logger,
-		dummyHash: dummy,
+		users:         users,
+		redis:         rdb,
+		config:        cfg,
+		blocklist:     bl,
+		sender:        sender,
+		serverRepo:    serverRepo,
+		permPublisher: permPub,
+		log:           logger,
+		dummyHash:     dummy,
 	}, nil
 }
 
@@ -121,6 +128,26 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*AuthResul
 	}
 	if blocked {
 		return nil, ErrDisposableEmail
+	}
+
+	emailHMAC, err := HMACIdentifier(email, s.config.ServerSecret)
+	if err != nil {
+		return nil, fmt.Errorf("compute email HMAC: %w", err)
+	}
+	if tombstoned, err := s.users.CheckTombstone(ctx, user.TombstoneEmail, emailHMAC); err != nil {
+		return nil, fmt.Errorf("check email tombstone: %w", err)
+	} else if tombstoned {
+		return nil, ErrAccountTombstoned
+	}
+
+	usernameHMAC, err := HMACIdentifier(strings.ToLower(req.Username), s.config.ServerSecret)
+	if err != nil {
+		return nil, fmt.Errorf("compute username HMAC: %w", err)
+	}
+	if tombstoned, err := s.users.CheckTombstone(ctx, user.TombstoneUsername, usernameHMAC); err != nil {
+		return nil, fmt.Errorf("check username tombstone: %w", err)
+	} else if tombstoned {
+		return nil, ErrAccountTombstoned
 	}
 
 	hash, err := HashPassword(
@@ -541,6 +568,69 @@ func (s *Service) VerifyUserPassword(ctx context.Context, userID uuid.UUID, pass
 		return ErrInvalidCredentials
 	}
 
+	return nil
+}
+
+// DeleteAccount verifies the user's password, checks that the user is not the server owner, computes HMAC tombstones
+// for the email (always) and optionally the username, atomically deletes the user and inserts tombstones, and performs
+// best-effort cleanup of refresh tokens and permission caches.
+func (s *Service) DeleteAccount(ctx context.Context, userID uuid.UUID, password string) error {
+	creds, err := s.users.GetCredentialsByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("get credentials for account deletion: %w", err)
+	}
+
+	match, err := VerifyPassword(password, creds.PasswordHash)
+	if err != nil {
+		return fmt.Errorf("verify password for account deletion: %w", err)
+	}
+	if !match {
+		return ErrInvalidCredentials
+	}
+
+	serverCfg, err := s.serverRepo.Get(ctx)
+	if err != nil {
+		return fmt.Errorf("get server config: %w", err)
+	}
+	if serverCfg.OwnerID == userID {
+		return ErrServerOwner
+	}
+
+	tombstones := make([]user.Tombstone, 0, 2)
+
+	emailHMAC, err := HMACIdentifier(creds.Email, s.config.ServerSecret)
+	if err != nil {
+		return fmt.Errorf("compute email HMAC: %w", err)
+	}
+	tombstones = append(tombstones, user.Tombstone{
+		IdentifierType: user.TombstoneEmail,
+		HMACHash:       emailHMAC,
+	})
+
+	if s.config.DeletionTombstoneUsernames {
+		usernameHMAC, err := HMACIdentifier(strings.ToLower(creds.Username), s.config.ServerSecret)
+		if err != nil {
+			return fmt.Errorf("compute username HMAC: %w", err)
+		}
+		tombstones = append(tombstones, user.Tombstone{
+			IdentifierType: user.TombstoneUsername,
+			HMACHash:       usernameHMAC,
+		})
+	}
+
+	if err := s.users.DeleteWithTombstones(ctx, userID, tombstones); err != nil {
+		return fmt.Errorf("delete user with tombstones: %w", err)
+	}
+
+	if err := RevokeAllRefreshTokens(ctx, s.redis, userID); err != nil {
+		s.log.Warn().Err(err).Str("user_id", userID.String()).Msg("Failed to revoke refresh tokens after account deletion")
+	}
+
+	if err := s.permPublisher.InvalidateUser(ctx, userID); err != nil {
+		s.log.Warn().Err(err).Str("user_id", userID.String()).Msg("Failed to invalidate permission cache after account deletion")
+	}
+
+	s.log.Info().Str("user_id", userID.String()).Msg("Account deleted")
 	return nil
 }
 

@@ -375,6 +375,24 @@
 							"path": ["users", "@me"]
 						}
 					}
+				},
+				{
+					"name": "Delete Me",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"password\": \"your-password-here\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/users/@me",
+							"host": ["{{base_url}}"],
+							"path": ["users", "@me"]
+						}
+					}
 				}
 			]
 		},

@@ -15,6 +15,7 @@ var (
 	ErrNotFound          = errors.New("user not found")
 	ErrAlreadyExists     = errors.New("email or username already taken")
 	ErrInvalidToken      = errors.New("invalid or expired verification token")
+	ErrTombstoned        = errors.New("email or username was previously used by a deleted account")
 	ErrDisplayNameLength = errors.New("display name must be between 1 and 32 characters")
 	ErrPronounsLength    = errors.New("pronouns must be between 1 and 40 characters")
 	ErrAboutLength       = errors.New("about must be between 1 and 190 characters")
@@ -71,6 +72,21 @@ type UpdateParams struct {
 	About                *string
 	ThemeColourPrimary   *int
 	ThemeColourSecondary *int
+}
+
+// TombstoneType identifies the kind of identifier stored in a deletion tombstone.
+type TombstoneType string
+
+const (
+	TombstoneEmail    TombstoneType = "email"
+	TombstoneUsername TombstoneType = "username"
+)
+
+// Tombstone represents an HMAC hash of an identifier that belonged to a deleted account, used to prevent
+// re-registration with the same email or username.
+type Tombstone struct {
+	IdentifierType TombstoneType
+	HMACHash       string
 }
 
 // NormalizeDisplayName trims surrounding whitespace from the pointed-to value. Nil values are left untouched.
@@ -156,4 +172,6 @@ type Repository interface {
 	GetUnusedRecoveryCodes(ctx context.Context, userID uuid.UUID) ([]MFARecoveryCode, error)
 	UseRecoveryCode(ctx context.Context, codeID uuid.UUID) error
 	ReplaceRecoveryCodes(ctx context.Context, userID uuid.UUID, codeHashes []string) error
+	DeleteWithTombstones(ctx context.Context, id uuid.UUID, tombstones []Tombstone) error
+	CheckTombstone(ctx context.Context, identifierType TombstoneType, hmacHash string) (bool, error)
 }

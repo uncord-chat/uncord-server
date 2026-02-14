@@ -204,7 +204,7 @@ func run() error {
 	serverRepo := servercfg.NewPGRepository(db, log.Logger)
 	channelRepo := channel.NewPGRepository(db, log.Logger)
 	categoryRepo := category.NewPGRepository(db, log.Logger)
-	authService, err := auth.NewService(userRepo, rdb, cfg, blocklist, emailSender, log.Logger)
+	authService, err := auth.NewService(userRepo, rdb, cfg, blocklist, emailSender, serverRepo, permPublisher, log.Logger)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create auth service")
 	}
@@ -336,10 +336,11 @@ func (s *server) registerRoutes(app *fiber.App) {
 	authGroup.Post("/verify-password", auth.RequireAuth(s.cfg.JWTSecret, s.cfg.ServerURL), authHandler.VerifyPassword)
 
 	// User profile routes (authenticated, no permission checks)
-	userHandler := api.NewUserHandler(s.userRepo, log.Logger)
+	userHandler := api.NewUserHandler(s.userRepo, s.authService, log.Logger)
 	userGroup := app.Group("/api/v1/users", auth.RequireAuth(s.cfg.JWTSecret, s.cfg.ServerURL))
 	userGroup.Get("/@me", userHandler.GetMe)
 	userGroup.Patch("/@me", userHandler.UpdateMe)
+	userGroup.Delete("/@me", userHandler.DeleteMe)
 
 	// MFA management routes (authenticated)
 	mfaHandler := api.NewMFAHandler(s.authService, log.Logger)
@@ -389,8 +390,6 @@ func (s *server) registerRoutes(app *fiber.App) {
 	categoryGroup.Delete("/:categoryID",
 		permission.RequireServerPermission(s.permResolver, permissions.ManageCategories),
 		categoryHandler.DeleteCategory)
-
-	_ = s.permPublisher // used by handlers that mutate permissions
 
 	// Catch-all handler returns 404 for any request that does not match a defined route. Fiber v3 treats app.Use()
 	// middleware as route matches, so without this terminal handler the router considers unmatched requests "handled"

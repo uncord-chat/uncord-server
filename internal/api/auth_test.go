@@ -20,6 +20,8 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/auth"
 	"github.com/uncord-chat/uncord-server/internal/config"
 	"github.com/uncord-chat/uncord-server/internal/disposable"
+	"github.com/uncord-chat/uncord-server/internal/permission"
+	"github.com/uncord-chat/uncord-server/internal/server"
 	"github.com/uncord-chat/uncord-server/internal/user"
 )
 
@@ -150,22 +152,30 @@ func (r *fakeRepo) GetUnusedRecoveryCodes(context.Context, uuid.UUID) ([]user.MF
 func (r *fakeRepo) UseRecoveryCode(context.Context, uuid.UUID) error { return nil }
 
 func (r *fakeRepo) ReplaceRecoveryCodes(context.Context, uuid.UUID, []string) error { return nil }
+func (r *fakeRepo) DeleteWithTombstones(context.Context, uuid.UUID, []user.Tombstone) error {
+	return nil
+}
+func (r *fakeRepo) CheckTombstone(context.Context, user.TombstoneType, string) (bool, error) {
+	return false, nil
+}
 
 func testAuthConfig() *config.Config {
 	return &config.Config{
-		ServerName:        "Test Server",
-		ServerURL:         "https://test.example.com",
-		ServerEnv:         "production",
-		JWTSecret:         "test-secret-at-least-32-chars-long!!",
-		JWTAccessTTL:      15 * time.Minute,
-		JWTRefreshTTL:     7 * 24 * time.Hour,
-		Argon2Memory:      64 * 1024,
-		Argon2Iterations:  1,
-		Argon2Parallelism: 1,
-		Argon2SaltLength:  16,
-		Argon2KeyLength:   32,
-		MFAEncryptionKey:  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-		MFATicketTTL:      5 * time.Minute,
+		ServerName:                 "Test Server",
+		ServerURL:                  "https://test.example.com",
+		ServerEnv:                  "production",
+		JWTSecret:                  "test-secret-at-least-32-chars-long!!",
+		JWTAccessTTL:               15 * time.Minute,
+		JWTRefreshTTL:              7 * 24 * time.Hour,
+		Argon2Memory:               64 * 1024,
+		Argon2Iterations:           1,
+		Argon2Parallelism:          1,
+		Argon2SaltLength:           16,
+		Argon2KeyLength:            32,
+		MFAEncryptionKey:           "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		MFATicketTTL:               5 * time.Minute,
+		ServerSecret:               "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		DeletionTombstoneUsernames: true,
 	}
 }
 
@@ -176,7 +186,9 @@ func testAuthHandler(t *testing.T) (*AuthHandler, *fiber.App) {
 
 	_ = mr
 	bl := disposable.NewBlocklist("", false, zerolog.Nop())
-	svc, err := auth.NewService(newFakeRepo(), rdb, testAuthConfig(), bl, nil, zerolog.Nop())
+	permPub := permission.NewPublisher(rdb)
+	srvRepo := &fakeServerRepo{cfg: &server.Config{OwnerID: uuid.New()}}
+	svc, err := auth.NewService(newFakeRepo(), rdb, testAuthConfig(), bl, nil, srvRepo, permPub, zerolog.Nop())
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -576,7 +588,8 @@ func testVerifyPasswordApp(t *testing.T) *fiber.App {
 
 	bl := disposable.NewBlocklist("", false, zerolog.Nop())
 	repo := newFakeRepo()
-	svc, err := auth.NewService(repo, rdb, testAuthConfig(), bl, nil, zerolog.Nop())
+	permPub := permission.NewPublisher(rdb)
+	svc, err := auth.NewService(repo, rdb, testAuthConfig(), bl, nil, &fakeServerRepo{}, permPub, zerolog.Nop())
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}

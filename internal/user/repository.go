@@ -417,6 +417,58 @@ func copyRecoveryCodes(ctx context.Context, tx pgx.Tx, userID uuid.UUID, codeHas
 	return nil
 }
 
+// DeleteWithTombstones inserts deletion tombstones and deletes the user in a single transaction. Tombstone inserts use
+// ON CONFLICT DO NOTHING so that re-deleting a restored account (or overlapping identifiers) is idempotent.
+func (r *PGRepository) DeleteWithTombstones(ctx context.Context, id uuid.UUID, tombstones []Tombstone) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin delete user tx: %w", err)
+	}
+	defer func() {
+		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			r.log.Warn().Err(err).Msg("tx rollback failed")
+		}
+	}()
+
+	for _, t := range tombstones {
+		_, err := tx.Exec(ctx,
+			`INSERT INTO deletion_tombstones (identifier_type, hmac_hash)
+			 VALUES ($1, $2)
+			 ON CONFLICT (identifier_type, hmac_hash) DO NOTHING`,
+			string(t.IdentifierType), t.HMACHash,
+		)
+		if err != nil {
+			return fmt.Errorf("insert tombstone: %w", err)
+		}
+	}
+
+	tag, err := tx.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("delete user: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit delete user tx: %w", err)
+	}
+	return nil
+}
+
+// CheckTombstone returns true if a deletion tombstone exists for the given identifier type and HMAC hash.
+func (r *PGRepository) CheckTombstone(ctx context.Context, identifierType TombstoneType, hmacHash string) (bool, error) {
+	var exists bool
+	err := r.db.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM deletion_tombstones WHERE identifier_type = $1 AND hmac_hash = $2)`,
+		string(identifierType), hmacHash,
+	).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("check tombstone: %w", err)
+	}
+	return exists, nil
+}
+
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"

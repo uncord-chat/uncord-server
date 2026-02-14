@@ -15,6 +15,8 @@ import (
 
 	"github.com/uncord-chat/uncord-server/internal/config"
 	"github.com/uncord-chat/uncord-server/internal/disposable"
+	"github.com/uncord-chat/uncord-server/internal/permission"
+	"github.com/uncord-chat/uncord-server/internal/server"
 	"github.com/uncord-chat/uncord-server/internal/user"
 )
 
@@ -22,6 +24,7 @@ import (
 type fakeRepository struct {
 	users         map[string]*user.Credentials // keyed by email
 	recoveryCodes map[uuid.UUID][]user.MFARecoveryCode
+	tombstones    map[string]bool // keyed by "type:hash"
 	createErr     error
 	getByEmailErr error
 	verifyErr     error
@@ -38,6 +41,7 @@ func newFakeRepository() *fakeRepository {
 	return &fakeRepository{
 		users:         make(map[string]*user.Credentials),
 		recoveryCodes: make(map[uuid.UUID][]user.MFARecoveryCode),
+		tombstones:    make(map[string]bool),
 	}
 }
 
@@ -199,21 +203,64 @@ func (r *fakeRepository) ReplaceRecoveryCodes(_ context.Context, userID uuid.UUI
 	return nil
 }
 
+func (r *fakeRepository) DeleteWithTombstones(_ context.Context, id uuid.UUID, tombstones []user.Tombstone) error {
+	var found string
+	for email, c := range r.users {
+		if c.ID == id {
+			found = email
+			break
+		}
+	}
+	if found == "" {
+		return user.ErrNotFound
+	}
+
+	for _, t := range tombstones {
+		r.tombstones[string(t.IdentifierType)+":"+t.HMACHash] = true
+	}
+	delete(r.users, found)
+	delete(r.recoveryCodes, id)
+	return nil
+}
+
+func (r *fakeRepository) CheckTombstone(_ context.Context, identifierType user.TombstoneType, hmacHash string) (bool, error) {
+	return r.tombstones[string(identifierType)+":"+hmacHash], nil
+}
+
+// fakeServerRepo implements server.Repository for unit tests.
+type fakeServerRepo struct {
+	ownerID uuid.UUID
+}
+
+func (r *fakeServerRepo) Get(_ context.Context) (*server.Config, error) {
+	return &server.Config{
+		ID:      uuid.New(),
+		Name:    "Test Server",
+		OwnerID: r.ownerID,
+	}, nil
+}
+
+func (r *fakeServerRepo) Update(_ context.Context, _ server.UpdateParams) (*server.Config, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
 func testConfig() *config.Config {
 	return &config.Config{
-		ServerName:        "Test Server",
-		ServerURL:         "https://test.example.com",
-		ServerEnv:         "production",
-		JWTSecret:         "test-secret-at-least-32-chars-long!!",
-		JWTAccessTTL:      15 * time.Minute,
-		JWTRefreshTTL:     7 * 24 * time.Hour,
-		Argon2Memory:      64 * 1024,
-		Argon2Iterations:  1, // fast for tests
-		Argon2Parallelism: 1,
-		Argon2SaltLength:  16,
-		Argon2KeyLength:   32,
-		MFAEncryptionKey:  testEncryptionKey,
-		MFATicketTTL:      5 * time.Minute,
+		ServerName:                 "Test Server",
+		ServerURL:                  "https://test.example.com",
+		ServerEnv:                  "production",
+		JWTSecret:                  "test-secret-at-least-32-chars-long!!",
+		JWTAccessTTL:               15 * time.Minute,
+		JWTRefreshTTL:              7 * 24 * time.Hour,
+		Argon2Memory:               64 * 1024,
+		Argon2Iterations:           1, // fast for tests
+		Argon2Parallelism:          1,
+		Argon2SaltLength:           16,
+		Argon2KeyLength:            32,
+		MFAEncryptionKey:           testEncryptionKey,
+		MFATicketTTL:               5 * time.Minute,
+		ServerSecret:               testEncryptionKey, // reuse same hex key for test convenience
+		DeletionTombstoneUsernames: true,
 	}
 }
 
@@ -221,7 +268,9 @@ func newTestService(t *testing.T, repo *fakeRepository) *Service {
 	t.Helper()
 	_, rdb := setupMiniredis(t)
 	bl := disposable.NewBlocklist("", false, zerolog.Nop())
-	svc, err := NewService(repo, rdb, testConfig(), bl, nil, zerolog.Nop())
+	serverRepo := &fakeServerRepo{ownerID: uuid.New()}
+	permPub := permission.NewPublisher(rdb)
+	svc, err := NewService(repo, rdb, testConfig(), bl, nil, serverRepo, permPub, zerolog.Nop())
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -344,7 +393,9 @@ func TestServiceRegisterDisposableEmailBlocked(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	bl := disposable.NewBlocklist(srv.URL, true, zerolog.Nop())
-	svc, err := NewService(repo, rdb, testConfig(), bl, nil, zerolog.Nop())
+	serverRepo := &fakeServerRepo{ownerID: uuid.New()}
+	permPub := permission.NewPublisher(rdb)
+	svc, err := NewService(repo, rdb, testConfig(), bl, nil, serverRepo, permPub, zerolog.Nop())
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -828,7 +879,9 @@ func newTestServiceWithSender(t *testing.T, repo *fakeRepository, sender Sender)
 	t.Helper()
 	_, rdb := setupMiniredis(t)
 	bl := disposable.NewBlocklist("", false, zerolog.Nop())
-	svc, err := NewService(repo, rdb, testConfig(), bl, sender, zerolog.Nop())
+	serverRepo := &fakeServerRepo{ownerID: uuid.New()}
+	permPub := permission.NewPublisher(rdb)
+	svc, err := NewService(repo, rdb, testConfig(), bl, sender, serverRepo, permPub, zerolog.Nop())
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -1328,7 +1381,9 @@ func TestServiceBeginMFASetupNotConfigured(t *testing.T) {
 	bl := disposable.NewBlocklist("", false, zerolog.Nop())
 	cfg := testConfig()
 	cfg.MFAEncryptionKey = "" // simulate unconfigured MFA
-	svc, err := NewService(repo, rdb, cfg, bl, nil, zerolog.Nop())
+	serverRepo := &fakeServerRepo{ownerID: uuid.New()}
+	permPub := permission.NewPublisher(rdb)
+	svc, err := NewService(repo, rdb, cfg, bl, nil, serverRepo, permPub, zerolog.Nop())
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -1420,5 +1475,270 @@ func TestServiceDisableMFANotConfigured(t *testing.T) {
 	err := svc.DisableMFA(ctx, userID, "strongpassword", "123456")
 	if !errors.Is(err, ErrMFANotConfigured) {
 		t.Errorf("DisableMFA() error = %v, want ErrMFANotConfigured", err)
+	}
+}
+
+// --- Account deletion tests ---
+
+// newTestServiceWithServerRepo creates a test service with a specific fakeServerRepo so tests can control the owner ID.
+func newTestServiceWithServerRepo(t *testing.T, repo *fakeRepository, srvRepo *fakeServerRepo) *Service {
+	t.Helper()
+	_, rdb := setupMiniredis(t)
+	bl := disposable.NewBlocklist("", false, zerolog.Nop())
+	permPub := permission.NewPublisher(rdb)
+	svc, err := NewService(repo, rdb, testConfig(), bl, nil, srvRepo, permPub, zerolog.Nop())
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	return svc
+}
+
+func TestDeleteAccountSuccess(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	srvRepo := &fakeServerRepo{ownerID: uuid.New()}
+	svc := newTestServiceWithServerRepo(t, repo, srvRepo)
+	ctx := context.Background()
+
+	_, err := svc.Register(ctx, RegisterRequest{
+		Email:    "alice@example.com",
+		Username: "alice",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	userID := repo.users["alice@example.com"].ID
+
+	if err := svc.DeleteAccount(ctx, userID, "strongpassword"); err != nil {
+		t.Fatalf("DeleteAccount() error = %v", err)
+	}
+
+	// User should be deleted.
+	if _, exists := repo.users["alice@example.com"]; exists {
+		t.Error("DeleteAccount() did not remove user from repository")
+	}
+
+	// Tombstones should exist for email and username.
+	if len(repo.tombstones) != 2 {
+		t.Errorf("DeleteAccount() created %d tombstones, want 2", len(repo.tombstones))
+	}
+}
+
+func TestDeleteAccountWrongPassword(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	srvRepo := &fakeServerRepo{ownerID: uuid.New()}
+	svc := newTestServiceWithServerRepo(t, repo, srvRepo)
+	ctx := context.Background()
+
+	_, err := svc.Register(ctx, RegisterRequest{
+		Email:    "alice@example.com",
+		Username: "alice",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	userID := repo.users["alice@example.com"].ID
+
+	err = svc.DeleteAccount(ctx, userID, "wrongpassword")
+	if !errors.Is(err, ErrInvalidCredentials) {
+		t.Errorf("DeleteAccount() error = %v, want ErrInvalidCredentials", err)
+	}
+}
+
+func TestDeleteAccountServerOwner(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	srvRepo := &fakeServerRepo{ownerID: uuid.New()} // will be overwritten below
+	svc := newTestServiceWithServerRepo(t, repo, srvRepo)
+	ctx := context.Background()
+
+	_, err := svc.Register(ctx, RegisterRequest{
+		Email:    "owner@example.com",
+		Username: "owner",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	userID := repo.users["owner@example.com"].ID
+	srvRepo.ownerID = userID // make this user the server owner
+
+	err = svc.DeleteAccount(ctx, userID, "strongpassword")
+	if !errors.Is(err, ErrServerOwner) {
+		t.Errorf("DeleteAccount() error = %v, want ErrServerOwner", err)
+	}
+}
+
+func TestDeleteAccountUserNotFound(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	srvRepo := &fakeServerRepo{ownerID: uuid.New()}
+	svc := newTestServiceWithServerRepo(t, repo, srvRepo)
+
+	err := svc.DeleteAccount(context.Background(), uuid.New(), "strongpassword")
+	if err == nil {
+		t.Fatal("DeleteAccount() should fail for nonexistent user")
+	}
+}
+
+func TestRegisterBlockedByEmailTombstone(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	srvRepo := &fakeServerRepo{ownerID: uuid.New()}
+	svc := newTestServiceWithServerRepo(t, repo, srvRepo)
+	ctx := context.Background()
+
+	_, err := svc.Register(ctx, RegisterRequest{
+		Email:    "alice@example.com",
+		Username: "alice",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	userID := repo.users["alice@example.com"].ID
+	if err := svc.DeleteAccount(ctx, userID, "strongpassword"); err != nil {
+		t.Fatalf("DeleteAccount() error = %v", err)
+	}
+
+	// Re-register with same email should be blocked.
+	_, err = svc.Register(ctx, RegisterRequest{
+		Email:    "alice@example.com",
+		Username: "alice2",
+		Password: "strongpassword",
+	})
+	if !errors.Is(err, ErrAccountTombstoned) {
+		t.Errorf("Register() error = %v, want ErrAccountTombstoned", err)
+	}
+}
+
+func TestRegisterBlockedByUsernameTombstone(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	srvRepo := &fakeServerRepo{ownerID: uuid.New()}
+	svc := newTestServiceWithServerRepo(t, repo, srvRepo)
+	ctx := context.Background()
+
+	_, err := svc.Register(ctx, RegisterRequest{
+		Email:    "alice@example.com",
+		Username: "Alice",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	userID := repo.users["alice@example.com"].ID
+	if err := svc.DeleteAccount(ctx, userID, "strongpassword"); err != nil {
+		t.Fatalf("DeleteAccount() error = %v", err)
+	}
+
+	// Re-register with same username (different case) should be blocked.
+	_, err = svc.Register(ctx, RegisterRequest{
+		Email:    "bob@example.com",
+		Username: "alice",
+		Password: "strongpassword",
+	})
+	if !errors.Is(err, ErrAccountTombstoned) {
+		t.Errorf("Register() error = %v, want ErrAccountTombstoned", err)
+	}
+}
+
+func TestRegisterUsernameTombstoneDisabled(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	_, rdb := setupMiniredis(t)
+	bl := disposable.NewBlocklist("", false, zerolog.Nop())
+	srvRepo := &fakeServerRepo{ownerID: uuid.New()}
+	permPub := permission.NewPublisher(rdb)
+	cfg := testConfig()
+	cfg.DeletionTombstoneUsernames = false
+	svc, err := NewService(repo, rdb, cfg, bl, nil, srvRepo, permPub, zerolog.Nop())
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	ctx := context.Background()
+
+	_, err = svc.Register(ctx, RegisterRequest{
+		Email:    "alice@example.com",
+		Username: "alice",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	userID := repo.users["alice@example.com"].ID
+	if err := svc.DeleteAccount(ctx, userID, "strongpassword"); err != nil {
+		t.Fatalf("DeleteAccount() error = %v", err)
+	}
+
+	// Only email tombstone should exist (no username tombstone).
+	if len(repo.tombstones) != 1 {
+		t.Errorf("DeleteAccount() created %d tombstones, want 1 (email only)", len(repo.tombstones))
+	}
+
+	// Re-register with same username should succeed (tombstone not created).
+	_, err = svc.Register(ctx, RegisterRequest{
+		Email:    "bob@example.com",
+		Username: "alice",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Errorf("Register() with same username should succeed when tombstone disabled, got error = %v", err)
+	}
+}
+
+func TestRegisterUsernameTombstoneRetroactive(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	_, rdb := setupMiniredis(t)
+	bl := disposable.NewBlocklist("", false, zerolog.Nop())
+	srvRepo := &fakeServerRepo{ownerID: uuid.New()}
+	permPub := permission.NewPublisher(rdb)
+
+	// Create service with tombstone usernames enabled.
+	cfg := testConfig()
+	svc, err := NewService(repo, rdb, cfg, bl, nil, srvRepo, permPub, zerolog.Nop())
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	ctx := context.Background()
+
+	_, err = svc.Register(ctx, RegisterRequest{
+		Email:    "alice@example.com",
+		Username: "alice",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	userID := repo.users["alice@example.com"].ID
+	if err := svc.DeleteAccount(ctx, userID, "strongpassword"); err != nil {
+		t.Fatalf("DeleteAccount() error = %v", err)
+	}
+
+	// Now disable tombstone usernames in config. Existing tombstones should still block.
+	cfg.DeletionTombstoneUsernames = false
+	svc2, err := NewService(repo, rdb, cfg, bl, nil, srvRepo, permPub, zerolog.Nop())
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	_, err = svc2.Register(ctx, RegisterRequest{
+		Email:    "bob@example.com",
+		Username: "alice",
+		Password: "strongpassword",
+	})
+	if !errors.Is(err, ErrAccountTombstoned) {
+		t.Errorf("Register() error = %v, want ErrAccountTombstoned (retroactive enforcement)", err)
 	}
 }

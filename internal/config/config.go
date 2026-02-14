@@ -84,6 +84,10 @@ type Config struct {
 	MFAEncryptionKey string
 	MFATicketTTL     time.Duration
 
+	// Account Deletion
+	ServerSecret               string // Required. Hex-encoded 32-byte HMAC key for tombstones and future use.
+	DeletionTombstoneUsernames bool   // Also tombstone usernames on deletion. Default: true.
+
 	// CORS
 	CORSAllowOrigins string
 }
@@ -151,6 +155,9 @@ func Load() (*Config, error) {
 
 		MFAEncryptionKey: envStr("MFA_ENCRYPTION_KEY", ""),
 		MFATicketTTL:     p.duration("MFA_TICKET_TTL", 5*time.Minute),
+
+		ServerSecret:               envStr("SERVER_SECRET", ""),
+		DeletionTombstoneUsernames: p.bool("DELETION_TOMBSTONE_USERNAMES", true),
 
 		CORSAllowOrigins: envStr("CORS_ALLOW_ORIGINS", "*"),
 	}
@@ -266,6 +273,15 @@ func (c *Config) validate() error {
 		b, err := hex.DecodeString(c.MFAEncryptionKey)
 		if err != nil || len(b) != 32 {
 			errs = append(errs, fmt.Errorf("MFA_ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes)"))
+		}
+	}
+
+	if c.ServerSecret == "" {
+		errs = append(errs, fmt.Errorf("SERVER_SECRET is required"))
+	} else {
+		b, err := hex.DecodeString(c.ServerSecret)
+		if err != nil || len(b) != 32 {
+			errs = append(errs, fmt.Errorf("SERVER_SECRET must be exactly 64 hex characters (32 bytes)"))
 		}
 	}
 

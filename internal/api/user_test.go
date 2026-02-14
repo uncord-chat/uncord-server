@@ -31,7 +31,7 @@ func seedUser(repo *fakeRepo) *user.User {
 
 func testUserApp(t *testing.T, repo *fakeRepo, userID uuid.UUID) *fiber.App {
 	t.Helper()
-	handler := NewUserHandler(repo, zerolog.Nop())
+	handler := NewUserHandler(repo, nil, zerolog.Nop())
 	app := fiber.New()
 
 	// Inject userID into Locals to simulate RequireAuth middleware.

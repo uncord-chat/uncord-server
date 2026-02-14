@@ -16,6 +16,7 @@ import (
 
 	"github.com/uncord-chat/uncord-server/internal/auth"
 	"github.com/uncord-chat/uncord-server/internal/disposable"
+	"github.com/uncord-chat/uncord-server/internal/permission"
 )
 
 // testMFAApp creates a Fiber app with simulated auth middleware and MFA routes.
@@ -26,7 +27,8 @@ func testMFAApp(t *testing.T) (*fiber.App, *auth.Service) {
 
 	bl := disposable.NewBlocklist("", false, zerolog.Nop())
 	repo := newFakeRepo()
-	svc, err := auth.NewService(repo, rdb, testAuthConfig(), bl, nil, zerolog.Nop())
+	permPub := permission.NewPublisher(rdb)
+	svc, err := auth.NewService(repo, rdb, testAuthConfig(), bl, nil, &fakeServerRepo{}, permPub, zerolog.Nop())
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}

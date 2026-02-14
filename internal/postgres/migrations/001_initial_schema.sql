@@ -369,7 +369,7 @@ CREATE INDEX idx_audit_log_actor ON audit_log (actor_id);
 CREATE TABLE bans (
     user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     reason          TEXT,
-    banned_by       UUID NOT NULL REFERENCES users(id),
+    banned_by       UUID REFERENCES users(id) ON DELETE SET NULL,
     expires_at      TIMESTAMPTZ,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (user_id)
@@ -383,7 +383,7 @@ CREATE TABLE reports (
     message_id      UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
     reason          TEXT NOT NULL,
     status          TEXT NOT NULL DEFAULT 'open',  -- open, resolved, dismissed
-    resolved_by     UUID REFERENCES users(id),
+    resolved_by     UUID REFERENCES users(id) ON DELETE SET NULL,
     resolution_note TEXT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -465,7 +465,7 @@ CREATE TABLE abuse_flags (
     related_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
     evidence        JSONB,
     status          TEXT NOT NULL DEFAULT 'pending',  -- pending, confirmed, dismissed
-    reviewed_by     UUID REFERENCES users(id),
+    reviewed_by     UUID REFERENCES users(id) ON DELETE SET NULL,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT chk_abuse_flags_reason CHECK (reason IN ('shared_ip', 'shared_device', 'behavioral', 'manual')),
@@ -525,11 +525,24 @@ CREATE INDEX idx_login_attempts_email_time ON login_attempts (email, created_at 
 CREATE INDEX idx_login_attempts_ip_time ON login_attempts (ip_address, created_at DESC);
 CREATE INDEX idx_login_attempts_created ON login_attempts (created_at);
 
+-- Deletion Tombstones
+
+CREATE TABLE deletion_tombstones (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    identifier_type TEXT NOT NULL,
+    hmac_hash       TEXT NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_tombstones_identifier_type CHECK (identifier_type IN ('email', 'username'))
+);
+
+CREATE UNIQUE INDEX idx_tombstones_type_hash ON deletion_tombstones (identifier_type, hmac_hash);
+
 -- +goose Down
 
 DROP FUNCTION IF EXISTS clean_permission_overrides_target();
 DROP FUNCTION IF EXISTS clean_permission_overrides_principal();
 
+DROP TABLE IF EXISTS deletion_tombstones CASCADE;
 DROP TABLE IF EXISTS login_attempts CASCADE;
 DROP TABLE IF EXISTS email_verifications CASCADE;
 DROP TABLE IF EXISTS registered_plugins CASCADE;

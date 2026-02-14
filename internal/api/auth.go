@@ -196,6 +196,10 @@ func mapAuthServiceError(c fiber.Ctx, err error, log zerolog.Logger, handler str
 		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.TokenReused, "Refresh token has already been used")
 	case errors.Is(err, auth.ErrInvalidToken):
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidToken, err.Error())
+	case errors.Is(err, auth.ErrServerOwner):
+		return httputil.Fail(c, fiber.StatusForbidden, apierrors.ServerOwner, err.Error())
+	case errors.Is(err, auth.ErrAccountTombstoned):
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.AccountDeleted, "This email or username is not available")
 
 	default:
 		log.Error().Err(err).Str("handler", handler).Msg("unhandled auth service error")

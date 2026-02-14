@@ -9,6 +9,7 @@ import (
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 	"github.com/uncord-chat/uncord-protocol/models"
 
+	"github.com/uncord-chat/uncord-server/internal/auth"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 	"github.com/uncord-chat/uncord-server/internal/user"
 )
@@ -16,12 +17,13 @@ import (
 // UserHandler serves user profile endpoints.
 type UserHandler struct {
 	users user.Repository
+	auth  *auth.Service
 	log   zerolog.Logger
 }
 
 // NewUserHandler creates a new user handler.
-func NewUserHandler(users user.Repository, logger zerolog.Logger) *UserHandler {
-	return &UserHandler{users: users, log: logger}
+func NewUserHandler(users user.Repository, authSvc *auth.Service, logger zerolog.Logger) *UserHandler {
+	return &UserHandler{users: users, auth: authSvc, log: logger}
 }
 
 // GetMe handles GET /api/v1/users/@me.
@@ -87,6 +89,28 @@ func (h *UserHandler) UpdateMe(c fiber.Ctx) error {
 	}
 
 	return httputil.Success(c, toUserModel(u))
+}
+
+// DeleteMe handles DELETE /api/v1/users/@me.
+func (h *UserHandler) DeleteMe(c fiber.Ctx) error {
+	userID, ok := c.Locals("userID").(uuid.UUID)
+	if !ok {
+		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	}
+
+	var body models.DeleteAccountRequest
+	if err := c.Bind().Body(&body); err != nil {
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "Invalid request body")
+	}
+	if body.Password == "" {
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "password is required")
+	}
+
+	if err := h.auth.DeleteAccount(c, userID, body.Password); err != nil {
+		return mapAuthServiceError(c, err, h.log, "user")
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 // toUserModel converts the internal user struct to the protocol response type.
