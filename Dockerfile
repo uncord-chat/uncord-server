@@ -5,8 +5,12 @@ RUN apk add --no-cache git ca-certificates
 
 WORKDIR /src
 
+# Cache module downloads separately from source changes.
+COPY go.mod go.sum ./
+RUN go mod edit -dropreplace=github.com/uncord-chat/uncord-protocol && \
+    go mod download
+
 COPY . .
-RUN go mod edit -dropreplace=github.com/uncord-chat/uncord-protocol && go mod tidy
 
 ARG VERSION=dev
 RUN CGO_ENABLED=0 GOOS=linux go build \
@@ -18,9 +22,10 @@ FROM alpine:3.21
 
 RUN apk add --no-cache ca-certificates wget
 
+RUN addgroup -S uncord && adduser -S uncord -G uncord
+
 COPY --from=build /bin/uncord /usr/local/bin/uncord
 
-RUN addgroup -S uncord && adduser -S uncord -G uncord
 USER uncord
 
 EXPOSE 8080 9090
