@@ -6,7 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 	"github.com/uncord-chat/uncord-protocol/models"
 	"github.com/uncord-chat/uncord-protocol/permissions"
@@ -21,11 +21,12 @@ type ChannelHandler struct {
 	channels    channel.Repository
 	resolver    *permission.Resolver
 	maxChannels int
+	log         zerolog.Logger
 }
 
 // NewChannelHandler creates a new channel handler.
-func NewChannelHandler(channels channel.Repository, resolver *permission.Resolver, maxChannels int) *ChannelHandler {
-	return &ChannelHandler{channels: channels, resolver: resolver, maxChannels: maxChannels}
+func NewChannelHandler(channels channel.Repository, resolver *permission.Resolver, maxChannels int, logger zerolog.Logger) *ChannelHandler {
+	return &ChannelHandler{channels: channels, resolver: resolver, maxChannels: maxChannels, log: logger}
 }
 
 // ListChannels handles GET /api/v1/server/channels. It returns only channels the authenticated user has permission to
@@ -38,7 +39,7 @@ func (h *ChannelHandler) ListChannels(c fiber.Ctx) error {
 
 	all, err := h.channels.List(c)
 	if err != nil {
-		log.Error().Err(err).Str("handler", "channel").Msg("list channels failed")
+		h.log.Error().Err(err).Str("handler", "channel").Msg("list channels failed")
 		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
 	}
 
@@ -49,7 +50,7 @@ func (h *ChannelHandler) ListChannels(c fiber.Ctx) error {
 
 	permitted, err := h.resolver.FilterPermitted(c, userID, channelIDs, permissions.ViewChannels)
 	if err != nil {
-		log.Error().Err(err).Str("handler", "channel").Msg("permission check failed during channel list")
+		h.log.Error().Err(err).Str("handler", "channel").Msg("permission check failed during channel list")
 		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
 	}
 
@@ -71,7 +72,7 @@ func (h *ChannelHandler) CreateChannel(c fiber.Ctx) error {
 
 	name, err := channel.ValidateNameRequired(body.Name)
 	if err != nil {
-		return mapChannelError(c, err)
+		return h.mapChannelError(c, err)
 	}
 
 	chType := channel.TypeText
@@ -79,14 +80,14 @@ func (h *ChannelHandler) CreateChannel(c fiber.Ctx) error {
 		chType = *body.Type
 	}
 	if err := channel.ValidateType(chType); err != nil {
-		return mapChannelError(c, err)
+		return h.mapChannelError(c, err)
 	}
 
 	if err := channel.ValidateTopic(body.Topic); err != nil {
-		return mapChannelError(c, err)
+		return h.mapChannelError(c, err)
 	}
 	if err := channel.ValidateSlowmode(body.SlowmodeSeconds); err != nil {
-		return mapChannelError(c, err)
+		return h.mapChannelError(c, err)
 	}
 
 	var categoryID *uuid.UUID
@@ -120,7 +121,7 @@ func (h *ChannelHandler) CreateChannel(c fiber.Ctx) error {
 		NSFW:            nsfw,
 	}, h.maxChannels)
 	if err != nil {
-		return mapChannelError(c, err)
+		return h.mapChannelError(c, err)
 	}
 
 	return httputil.SuccessStatus(c, fiber.StatusCreated, toChannelModel(ch))
@@ -135,7 +136,7 @@ func (h *ChannelHandler) GetChannel(c fiber.Ctx) error {
 
 	ch, err := h.channels.GetByID(c, id)
 	if err != nil {
-		return mapChannelError(c, err)
+		return h.mapChannelError(c, err)
 	}
 
 	return httputil.Success(c, toChannelModel(ch))
@@ -154,16 +155,16 @@ func (h *ChannelHandler) UpdateChannel(c fiber.Ctx) error {
 	}
 
 	if err := channel.ValidateName(body.Name); err != nil {
-		return mapChannelError(c, err)
+		return h.mapChannelError(c, err)
 	}
 	if err := channel.ValidateTopic(body.Topic); err != nil {
-		return mapChannelError(c, err)
+		return h.mapChannelError(c, err)
 	}
 	if err := channel.ValidatePosition(body.Position); err != nil {
-		return mapChannelError(c, err)
+		return h.mapChannelError(c, err)
 	}
 	if err := channel.ValidateSlowmode(body.SlowmodeSeconds); err != nil {
-		return mapChannelError(c, err)
+		return h.mapChannelError(c, err)
 	}
 
 	params := channel.UpdateParams{
@@ -189,7 +190,7 @@ func (h *ChannelHandler) UpdateChannel(c fiber.Ctx) error {
 
 	ch, err := h.channels.Update(c, id, params)
 	if err != nil {
-		return mapChannelError(c, err)
+		return h.mapChannelError(c, err)
 	}
 
 	return httputil.Success(c, toChannelModel(ch))
@@ -203,7 +204,7 @@ func (h *ChannelHandler) DeleteChannel(c fiber.Ctx) error {
 	}
 
 	if err := h.channels.Delete(c, id); err != nil {
-		return mapChannelError(c, err)
+		return h.mapChannelError(c, err)
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)
@@ -231,7 +232,7 @@ func toChannelModel(ch *channel.Channel) models.Channel {
 }
 
 // mapChannelError converts channel-layer errors to appropriate HTTP responses.
-func mapChannelError(c fiber.Ctx, err error) error {
+func (h *ChannelHandler) mapChannelError(c fiber.Ctx, err error) error {
 	switch {
 	case errors.Is(err, channel.ErrNotFound):
 		return httputil.Fail(c, fiber.StatusNotFound, apierrors.UnknownChannel, "Channel not found")
@@ -250,7 +251,7 @@ func mapChannelError(c fiber.Ctx, err error) error {
 	case errors.Is(err, channel.ErrMaxChannelsReached):
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.MaxChannelsReached, err.Error())
 	default:
-		log.Error().Err(err).Str("handler", "channel").Msg("unhandled channel service error")
+		h.log.Error().Err(err).Str("handler", "channel").Msg("unhandled channel service error")
 		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
 	}
 }

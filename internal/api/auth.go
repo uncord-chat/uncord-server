@@ -4,7 +4,7 @@ import (
 	"errors"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 	"github.com/uncord-chat/uncord-protocol/models"
 
@@ -15,11 +15,12 @@ import (
 // AuthHandler serves authentication endpoints.
 type AuthHandler struct {
 	auth *auth.Service
+	log  zerolog.Logger
 }
 
 // NewAuthHandler creates a new authentication handler.
-func NewAuthHandler(svc *auth.Service) *AuthHandler {
-	return &AuthHandler{auth: svc}
+func NewAuthHandler(svc *auth.Service, logger zerolog.Logger) *AuthHandler {
+	return &AuthHandler{auth: svc, log: logger}
 }
 
 // toAuthResponse maps a service AuthResult to the protocol response type.
@@ -44,7 +45,7 @@ func (h *AuthHandler) Register(c fiber.Ctx) error {
 		Password: body.Password,
 	})
 	if err != nil {
-		return mapAuthError(c, err)
+		return h.mapAuthError(c, err)
 	}
 
 	return httputil.SuccessStatus(c, fiber.StatusCreated, toAuthResponse(result))
@@ -63,7 +64,7 @@ func (h *AuthHandler) Login(c fiber.Ctx) error {
 		IP:       c.IP(),
 	})
 	if err != nil {
-		return mapAuthError(c, err)
+		return h.mapAuthError(c, err)
 	}
 
 	return httputil.Success(c, toAuthResponse(result))
@@ -81,7 +82,7 @@ func (h *AuthHandler) Refresh(c fiber.Ctx) error {
 
 	tokens, err := h.auth.Refresh(c, body.RefreshToken)
 	if err != nil {
-		return mapAuthError(c, err)
+		return h.mapAuthError(c, err)
 	}
 
 	return httputil.Success(c, models.TokenPairResponse{
@@ -101,7 +102,7 @@ func (h *AuthHandler) VerifyEmail(c fiber.Ctx) error {
 	}
 
 	if err := h.auth.VerifyEmail(c, body.Token); err != nil {
-		return mapAuthError(c, err)
+		return h.mapAuthError(c, err)
 	}
 
 	return httputil.Success(c, models.MessageResponse{
@@ -110,7 +111,7 @@ func (h *AuthHandler) VerifyEmail(c fiber.Ctx) error {
 }
 
 // mapAuthError converts auth-layer errors to appropriate HTTP responses.
-func mapAuthError(c fiber.Ctx, err error) error {
+func (h *AuthHandler) mapAuthError(c fiber.Ctx, err error) error {
 	switch {
 	// Validation errors
 	case errors.Is(err, auth.ErrInvalidEmail):
@@ -137,7 +138,7 @@ func mapAuthError(c fiber.Ctx, err error) error {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidToken, err.Error())
 
 	default:
-		log.Error().Err(err).Str("handler", "auth").Msg("unhandled auth service error")
+		h.log.Error().Err(err).Str("handler", "auth").Msg("unhandled auth service error")
 		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
 	}
 }

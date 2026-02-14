@@ -320,7 +320,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 	health := api.NewHealthHandler(s.db, redisPinger{client: s.rdb})
 	app.Get("/api/v1/health", health.Health)
 
-	authHandler := api.NewAuthHandler(s.authService)
+	authHandler := api.NewAuthHandler(s.authService, log.Logger)
 
 	// Auth routes with stricter rate limiting
 	authGroup := app.Group("/api/v1/auth")
@@ -334,19 +334,19 @@ func (s *server) registerRoutes(app *fiber.App) {
 	authGroup.Post("/verify-email", authHandler.VerifyEmail)
 
 	// User profile routes (authenticated, no permission checks)
-	userHandler := api.NewUserHandler(s.userRepo)
+	userHandler := api.NewUserHandler(s.userRepo, log.Logger)
 	userGroup := app.Group("/api/v1/users", auth.RequireAuth(s.cfg.JWTSecret, s.cfg.ServerURL))
 	userGroup.Get("/@me", userHandler.GetMe)
 	userGroup.Patch("/@me", userHandler.UpdateMe)
 
 	// Server config routes (authenticated, PATCH requires ManageServer)
-	serverHandler := api.NewServerHandler(s.serverRepo)
+	serverHandler := api.NewServerHandler(s.serverRepo, log.Logger)
 	serverGroup := app.Group("/api/v1/server", auth.RequireAuth(s.cfg.JWTSecret, s.cfg.ServerURL))
 	serverGroup.Get("/", serverHandler.Get)
 	serverGroup.Patch("/", permission.RequireServerPermission(s.permResolver, permissions.ManageServer), serverHandler.Update)
 
 	// Channel routes
-	channelHandler := api.NewChannelHandler(s.channelRepo, s.permResolver, s.cfg.MaxChannels)
+	channelHandler := api.NewChannelHandler(s.channelRepo, s.permResolver, s.cfg.MaxChannels, log.Logger)
 	serverGroup.Get("/channels", channelHandler.ListChannels)
 	serverGroup.Post("/channels",
 		permission.RequireServerPermission(s.permResolver, permissions.ManageChannels),
@@ -365,7 +365,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 		channelHandler.DeleteChannel)
 
 	// Category routes
-	categoryHandler := api.NewCategoryHandler(s.categoryRepo, s.cfg.MaxCategories)
+	categoryHandler := api.NewCategoryHandler(s.categoryRepo, s.cfg.MaxCategories, log.Logger)
 	serverGroup.Get("/categories", categoryHandler.ListCategories)
 	serverGroup.Post("/categories",
 		permission.RequireServerPermission(s.permResolver, permissions.ManageCategories),

@@ -120,7 +120,7 @@ func testAuthHandler(t *testing.T) (*AuthHandler, *fiber.App) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	handler := NewAuthHandler(svc)
+	handler := NewAuthHandler(svc, zerolog.Nop())
 
 	app := fiber.New()
 	app.Post("/register", handler.Register)

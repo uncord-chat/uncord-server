@@ -10,6 +10,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 
 	"github.com/uncord-chat/uncord-server/internal/category"
@@ -94,7 +95,7 @@ func seedCategory(repo *fakeCategoryRepo) *category.Category {
 
 func testCategoryApp(t *testing.T, repo category.Repository, maxCategories int, userID uuid.UUID) *fiber.App {
 	t.Helper()
-	handler := NewCategoryHandler(repo, maxCategories)
+	handler := NewCategoryHandler(repo, maxCategories, zerolog.Nop())
 	app := fiber.New()
 
 	app.Use(func(c fiber.Ctx) error {

@@ -6,7 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 	"github.com/uncord-chat/uncord-protocol/models"
 
@@ -18,11 +18,12 @@ import (
 type CategoryHandler struct {
 	categories    category.Repository
 	maxCategories int
+	log           zerolog.Logger
 }
 
 // NewCategoryHandler creates a new category handler.
-func NewCategoryHandler(categories category.Repository, maxCategories int) *CategoryHandler {
-	return &CategoryHandler{categories: categories, maxCategories: maxCategories}
+func NewCategoryHandler(categories category.Repository, maxCategories int, logger zerolog.Logger) *CategoryHandler {
+	return &CategoryHandler{categories: categories, maxCategories: maxCategories, log: logger}
 }
 
 // ListCategories handles GET /api/v1/server/categories.
@@ -34,7 +35,7 @@ func (h *CategoryHandler) ListCategories(c fiber.Ctx) error {
 
 	cats, err := h.categories.List(c)
 	if err != nil {
-		log.Error().Err(err).Str("handler", "category").Msg("list categories failed")
+		h.log.Error().Err(err).Str("handler", "category").Msg("list categories failed")
 		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
 	}
 
@@ -54,12 +55,12 @@ func (h *CategoryHandler) CreateCategory(c fiber.Ctx) error {
 
 	name, err := category.ValidateNameRequired(body.Name)
 	if err != nil {
-		return mapCategoryError(c, err)
+		return h.mapCategoryError(c, err)
 	}
 
 	cat, err := h.categories.Create(c, category.CreateParams{Name: name}, h.maxCategories)
 	if err != nil {
-		return mapCategoryError(c, err)
+		return h.mapCategoryError(c, err)
 	}
 
 	return httputil.SuccessStatus(c, fiber.StatusCreated, toCategoryModel(cat))
@@ -78,10 +79,10 @@ func (h *CategoryHandler) UpdateCategory(c fiber.Ctx) error {
 	}
 
 	if err := category.ValidateName(body.Name); err != nil {
-		return mapCategoryError(c, err)
+		return h.mapCategoryError(c, err)
 	}
 	if err := category.ValidatePosition(body.Position); err != nil {
-		return mapCategoryError(c, err)
+		return h.mapCategoryError(c, err)
 	}
 
 	cat, err := h.categories.Update(c, id, category.UpdateParams{
@@ -89,7 +90,7 @@ func (h *CategoryHandler) UpdateCategory(c fiber.Ctx) error {
 		Position: body.Position,
 	})
 	if err != nil {
-		return mapCategoryError(c, err)
+		return h.mapCategoryError(c, err)
 	}
 
 	return httputil.Success(c, toCategoryModel(cat))
@@ -103,7 +104,7 @@ func (h *CategoryHandler) DeleteCategory(c fiber.Ctx) error {
 	}
 
 	if err := h.categories.Delete(c, id); err != nil {
-		return mapCategoryError(c, err)
+		return h.mapCategoryError(c, err)
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)
@@ -121,7 +122,7 @@ func toCategoryModel(cat *category.Category) models.Category {
 }
 
 // mapCategoryError converts category-layer errors to appropriate HTTP responses.
-func mapCategoryError(c fiber.Ctx, err error) error {
+func (h *CategoryHandler) mapCategoryError(c fiber.Ctx, err error) error {
 	switch {
 	case errors.Is(err, category.ErrNotFound):
 		return httputil.Fail(c, fiber.StatusNotFound, apierrors.UnknownCategory, "Category not found")
@@ -134,7 +135,7 @@ func mapCategoryError(c fiber.Ctx, err error) error {
 	case errors.Is(err, category.ErrMaxCategoriesReached):
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.MaxCategoriesReached, err.Error())
 	default:
-		log.Error().Err(err).Str("handler", "category").Msg("unhandled category service error")
+		h.log.Error().Err(err).Str("handler", "category").Msg("unhandled category service error")
 		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
 	}
 }

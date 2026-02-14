@@ -186,7 +186,7 @@ func seedChannel(repo *fakeChannelRepo) *channel.Channel {
 
 func testChannelApp(t *testing.T, repo channel.Repository, resolver *permission.Resolver, maxChannels int, userID uuid.UUID) *fiber.App {
 	t.Helper()
-	handler := NewChannelHandler(repo, resolver, maxChannels)
+	handler := NewChannelHandler(repo, resolver, maxChannels, zerolog.Nop())
 	app := fiber.New()
 
 	app.Use(func(c fiber.Ctx) error {

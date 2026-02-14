@@ -6,7 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 	"github.com/uncord-chat/uncord-protocol/models"
 
@@ -17,11 +17,12 @@ import (
 // ServerHandler serves server configuration endpoints.
 type ServerHandler struct {
 	servers server.Repository
+	log     zerolog.Logger
 }
 
 // NewServerHandler creates a new server handler.
-func NewServerHandler(servers server.Repository) *ServerHandler {
-	return &ServerHandler{servers: servers}
+func NewServerHandler(servers server.Repository, logger zerolog.Logger) *ServerHandler {
+	return &ServerHandler{servers: servers, log: logger}
 }
 
 // Get handles GET /api/v1/server.
@@ -33,7 +34,7 @@ func (h *ServerHandler) Get(c fiber.Ctx) error {
 
 	cfg, err := h.servers.Get(c)
 	if err != nil {
-		return mapServerError(c, err)
+		return h.mapServerError(c, err)
 	}
 
 	return httputil.Success(c, toServerConfigModel(cfg))
@@ -52,10 +53,10 @@ func (h *ServerHandler) Update(c fiber.Ctx) error {
 	}
 
 	if err := server.ValidateName(body.Name); err != nil {
-		return mapServerError(c, err)
+		return h.mapServerError(c, err)
 	}
 	if err := server.ValidateDescription(body.Description); err != nil {
-		return mapServerError(c, err)
+		return h.mapServerError(c, err)
 	}
 
 	cfg, err := h.servers.Update(c, server.UpdateParams{
@@ -65,7 +66,7 @@ func (h *ServerHandler) Update(c fiber.Ctx) error {
 		BannerKey:   body.BannerKey,
 	})
 	if err != nil {
-		return mapServerError(c, err)
+		return h.mapServerError(c, err)
 	}
 
 	return httputil.Success(c, toServerConfigModel(cfg))
@@ -86,7 +87,7 @@ func toServerConfigModel(cfg *server.Config) models.ServerConfig {
 }
 
 // mapServerError converts server-layer errors to appropriate HTTP responses.
-func mapServerError(c fiber.Ctx, err error) error {
+func (h *ServerHandler) mapServerError(c fiber.Ctx, err error) error {
 	switch {
 	case errors.Is(err, server.ErrNotFound):
 		return httputil.Fail(c, fiber.StatusNotFound, apierrors.NotFound, "Server config not found")
@@ -95,7 +96,7 @@ func mapServerError(c fiber.Ctx, err error) error {
 	case errors.Is(err, server.ErrDescriptionLength):
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, err.Error())
 	default:
-		log.Error().Err(err).Str("handler", "server").Msg("unhandled server service error")
+		h.log.Error().Err(err).Str("handler", "server").Msg("unhandled server service error")
 		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
 	}
 }

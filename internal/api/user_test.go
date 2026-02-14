@@ -8,6 +8,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 
 	"github.com/uncord-chat/uncord-server/internal/user"
@@ -30,7 +31,7 @@ func seedUser(repo *fakeRepo) *user.User {
 
 func testUserApp(t *testing.T, repo *fakeRepo, userID uuid.UUID) *fiber.App {
 	t.Helper()
-	handler := NewUserHandler(repo)
+	handler := NewUserHandler(repo, zerolog.Nop())
 	app := fiber.New()
 
 	// Inject userID into Locals to simulate RequireAuth middleware.

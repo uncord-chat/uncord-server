@@ -10,6 +10,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 
 	"github.com/uncord-chat/uncord-server/internal/server"
@@ -66,7 +67,7 @@ func seedServerConfig() *fakeServerRepo {
 
 func testServerApp(t *testing.T, repo server.Repository, userID uuid.UUID) *fiber.App {
 	t.Helper()
-	handler := NewServerHandler(repo)
+	handler := NewServerHandler(repo, zerolog.Nop())
 	app := fiber.New()
 
 	app.Use(func(c fiber.Ctx) error {

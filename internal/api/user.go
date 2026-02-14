@@ -5,7 +5,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 	"github.com/uncord-chat/uncord-protocol/models"
 
@@ -16,11 +16,12 @@ import (
 // UserHandler serves user profile endpoints.
 type UserHandler struct {
 	users user.Repository
+	log   zerolog.Logger
 }
 
 // NewUserHandler creates a new user handler.
-func NewUserHandler(users user.Repository) *UserHandler {
-	return &UserHandler{users: users}
+func NewUserHandler(users user.Repository, logger zerolog.Logger) *UserHandler {
+	return &UserHandler{users: users, log: logger}
 }
 
 // GetMe handles GET /api/v1/users/@me.
@@ -32,7 +33,7 @@ func (h *UserHandler) GetMe(c fiber.Ctx) error {
 
 	u, err := h.users.GetByID(c, userID)
 	if err != nil {
-		return mapUserError(c, err)
+		return h.mapUserError(c, err)
 	}
 
 	return httputil.Success(c, toUserModel(u))
@@ -51,7 +52,7 @@ func (h *UserHandler) UpdateMe(c fiber.Ctx) error {
 	}
 
 	if err := user.ValidateDisplayName(body.DisplayName); err != nil {
-		return mapUserError(c, err)
+		return h.mapUserError(c, err)
 	}
 
 	u, err := h.users.Update(c, userID, user.UpdateParams{
@@ -59,7 +60,7 @@ func (h *UserHandler) UpdateMe(c fiber.Ctx) error {
 		AvatarKey:   body.AvatarKey,
 	})
 	if err != nil {
-		return mapUserError(c, err)
+		return h.mapUserError(c, err)
 	}
 
 	return httputil.Success(c, toUserModel(u))
@@ -78,14 +79,14 @@ func toUserModel(u *user.User) models.User {
 }
 
 // mapUserError converts user-layer errors to appropriate HTTP responses.
-func mapUserError(c fiber.Ctx, err error) error {
+func (h *UserHandler) mapUserError(c fiber.Ctx, err error) error {
 	switch {
 	case errors.Is(err, user.ErrNotFound):
 		return httputil.Fail(c, fiber.StatusNotFound, apierrors.NotFound, "User not found")
 	case errors.Is(err, user.ErrDisplayNameLength):
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, err.Error())
 	default:
-		log.Error().Err(err).Str("handler", "user").Msg("unhandled user service error")
+		h.log.Error().Err(err).Str("handler", "user").Msg("unhandled user service error")
 		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
 	}
 }
