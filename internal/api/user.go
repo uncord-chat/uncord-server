@@ -56,9 +56,31 @@ func (h *UserHandler) UpdateMe(c fiber.Ctx) error {
 		return h.mapUserError(c, err)
 	}
 
+	user.NormalizePronouns(body.Pronouns)
+	if err := user.ValidatePronouns(body.Pronouns); err != nil {
+		return h.mapUserError(c, err)
+	}
+
+	user.NormalizeAbout(body.About)
+	if err := user.ValidateAbout(body.About); err != nil {
+		return h.mapUserError(c, err)
+	}
+
+	if err := user.ValidateThemeColour(body.ThemeColourPrimary); err != nil {
+		return h.mapUserError(c, err)
+	}
+	if err := user.ValidateThemeColour(body.ThemeColourSecondary); err != nil {
+		return h.mapUserError(c, err)
+	}
+
 	u, err := h.users.Update(c, userID, user.UpdateParams{
-		DisplayName: body.DisplayName,
-		AvatarKey:   body.AvatarKey,
+		DisplayName:          body.DisplayName,
+		AvatarKey:            body.AvatarKey,
+		Pronouns:             body.Pronouns,
+		BannerKey:            body.BannerKey,
+		About:                body.About,
+		ThemeColourPrimary:   body.ThemeColourPrimary,
+		ThemeColourSecondary: body.ThemeColourSecondary,
 	})
 	if err != nil {
 		return h.mapUserError(c, err)
@@ -70,13 +92,18 @@ func (h *UserHandler) UpdateMe(c fiber.Ctx) error {
 // toUserModel converts the internal user struct to the protocol response type.
 func toUserModel(u *user.User) models.User {
 	return models.User{
-		ID:            u.ID.String(),
-		Email:         u.Email,
-		Username:      u.Username,
-		DisplayName:   u.DisplayName,
-		AvatarKey:     u.AvatarKey,
-		MFAEnabled:    u.MFAEnabled,
-		EmailVerified: u.EmailVerified,
+		ID:                   u.ID.String(),
+		Email:                u.Email,
+		Username:             u.Username,
+		DisplayName:          u.DisplayName,
+		AvatarKey:            u.AvatarKey,
+		Pronouns:             u.Pronouns,
+		BannerKey:            u.BannerKey,
+		About:                u.About,
+		ThemeColourPrimary:   u.ThemeColourPrimary,
+		ThemeColourSecondary: u.ThemeColourSecondary,
+		MFAEnabled:           u.MFAEnabled,
+		EmailVerified:        u.EmailVerified,
 	}
 }
 
@@ -86,6 +113,12 @@ func (h *UserHandler) mapUserError(c fiber.Ctx, err error) error {
 	case errors.Is(err, user.ErrNotFound):
 		return httputil.Fail(c, fiber.StatusNotFound, apierrors.NotFound, "User not found")
 	case errors.Is(err, user.ErrDisplayNameLength):
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, err.Error())
+	case errors.Is(err, user.ErrPronounsLength):
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, err.Error())
+	case errors.Is(err, user.ErrAboutLength):
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, err.Error())
+	case errors.Is(err, user.ErrThemeColourRange):
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, err.Error())
 	default:
 		h.log.Error().Err(err).Str("handler", "user").Msg("unhandled user service error")

@@ -256,3 +256,207 @@ func TestUpdateMe_AvatarKey(t *testing.T) {
 		t.Errorf("avatar_key = %v, want %q", userResp.AvatarKey, "abc123")
 	}
 }
+
+// --- Pronouns tests ---
+
+func TestUpdateMe_PronounsTooLong(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepo()
+	u := seedUser(repo)
+	app := testUserApp(t, repo, u.ID)
+
+	longPronouns := strings.Repeat("a", 41)
+	resp := doReq(t, app, jsonReq(http.MethodPatch, "/@me", `{"pronouns":"`+longPronouns+`"}`))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusBadRequest)
+	}
+	env := parseError(t, body)
+	if env.Error.Code != string(apierrors.ValidationError) {
+		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.ValidationError)
+	}
+}
+
+func TestUpdateMe_PronounsEmpty(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepo()
+	u := seedUser(repo)
+	app := testUserApp(t, repo, u.ID)
+
+	resp := doReq(t, app, jsonReq(http.MethodPatch, "/@me", `{"pronouns":"   "}`))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusBadRequest)
+	}
+	env := parseError(t, body)
+	if env.Error.Code != string(apierrors.ValidationError) {
+		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.ValidationError)
+	}
+}
+
+func TestUpdateMe_PronounsSuccess(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepo()
+	u := seedUser(repo)
+	app := testUserApp(t, repo, u.ID)
+
+	resp := doReq(t, app, jsonReq(http.MethodPatch, "/@me", `{"pronouns":"they/them"}`))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusOK {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusOK)
+	}
+
+	env := parseSuccess(t, body)
+	var userResp struct {
+		Pronouns *string `json:"pronouns"`
+	}
+	if err := json.Unmarshal(env.Data, &userResp); err != nil {
+		t.Fatalf("unmarshal user response: %v", err)
+	}
+	if userResp.Pronouns == nil || *userResp.Pronouns != "they/them" {
+		t.Errorf("pronouns = %v, want %q", userResp.Pronouns, "they/them")
+	}
+}
+
+// --- About tests ---
+
+func TestUpdateMe_AboutTooLong(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepo()
+	u := seedUser(repo)
+	app := testUserApp(t, repo, u.ID)
+
+	longAbout := strings.Repeat("a", 191)
+	resp := doReq(t, app, jsonReq(http.MethodPatch, "/@me", `{"about":"`+longAbout+`"}`))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusBadRequest)
+	}
+	env := parseError(t, body)
+	if env.Error.Code != string(apierrors.ValidationError) {
+		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.ValidationError)
+	}
+}
+
+func TestUpdateMe_AboutSuccess(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepo()
+	u := seedUser(repo)
+	app := testUserApp(t, repo, u.ID)
+
+	resp := doReq(t, app, jsonReq(http.MethodPatch, "/@me", `{"about":"Hello, world!"}`))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusOK {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusOK)
+	}
+
+	env := parseSuccess(t, body)
+	var userResp struct {
+		About *string `json:"about"`
+	}
+	if err := json.Unmarshal(env.Data, &userResp); err != nil {
+		t.Fatalf("unmarshal user response: %v", err)
+	}
+	if userResp.About == nil || *userResp.About != "Hello, world!" {
+		t.Errorf("about = %v, want %q", userResp.About, "Hello, world!")
+	}
+}
+
+// --- Theme colour tests ---
+
+func TestUpdateMe_ThemeColourNegative(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepo()
+	u := seedUser(repo)
+	app := testUserApp(t, repo, u.ID)
+
+	resp := doReq(t, app, jsonReq(http.MethodPatch, "/@me", `{"theme_colour_primary":-1}`))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusBadRequest)
+	}
+	env := parseError(t, body)
+	if env.Error.Code != string(apierrors.ValidationError) {
+		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.ValidationError)
+	}
+}
+
+func TestUpdateMe_ThemeColourTooLarge(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepo()
+	u := seedUser(repo)
+	app := testUserApp(t, repo, u.ID)
+
+	resp := doReq(t, app, jsonReq(http.MethodPatch, "/@me", `{"theme_colour_secondary":16777216}`))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusBadRequest)
+	}
+	env := parseError(t, body)
+	if env.Error.Code != string(apierrors.ValidationError) {
+		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.ValidationError)
+	}
+}
+
+func TestUpdateMe_ThemeColourSuccess(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepo()
+	u := seedUser(repo)
+	app := testUserApp(t, repo, u.ID)
+
+	resp := doReq(t, app, jsonReq(http.MethodPatch, "/@me", `{"theme_colour_primary":16711680,"theme_colour_secondary":255}`))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusOK {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusOK)
+	}
+
+	env := parseSuccess(t, body)
+	var userResp struct {
+		ThemeColourPrimary   *int `json:"theme_colour_primary"`
+		ThemeColourSecondary *int `json:"theme_colour_secondary"`
+	}
+	if err := json.Unmarshal(env.Data, &userResp); err != nil {
+		t.Fatalf("unmarshal user response: %v", err)
+	}
+	if userResp.ThemeColourPrimary == nil || *userResp.ThemeColourPrimary != 16711680 {
+		t.Errorf("theme_colour_primary = %v, want 16711680", userResp.ThemeColourPrimary)
+	}
+	if userResp.ThemeColourSecondary == nil || *userResp.ThemeColourSecondary != 255 {
+		t.Errorf("theme_colour_secondary = %v, want 255", userResp.ThemeColourSecondary)
+	}
+}
+
+// --- Banner key tests ---
+
+func TestUpdateMe_BannerKey(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepo()
+	u := seedUser(repo)
+	app := testUserApp(t, repo, u.ID)
+
+	resp := doReq(t, app, jsonReq(http.MethodPatch, "/@me", `{"banner_key":"banner_abc123"}`))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusOK {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusOK)
+	}
+
+	env := parseSuccess(t, body)
+	var userResp struct {
+		BannerKey *string `json:"banner_key"`
+	}
+	if err := json.Unmarshal(env.Data, &userResp); err != nil {
+		t.Fatalf("unmarshal user response: %v", err)
+	}
+	if userResp.BannerKey == nil || *userResp.BannerKey != "banner_abc123" {
+		t.Errorf("banner_key = %v, want %q", userResp.BannerKey, "banner_abc123")
+	}
+}

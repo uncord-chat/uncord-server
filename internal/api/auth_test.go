@@ -87,6 +87,21 @@ func (r *fakeRepo) Update(_ context.Context, id uuid.UUID, params user.UpdatePar
 			if params.AvatarKey != nil {
 				c.AvatarKey = params.AvatarKey
 			}
+			if params.Pronouns != nil {
+				c.Pronouns = params.Pronouns
+			}
+			if params.BannerKey != nil {
+				c.BannerKey = params.BannerKey
+			}
+			if params.About != nil {
+				c.About = params.About
+			}
+			if params.ThemeColourPrimary != nil {
+				c.ThemeColourPrimary = params.ThemeColourPrimary
+			}
+			if params.ThemeColourSecondary != nil {
+				c.ThemeColourSecondary = params.ThemeColourSecondary
+			}
 			cpy := c.User
 			return &cpy, nil
 		}

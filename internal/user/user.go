@@ -16,17 +16,25 @@ var (
 	ErrAlreadyExists     = errors.New("email or username already taken")
 	ErrInvalidToken      = errors.New("invalid or expired verification token")
 	ErrDisplayNameLength = errors.New("display name must be between 1 and 32 characters")
+	ErrPronounsLength    = errors.New("pronouns must be between 1 and 40 characters")
+	ErrAboutLength       = errors.New("about must be between 1 and 190 characters")
+	ErrThemeColourRange  = errors.New("theme colour must be between 0 and 16777215")
 )
 
 // User holds the core identity fields read from the database.
 type User struct {
-	ID            uuid.UUID
-	Email         string
-	Username      string
-	DisplayName   *string
-	AvatarKey     *string
-	MFAEnabled    bool
-	EmailVerified bool
+	ID                   uuid.UUID
+	Email                string
+	Username             string
+	DisplayName          *string
+	AvatarKey            *string
+	Pronouns             *string
+	BannerKey            *string
+	About                *string
+	ThemeColourPrimary   *int
+	ThemeColourSecondary *int
+	MFAEnabled           bool
+	EmailVerified        bool
 }
 
 // Credentials extends User with the password hash and optional MFA secret. Only repository methods that serve the
@@ -56,8 +64,13 @@ type CreateParams struct {
 
 // UpdateParams groups the optional fields for updating a user profile.
 type UpdateParams struct {
-	DisplayName *string
-	AvatarKey   *string
+	DisplayName          *string
+	AvatarKey            *string
+	Pronouns             *string
+	BannerKey            *string
+	About                *string
+	ThemeColourPrimary   *int
+	ThemeColourSecondary *int
 }
 
 // NormalizeDisplayName trims surrounding whitespace from the pointed-to value. Nil values are left untouched.
@@ -75,6 +88,55 @@ func ValidateDisplayName(name *string) error {
 	}
 	if n := utf8.RuneCountInString(*name); n < 1 || n > 32 {
 		return ErrDisplayNameLength
+	}
+	return nil
+}
+
+// NormalizePronouns trims surrounding whitespace from the pointed-to value. Nil values are left untouched.
+func NormalizePronouns(p *string) {
+	if p == nil {
+		return
+	}
+	*p = strings.TrimSpace(*p)
+}
+
+// ValidatePronouns checks that a non-nil pronouns string is between 1 and 40 Unicode characters.
+func ValidatePronouns(p *string) error {
+	if p == nil {
+		return nil
+	}
+	if n := utf8.RuneCountInString(*p); n < 1 || n > 40 {
+		return ErrPronounsLength
+	}
+	return nil
+}
+
+// NormalizeAbout trims surrounding whitespace from the pointed-to value. Nil values are left untouched.
+func NormalizeAbout(a *string) {
+	if a == nil {
+		return
+	}
+	*a = strings.TrimSpace(*a)
+}
+
+// ValidateAbout checks that a non-nil about string is between 1 and 190 Unicode characters.
+func ValidateAbout(a *string) error {
+	if a == nil {
+		return nil
+	}
+	if n := utf8.RuneCountInString(*a); n < 1 || n > 190 {
+		return ErrAboutLength
+	}
+	return nil
+}
+
+// ValidateThemeColour checks that a non-nil theme colour is within the 24-bit RGB range (0 to 16777215).
+func ValidateThemeColour(colour *int) error {
+	if colour == nil {
+		return nil
+	}
+	if *colour < 0 || *colour > 0xFFFFFF {
+		return ErrThemeColourRange
 	}
 	return nil
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -11,6 +13,45 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
 )
+
+// selectColumns lists the columns returned by queries that produce a *User. Every method that scans into a User must
+// select these columns in this exact order.
+const selectColumns = `id, email, username, display_name, avatar_key, pronouns, banner_key, about,
+	theme_colour_primary, theme_colour_secondary, mfa_enabled, email_verified`
+
+// selectCredentialsColumns lists the columns returned by queries that produce a *Credentials. The order must match
+// scanCredentials.
+const selectCredentialsColumns = `id, email, password_hash, username, display_name, avatar_key, pronouns, banner_key,
+	about, theme_colour_primary, theme_colour_secondary, mfa_enabled, mfa_secret, email_verified`
+
+// scanUser scans a single row into a *User. The row must contain the columns listed in selectColumns.
+func scanUser(row pgx.Row) (*User, error) {
+	var u User
+	err := row.Scan(
+		&u.ID, &u.Email, &u.Username, &u.DisplayName, &u.AvatarKey,
+		&u.Pronouns, &u.BannerKey, &u.About, &u.ThemeColourPrimary, &u.ThemeColourSecondary,
+		&u.MFAEnabled, &u.EmailVerified,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
+// scanCredentials scans a single row into a *Credentials. The row must contain the columns listed in
+// selectCredentialsColumns.
+func scanCredentials(row pgx.Row) (*Credentials, error) {
+	var c Credentials
+	err := row.Scan(
+		&c.ID, &c.Email, &c.PasswordHash, &c.Username, &c.DisplayName, &c.AvatarKey,
+		&c.Pronouns, &c.BannerKey, &c.About, &c.ThemeColourPrimary, &c.ThemeColourSecondary,
+		&c.MFAEnabled, &c.MFASecret, &c.EmailVerified,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
 
 // PGRepository implements Repository using PostgreSQL.
 type PGRepository struct {
@@ -70,55 +111,42 @@ func (r *PGRepository) Create(ctx context.Context, params CreateParams) (uuid.UU
 
 // GetByID returns the user matching the given ID.
 func (r *PGRepository) GetByID(ctx context.Context, id uuid.UUID) (*User, error) {
-	var u User
-	err := r.db.QueryRow(ctx,
-		`SELECT id, email, username, display_name, avatar_key, mfa_enabled, email_verified
-		 FROM users WHERE id = $1`,
-		id,
-	).Scan(&u.ID, &u.Email, &u.Username, &u.DisplayName, &u.AvatarKey, &u.MFAEnabled, &u.EmailVerified)
+	u, err := scanUser(r.db.QueryRow(ctx, `SELECT `+selectColumns+` FROM users WHERE id = $1`, id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("query user by id: %w", err)
 	}
-	return &u, nil
+	return u, nil
 }
 
 // GetByEmail returns the user with credentials matching the given email address. This is one of two methods that return
 // credentials, since it serves the authentication path.
 func (r *PGRepository) GetByEmail(ctx context.Context, email string) (*Credentials, error) {
-	var c Credentials
-	err := r.db.QueryRow(ctx,
-		`SELECT id, email, password_hash, username, display_name, avatar_key, mfa_enabled, mfa_secret, email_verified
-		 FROM users WHERE email = $1`,
-		email,
-	).Scan(&c.ID, &c.Email, &c.PasswordHash, &c.Username, &c.DisplayName, &c.AvatarKey, &c.MFAEnabled, &c.MFASecret, &c.EmailVerified)
+	c, err := scanCredentials(r.db.QueryRow(ctx,
+		`SELECT `+selectCredentialsColumns+` FROM users WHERE email = $1`, email))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("query user by email: %w", err)
 	}
-	return &c, nil
+	return c, nil
 }
 
 // GetCredentialsByID returns the user with credentials matching the given ID. Used by MFA flows that need the password
 // hash and MFA secret after ticket-based user identification.
 func (r *PGRepository) GetCredentialsByID(ctx context.Context, id uuid.UUID) (*Credentials, error) {
-	var c Credentials
-	err := r.db.QueryRow(ctx,
-		`SELECT id, email, password_hash, username, display_name, avatar_key, mfa_enabled, mfa_secret, email_verified
-		 FROM users WHERE id = $1`,
-		id,
-	).Scan(&c.ID, &c.Email, &c.PasswordHash, &c.Username, &c.DisplayName, &c.AvatarKey, &c.MFAEnabled, &c.MFASecret, &c.EmailVerified)
+	c, err := scanCredentials(r.db.QueryRow(ctx,
+		`SELECT `+selectCredentialsColumns+` FROM users WHERE id = $1`, id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("query credentials by id: %w", err)
 	}
-	return &c, nil
+	return c, nil
 }
 
 // VerifyEmail consumes a verification token and marks the user as verified, all within a single transaction.
@@ -191,42 +219,57 @@ func (r *PGRepository) UpdatePasswordHash(ctx context.Context, userID uuid.UUID,
 // Update applies the non-nil fields in params to the user row and returns the updated user. Returns ErrNotFound if no
 // row matches the given ID.
 func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdateParams) (*User, error) {
-	hasDisplayName := params.DisplayName != nil
-	hasAvatarKey := params.AvatarKey != nil
+	var setClauses []string
+	var args []any
+
+	if params.DisplayName != nil {
+		args = append(args, *params.DisplayName)
+		setClauses = append(setClauses, "display_name = $"+strconv.Itoa(len(args)))
+	}
+	if params.AvatarKey != nil {
+		args = append(args, *params.AvatarKey)
+		setClauses = append(setClauses, "avatar_key = $"+strconv.Itoa(len(args)))
+	}
+	if params.Pronouns != nil {
+		args = append(args, *params.Pronouns)
+		setClauses = append(setClauses, "pronouns = $"+strconv.Itoa(len(args)))
+	}
+	if params.BannerKey != nil {
+		args = append(args, *params.BannerKey)
+		setClauses = append(setClauses, "banner_key = $"+strconv.Itoa(len(args)))
+	}
+	if params.About != nil {
+		args = append(args, *params.About)
+		setClauses = append(setClauses, "about = $"+strconv.Itoa(len(args)))
+	}
+	if params.ThemeColourPrimary != nil {
+		args = append(args, *params.ThemeColourPrimary)
+		setClauses = append(setClauses, "theme_colour_primary = $"+strconv.Itoa(len(args)))
+	}
+	if params.ThemeColourSecondary != nil {
+		args = append(args, *params.ThemeColourSecondary)
+		setClauses = append(setClauses, "theme_colour_secondary = $"+strconv.Itoa(len(args)))
+	}
 
 	// No fields to update. Return the current row without issuing an UPDATE so the database trigger does not bump
 	// updated_at. A no-op PATCH should not alter the modification timestamp.
-	if !hasDisplayName && !hasAvatarKey {
+	if len(setClauses) == 0 {
 		return r.GetByID(ctx, id)
 	}
 
-	var query string
-	var args []any
-	switch {
-	case hasDisplayName && hasAvatarKey:
-		query = `UPDATE users SET display_name = $1, avatar_key = $2 WHERE id = $3
-			 RETURNING id, email, username, display_name, avatar_key, mfa_enabled, email_verified`
-		args = []any{*params.DisplayName, *params.AvatarKey, id}
-	case hasDisplayName:
-		query = `UPDATE users SET display_name = $1 WHERE id = $2
-			 RETURNING id, email, username, display_name, avatar_key, mfa_enabled, email_verified`
-		args = []any{*params.DisplayName, id}
-	default:
-		query = `UPDATE users SET avatar_key = $1 WHERE id = $2
-			 RETURNING id, email, username, display_name, avatar_key, mfa_enabled, email_verified`
-		args = []any{*params.AvatarKey, id}
-	}
+	args = append(args, id)
+	query := "UPDATE users SET " + strings.Join(setClauses, ", ") +
+		" WHERE id = $" + strconv.Itoa(len(args)) +
+		" RETURNING " + selectColumns
 
-	var u User
-	err := r.db.QueryRow(ctx, query, args...).
-		Scan(&u.ID, &u.Email, &u.Username, &u.DisplayName, &u.AvatarKey, &u.MFAEnabled, &u.EmailVerified)
+	u, err := scanUser(r.db.QueryRow(ctx, query, args...))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("update user: %w", err)
 	}
-	return &u, nil
+	return u, nil
 }
 
 // EnableMFA atomically sets the user's MFA secret and enabled flag, and inserts the initial set of recovery code

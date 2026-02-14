@@ -13,10 +13,11 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.8.0
+	github.com/pquerna/otp v1.5.0
 	github.com/pressly/goose/v3 v3.26.0
 	github.com/redis/go-redis/v9 v9.17.3
 	github.com/rs/zerolog v1.34.0
-	github.com/uncord-chat/uncord-protocol v0.2.3
+	github.com/uncord-chat/uncord-protocol v0.2.4
 )
 
 require (
@@ -34,7 +35,6 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
-	github.com/pquerna/otp v1.5.0 // indirect
 	github.com/sethvargo/go-retry v0.3.0 // indirect
 	github.com/tinylib/msgp v1.6.3 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect

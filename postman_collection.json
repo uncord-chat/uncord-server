@@ -367,7 +367,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"display_name\": \"New Display Name\"\n}"
+							"raw": "{\n  \"display_name\": \"New Display Name\",\n  \"avatar_key\": null,\n  \"pronouns\": \"they/them\",\n  \"banner_key\": null,\n  \"about\": \"Hello, world!\",\n  \"theme_colour_primary\": 16711680,\n  \"theme_colour_secondary\": 255\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/users/@me",

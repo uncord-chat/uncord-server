@@ -11,7 +11,7 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/auth"
 )
 
-//nolint:misspell // CSS property names (color, center) are not misspellings.
+//nolint:misspell // CSS property names (center) are not misspellings.
 var verifyTmpl = template.Must(template.New("verify").Parse(`<!DOCTYPE html>
 <html lang="en">
 <head>
