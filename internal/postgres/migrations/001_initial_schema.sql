@@ -193,6 +193,7 @@ CREATE TRIGGER set_updated_at BEFORE UPDATE ON roles
     FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
 
 CREATE UNIQUE INDEX idx_roles_position ON roles (position);
+CREATE UNIQUE INDEX idx_roles_everyone ON roles (is_everyone) WHERE is_everyone = true;
 
 -- Member Roles
 
