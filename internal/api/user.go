@@ -51,6 +51,7 @@ func (h *UserHandler) UpdateMe(c fiber.Ctx) error {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "Invalid request body")
 	}
 
+	user.NormalizeDisplayName(body.DisplayName)
 	if err := user.ValidateDisplayName(body.DisplayName); err != nil {
 		return h.mapUserError(c, err)
 	}

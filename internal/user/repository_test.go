@@ -99,6 +99,33 @@ func TestCreateParamsZeroValue(t *testing.T) {
 	}
 }
 
+func TestNormalizeDisplayName(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil is a no-op", func(t *testing.T) {
+		t.Parallel()
+		NormalizeDisplayName(nil) // must not panic
+	})
+
+	t.Run("trims surrounding whitespace", func(t *testing.T) {
+		t.Parallel()
+		name := ptr("  Bob  ")
+		NormalizeDisplayName(name)
+		if *name != "Bob" {
+			t.Errorf("expected trimmed value %q, got %q", "Bob", *name)
+		}
+	})
+
+	t.Run("leaves clean value unchanged", func(t *testing.T) {
+		t.Parallel()
+		name := ptr("Alice")
+		NormalizeDisplayName(name)
+		if *name != "Alice" {
+			t.Errorf("expected %q, got %q", "Alice", *name)
+		}
+	})
+}
+
 func TestValidateDisplayName(t *testing.T) {
 	t.Parallel()
 
@@ -112,8 +139,6 @@ func TestValidateDisplayName(t *testing.T) {
 		{"32 chars", ptr(strings.Repeat("a", 32)), false},
 		{"33 chars", ptr(strings.Repeat("a", 33)), true},
 		{"empty string", ptr(""), true},
-		{"whitespace only", ptr("   "), true},
-		{"trimmed to valid", ptr("  Bob  "), false},
 		{"32 multibyte runes", ptr(strings.Repeat("🎮", 32)), false},
 		{"33 multibyte runes", ptr(strings.Repeat("🎮", 33)), true},
 	}
@@ -130,15 +155,29 @@ func TestValidateDisplayName(t *testing.T) {
 			}
 		})
 	}
+}
 
-	t.Run("trims whitespace in place", func(t *testing.T) {
+func TestNormalizeAndValidateDisplayName(t *testing.T) {
+	t.Parallel()
+
+	t.Run("whitespace only rejects after normalize", func(t *testing.T) {
+		t.Parallel()
+		name := ptr("   ")
+		NormalizeDisplayName(name)
+		if err := ValidateDisplayName(name); !errors.Is(err, ErrDisplayNameLength) {
+			t.Errorf("expected ErrDisplayNameLength after normalizing whitespace-only input, got %v", err)
+		}
+	})
+
+	t.Run("padded value passes after normalize", func(t *testing.T) {
 		t.Parallel()
 		name := ptr("  Bob  ")
+		NormalizeDisplayName(name)
 		if err := ValidateDisplayName(name); err != nil {
-			t.Fatalf("unexpected error: %v", err)
+			t.Errorf("unexpected error: %v", err)
 		}
 		if *name != "Bob" {
-			t.Errorf("expected trimmed value %q, got %q", "Bob", *name)
+			t.Errorf("expected %q, got %q", "Bob", *name)
 		}
 	})
 }
