@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 	"github.com/uncord-chat/uncord-protocol/models"
@@ -133,6 +134,28 @@ func (h *AuthHandler) VerifyEmail(c fiber.Ctx) error {
 	return httputil.Success(c, models.MessageResponse{
 		Message: "Email verified successfully",
 	})
+}
+
+// VerifyPassword handles POST /api/v1/auth/verify-password.
+func (h *AuthHandler) VerifyPassword(c fiber.Ctx) error {
+	userID, ok := c.Locals("userID").(uuid.UUID)
+	if !ok {
+		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	}
+
+	var body models.VerifyPasswordRequest
+	if err := c.Bind().Body(&body); err != nil {
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "Invalid request body")
+	}
+	if body.Password == "" {
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "password is required")
+	}
+
+	if err := h.auth.VerifyUserPassword(c, userID, body.Password); err != nil {
+		return h.mapAuthError(c, err)
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 // mapAuthError converts auth-layer errors to appropriate HTTP responses.

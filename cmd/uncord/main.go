@@ -333,6 +333,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 	authGroup.Post("/refresh", authHandler.Refresh)
 	authGroup.Post("/verify-email", authHandler.VerifyEmail)
 	authGroup.Post("/mfa/verify", authHandler.MFAVerify)
+	authGroup.Post("/verify-password", auth.RequireAuth(s.cfg.JWTSecret, s.cfg.ServerURL), authHandler.VerifyPassword)
 
 	// User profile routes (authenticated, no permission checks)
 	userHandler := api.NewUserHandler(s.userRepo, log.Logger)

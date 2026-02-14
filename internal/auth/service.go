@@ -521,6 +521,26 @@ func (s *Service) RegenerateRecoveryCodes(ctx context.Context, userID uuid.UUID,
 	return codes, nil
 }
 
+// VerifyUserPassword confirms that the provided password matches the stored hash for the given user. It is used by the
+// verify-password endpoint to let clients gate sensitive workflows behind a password prompt without performing any
+// mutation.
+func (s *Service) VerifyUserPassword(ctx context.Context, userID uuid.UUID, password string) error {
+	creds, err := s.users.GetCredentialsByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("get credentials for password verification: %w", err)
+	}
+
+	match, err := VerifyPassword(password, creds.PasswordHash)
+	if err != nil {
+		return fmt.Errorf("verify password: %w", err)
+	}
+	if !match {
+		return ErrInvalidCredentials
+	}
+
+	return nil
+}
+
 // completeMFALogin issues tokens and builds an AuthResult with MFAEnabled set to true.
 func (s *Service) completeMFALogin(ctx context.Context, creds *user.Credentials) (*AuthResult, error) {
 	tokens, err := s.issueTokens(ctx, creds.ID)

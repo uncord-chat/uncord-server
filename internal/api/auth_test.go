@@ -551,6 +551,107 @@ func TestVerifyEmailHandler_Success(t *testing.T) {
 	}
 }
 
+// --- VerifyPassword handler tests ---
+
+// testVerifyPasswordApp creates a Fiber app with simulated auth middleware and the verify-password route.
+func testVerifyPasswordApp(t *testing.T) *fiber.App {
+	t.Helper()
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+
+	bl := disposable.NewBlocklist("", false, zerolog.Nop())
+	repo := newFakeRepo()
+	svc, err := auth.NewService(repo, rdb, testAuthConfig(), bl, nil, zerolog.Nop())
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	result, err := svc.Register(t.Context(), auth.RegisterRequest{
+		Email:    "verify@example.com",
+		Username: "verifyuser",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	userID, err := uuid.Parse(result.User.ID)
+	if err != nil {
+		t.Fatalf("Parse user ID: %v", err)
+	}
+
+	handler := NewAuthHandler(svc, zerolog.Nop())
+
+	app := fiber.New()
+	app.Use(func(c fiber.Ctx) error {
+		c.Locals("userID", userID)
+		return c.Next()
+	})
+	app.Post("/verify-password", handler.VerifyPassword)
+
+	return app
+}
+
+func TestVerifyPasswordHandler_InvalidJSON(t *testing.T) {
+	t.Parallel()
+	app := testVerifyPasswordApp(t)
+
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/verify-password", "not json"))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusBadRequest)
+	}
+	env := parseError(t, body)
+	if env.Error.Code != string(apierrors.InvalidBody) {
+		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.InvalidBody)
+	}
+}
+
+func TestVerifyPasswordHandler_MissingPassword(t *testing.T) {
+	t.Parallel()
+	app := testVerifyPasswordApp(t)
+
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/verify-password", `{}`))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusBadRequest)
+	}
+	env := parseError(t, body)
+	if env.Error.Code != string(apierrors.InvalidBody) {
+		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.InvalidBody)
+	}
+}
+
+func TestVerifyPasswordHandler_WrongPassword(t *testing.T) {
+	t.Parallel()
+	app := testVerifyPasswordApp(t)
+
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/verify-password", `{"password":"wrongpassword"}`))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusUnauthorized)
+	}
+	env := parseError(t, body)
+	if env.Error.Code != string(apierrors.InvalidCredentials) {
+		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.InvalidCredentials)
+	}
+}
+
+func TestVerifyPasswordHandler_Success(t *testing.T) {
+	t.Parallel()
+	app := testVerifyPasswordApp(t)
+
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/verify-password", `{"password":"strongpassword"}`))
+	_ = readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusNoContent)
+	}
+}
+
 // --- MFA verify handler tests ---
 
 func TestMFAVerifyHandler_InvalidJSON(t *testing.T) {

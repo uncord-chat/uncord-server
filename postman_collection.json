@@ -213,6 +213,24 @@
 					}
 				},
 				{
+					"name": "Verify Password",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"password\": \"SecurePass123!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/verify-password",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "verify-password"]
+						}
+					}
+				},
+				{
 					"name": "MFA Verify",
 					"event": [
 						{
