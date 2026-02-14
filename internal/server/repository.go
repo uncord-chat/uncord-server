@@ -43,25 +43,21 @@ func (r *PGRepository) Get(ctx context.Context) (*Config, error) {
 func (r *PGRepository) Update(ctx context.Context, params UpdateParams) (*Config, error) {
 	setClauses := make([]string, 0, 4)
 	args := make([]any, 0, 4)
-	argPos := 1
 
 	if params.Name != nil {
-		setClauses = append(setClauses, fmt.Sprintf("name = $%d", argPos))
+		setClauses = append(setClauses, fmt.Sprintf("name = $%d", len(args)+1))
 		args = append(args, *params.Name)
-		argPos++
 	}
 	if params.Description != nil {
-		setClauses = append(setClauses, fmt.Sprintf("description = $%d", argPos))
+		setClauses = append(setClauses, fmt.Sprintf("description = $%d", len(args)+1))
 		args = append(args, *params.Description)
-		argPos++
 	}
 	if params.IconKey != nil {
-		setClauses = append(setClauses, fmt.Sprintf("icon_key = $%d", argPos))
+		setClauses = append(setClauses, fmt.Sprintf("icon_key = $%d", len(args)+1))
 		args = append(args, *params.IconKey)
-		argPos++
 	}
 	if params.BannerKey != nil {
-		setClauses = append(setClauses, fmt.Sprintf("banner_key = $%d", argPos))
+		setClauses = append(setClauses, fmt.Sprintf("banner_key = $%d", len(args)+1))
 		args = append(args, *params.BannerKey)
 	}
 

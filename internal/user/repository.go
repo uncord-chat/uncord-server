@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -174,33 +173,31 @@ func (r *PGRepository) UpdatePasswordHash(ctx context.Context, userID uuid.UUID,
 // Update applies the non-nil fields in params to the user row and returns the updated user. Returns ErrNotFound if no
 // row matches the given ID.
 func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdateParams) (*User, error) {
-	setClauses := make([]string, 0, 2)
-	args := make([]any, 0, 3)
-	argPos := 1
-
-	if params.DisplayName != nil {
-		setClauses = append(setClauses, fmt.Sprintf("display_name = $%d", argPos))
-		args = append(args, *params.DisplayName)
-		argPos++
-	}
-	if params.AvatarKey != nil {
-		setClauses = append(setClauses, fmt.Sprintf("avatar_key = $%d", argPos))
-		args = append(args, *params.AvatarKey)
-		argPos++
-	}
+	hasDisplayName := params.DisplayName != nil
+	hasAvatarKey := params.AvatarKey != nil
 
 	// No fields to update. Return the current row without issuing an UPDATE so the database trigger does not bump
 	// updated_at. A no-op PATCH should not alter the modification timestamp.
-	if len(setClauses) == 0 {
+	if !hasDisplayName && !hasAvatarKey {
 		return r.GetByID(ctx, id)
 	}
 
-	query := fmt.Sprintf(
-		`UPDATE users SET %s WHERE id = $%d
-		 RETURNING id, email, username, display_name, avatar_key, mfa_enabled, email_verified`,
-		strings.Join(setClauses, ", "), argPos,
-	)
-	args = append(args, id)
+	var query string
+	var args []any
+	switch {
+	case hasDisplayName && hasAvatarKey:
+		query = `UPDATE users SET display_name = $1, avatar_key = $2 WHERE id = $3
+			 RETURNING id, email, username, display_name, avatar_key, mfa_enabled, email_verified`
+		args = []any{*params.DisplayName, *params.AvatarKey, id}
+	case hasDisplayName:
+		query = `UPDATE users SET display_name = $1 WHERE id = $2
+			 RETURNING id, email, username, display_name, avatar_key, mfa_enabled, email_verified`
+		args = []any{*params.DisplayName, id}
+	default:
+		query = `UPDATE users SET avatar_key = $1 WHERE id = $2
+			 RETURNING id, email, username, display_name, avatar_key, mfa_enabled, email_verified`
+		args = []any{*params.AvatarKey, id}
+	}
 
 	var u User
 	err := r.db.QueryRow(ctx, query, args...).
