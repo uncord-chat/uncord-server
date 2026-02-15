@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 	"github.com/uncord-chat/uncord-protocol/models"
@@ -27,11 +26,6 @@ func NewServerHandler(servers server.Repository, logger zerolog.Logger) *ServerH
 
 // Get handles GET /api/v1/server.
 func (h *ServerHandler) Get(c fiber.Ctx) error {
-	_, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
-	}
-
 	cfg, err := h.servers.Get(c)
 	if err != nil {
 		return h.mapServerError(c, err)
@@ -42,11 +36,6 @@ func (h *ServerHandler) Get(c fiber.Ctx) error {
 
 // Update handles PATCH /api/v1/server.
 func (h *ServerHandler) Update(c fiber.Ctx) error {
-	_, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
-	}
-
 	var body models.UpdateServerConfigRequest
 	if err := c.Bind().Body(&body); err != nil {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "Invalid request body")

@@ -28,11 +28,6 @@ func NewCategoryHandler(categories category.Repository, maxCategories int, logge
 
 // ListCategories handles GET /api/v1/server/categories.
 func (h *CategoryHandler) ListCategories(c fiber.Ctx) error {
-	_, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
-	}
-
 	cats, err := h.categories.List(c)
 	if err != nil {
 		h.log.Error().Err(err).Str("handler", "category").Msg("list categories failed")
