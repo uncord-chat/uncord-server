@@ -424,6 +424,19 @@
 			"name": "Server",
 			"item": [
 				{
+					"name": "Get Public Server Info",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/server/info",
+							"host": ["{{base_url}}"],
+							"path": ["server", "info"]
+						}
+					}
+				},
+				{
 					"name": "Get Server Config",
 					"request": {
 						"method": "GET",

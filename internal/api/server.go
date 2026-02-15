@@ -34,6 +34,20 @@ func (h *ServerHandler) Get(c fiber.Ctx) error {
 	return httputil.Success(c, toServerConfigModel(cfg))
 }
 
+// GetPublicInfo handles GET /api/v1/server/info (unauthenticated).
+func (h *ServerHandler) GetPublicInfo(c fiber.Ctx) error {
+	cfg, err := h.servers.Get(c)
+	if err != nil {
+		return h.mapServerError(c, err)
+	}
+
+	return httputil.Success(c, models.PublicServerInfo{
+		Name:        cfg.Name,
+		Description: cfg.Description,
+		IconKey:     cfg.IconKey,
+	})
+}
+
 // Update handles PATCH /api/v1/server.
 func (h *ServerHandler) Update(c fiber.Ctx) error {
 	var body models.UpdateServerConfigRequest

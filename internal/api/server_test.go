@@ -77,6 +77,76 @@ func testServerApp(t *testing.T, repo server.Repository, userID uuid.UUID) *fibe
 	return app
 }
 
+func testPublicServerInfoApp(t *testing.T, repo server.Repository) *fiber.App {
+	t.Helper()
+	handler := NewServerHandler(repo, zerolog.Nop())
+	app := fiber.New()
+	app.Get("/", handler.GetPublicInfo)
+	return app
+}
+
+// --- GetPublicInfo tests ---
+
+func TestGetPublicInfo_Success(t *testing.T) {
+	t.Parallel()
+	repo := seedServerConfig()
+	app := testPublicServerInfoApp(t, repo)
+
+	resp := doReq(t, app, jsonReq(http.MethodGet, "/", ""))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusOK {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusOK)
+	}
+
+	env := parseSuccess(t, body)
+	var info struct {
+		Name        string  `json:"name"`
+		Description string  `json:"description"`
+		IconKey     *string `json:"icon_key"`
+	}
+	if err := json.Unmarshal(env.Data, &info); err != nil {
+		t.Fatalf("unmarshal public info response: %v", err)
+	}
+	if info.Name != "Test Server" {
+		t.Errorf("name = %q, want %q", info.Name, "Test Server")
+	}
+	if info.Description != "A test server" {
+		t.Errorf("description = %q, want %q", info.Description, "A test server")
+	}
+	if info.IconKey == nil || *info.IconKey != "icon-abc" {
+		t.Errorf("icon_key = %v, want %q", info.IconKey, "icon-abc")
+	}
+
+	// Verify that privileged fields are absent from the response.
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(env.Data, &raw); err != nil {
+		t.Fatalf("unmarshal raw data: %v", err)
+	}
+	for _, key := range []string{"id", "owner_id", "banner_key", "created_at", "updated_at"} {
+		if _, ok := raw[key]; ok {
+			t.Errorf("response contains privileged field %q", key)
+		}
+	}
+}
+
+func TestGetPublicInfo_NotFound(t *testing.T) {
+	t.Parallel()
+	repo := &fakeServerRepo{}
+	app := testPublicServerInfoApp(t, repo)
+
+	resp := doReq(t, app, jsonReq(http.MethodGet, "/", ""))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusNotFound {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusNotFound)
+	}
+	env := parseError(t, body)
+	if env.Error.Code != string(apierrors.NotFound) {
+		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.NotFound)
+	}
+}
+
 // --- Get tests ---
 
 func TestGetServer_Unauthenticated(t *testing.T) {

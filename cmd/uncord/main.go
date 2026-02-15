@@ -464,6 +464,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 
 	// Server config routes (authenticated, PATCH requires ManageServer)
 	serverHandler := api.NewServerHandler(s.serverRepo, log.Logger)
+	app.Get("/api/v1/server/info", serverHandler.GetPublicInfo)
 	serverGroup := app.Group("/api/v1/server", auth.RequireAuth(s.cfg.JWTSecret, s.cfg.ServerURL))
 	serverGroup.Get("/", serverHandler.Get)
 	serverGroup.Patch("/", permission.RequireServerPermission(s.permResolver, permissions.ManageServer), serverHandler.Update)
