@@ -14,6 +14,7 @@ import (
 type InvalidationMessage struct {
 	UserID    *uuid.UUID `json:"user_id,omitempty"`
 	ChannelID *uuid.UUID `json:"channel_id,omitempty"`
+	All       bool       `json:"all,omitempty"`
 }
 
 // Publisher sends cache invalidation messages via Valkey pub/sub.
@@ -39,6 +40,12 @@ func (p *Publisher) InvalidateChannel(ctx context.Context, channelID uuid.UUID) 
 // InvalidateUserChannel publishes an invalidation for a specific user+channel pair.
 func (p *Publisher) InvalidateUserChannel(ctx context.Context, userID, channelID uuid.UUID) error {
 	return p.publish(ctx, InvalidationMessage{UserID: &userID, ChannelID: &channelID})
+}
+
+// InvalidateAll publishes an invalidation for all cached permission entries. This is used when a role's permissions
+// change, since any user holding that role could have different effective permissions in any channel.
+func (p *Publisher) InvalidateAll(ctx context.Context) error {
+	return p.publish(ctx, InvalidationMessage{All: true})
 }
 
 func (p *Publisher) publish(ctx context.Context, msg InvalidationMessage) error {
@@ -90,6 +97,8 @@ func (s *Subscriber) handleMessage(ctx context.Context, payload string) {
 
 	var err error
 	switch {
+	case msg.All:
+		err = s.cache.DeleteAll(ctx)
 	case msg.UserID != nil && msg.ChannelID != nil:
 		err = s.cache.DeleteExact(ctx, *msg.UserID, *msg.ChannelID)
 	case msg.UserID != nil:

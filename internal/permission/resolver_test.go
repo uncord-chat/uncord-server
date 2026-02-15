@@ -86,6 +86,7 @@ func (c *fakeCache) Set(_ context.Context, userID, channelID uuid.UUID, perm per
 func (c *fakeCache) DeleteByUser(_ context.Context, _ uuid.UUID) error    { return nil }
 func (c *fakeCache) DeleteByChannel(_ context.Context, _ uuid.UUID) error { return nil }
 func (c *fakeCache) DeleteExact(_ context.Context, _, _ uuid.UUID) error  { return nil }
+func (c *fakeCache) DeleteAll(_ context.Context) error                    { return nil }
 
 // --- Tests ---
 

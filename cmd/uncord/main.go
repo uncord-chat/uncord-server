@@ -35,6 +35,7 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/page"
 	"github.com/uncord-chat/uncord-server/internal/permission"
 	"github.com/uncord-chat/uncord-server/internal/postgres"
+	"github.com/uncord-chat/uncord-server/internal/role"
 	servercfg "github.com/uncord-chat/uncord-server/internal/server"
 	"github.com/uncord-chat/uncord-server/internal/typesense"
 	"github.com/uncord-chat/uncord-server/internal/user"
@@ -60,6 +61,7 @@ type server struct {
 	serverRepo    servercfg.Repository
 	channelRepo   channel.Repository
 	categoryRepo  category.Repository
+	roleRepo      role.Repository
 	permResolver  *permission.Resolver
 	permPublisher *permission.Publisher
 }
@@ -204,6 +206,7 @@ func run() error {
 	serverRepo := servercfg.NewPGRepository(db, log.Logger)
 	channelRepo := channel.NewPGRepository(db, log.Logger)
 	categoryRepo := category.NewPGRepository(db, log.Logger)
+	roleRepo := role.NewPGRepository(db, log.Logger)
 	authService, err := auth.NewService(userRepo, rdb, cfg, blocklist, emailSender, serverRepo, permPublisher, log.Logger)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create auth service")
@@ -267,6 +270,7 @@ func run() error {
 		serverRepo:    serverRepo,
 		channelRepo:   channelRepo,
 		categoryRepo:  categoryRepo,
+		roleRepo:      roleRepo,
 		authService:   authService,
 		permResolver:  permResolver,
 		permPublisher: permPublisher,
@@ -390,6 +394,19 @@ func (s *server) registerRoutes(app *fiber.App) {
 	categoryGroup.Delete("/:categoryID",
 		permission.RequireServerPermission(s.permResolver, permissions.ManageCategories),
 		categoryHandler.DeleteCategory)
+
+	// Role routes
+	roleHandler := api.NewRoleHandler(s.roleRepo, s.permPublisher, s.cfg.MaxRoles, log.Logger)
+	serverGroup.Get("/roles", roleHandler.ListRoles)
+	serverGroup.Post("/roles",
+		permission.RequireServerPermission(s.permResolver, permissions.ManageRoles),
+		roleHandler.CreateRole)
+	serverGroup.Patch("/roles/:roleID",
+		permission.RequireServerPermission(s.permResolver, permissions.ManageRoles),
+		roleHandler.UpdateRole)
+	serverGroup.Delete("/roles/:roleID",
+		permission.RequireServerPermission(s.permResolver, permissions.ManageRoles),
+		roleHandler.DeleteRole)
 
 	// Catch-all handler returns 404 for any request that does not match a defined route. Fiber v3 treats app.Use()
 	// middleware as route matches, so without this terminal handler the router considers unmatched requests "handled"

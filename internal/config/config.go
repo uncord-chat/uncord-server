@@ -72,6 +72,7 @@ type Config struct {
 	// Entity Limits
 	MaxChannels   int
 	MaxCategories int
+	MaxRoles      int
 
 	// SMTP
 	SMTPHost     string
@@ -146,6 +147,7 @@ func Load() (*Config, error) {
 
 		MaxChannels:   p.int("MAX_CHANNELS", 500),
 		MaxCategories: p.int("MAX_CATEGORIES", 50),
+		MaxRoles:      p.int("MAX_ROLES", 250),
 
 		SMTPHost:     envStr("SMTP_HOST", ""),
 		SMTPPort:     p.int("SMTP_PORT", 587),

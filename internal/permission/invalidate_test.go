@@ -20,6 +20,7 @@ type spyCache struct {
 	deleteByUserCalled    bool
 	deleteByChannelCalled bool
 	deleteExactCalled     bool
+	deleteAllCalled       bool
 	lastUserID            uuid.UUID
 	lastChannelID         uuid.UUID
 }
@@ -44,6 +45,10 @@ func (c *spyCache) DeleteExact(_ context.Context, userID, channelID uuid.UUID) e
 	c.deleteExactCalled = true
 	c.lastUserID = userID
 	c.lastChannelID = channelID
+	return nil
+}
+func (c *spyCache) DeleteAll(_ context.Context) error {
+	c.deleteAllCalled = true
 	return nil
 }
 
@@ -115,6 +120,21 @@ func TestHandleMessageMalformedJSON(t *testing.T) {
 	}
 }
 
+func TestHandleMessageAll(t *testing.T) {
+	t.Parallel()
+	cache := &spyCache{}
+	sub := &Subscriber{cache: cache, log: zerolog.Nop()}
+
+	sub.handleMessage(context.Background(), `{"all":true}`)
+
+	if !cache.deleteAllCalled {
+		t.Error("DeleteAll should be called")
+	}
+	if cache.deleteByUserCalled || cache.deleteByChannelCalled || cache.deleteExactCalled {
+		t.Error("only DeleteAll should be called")
+	}
+}
+
 func TestHandleMessageEmptyJSON(t *testing.T) {
 	t.Parallel()
 	cache := &spyCache{}
@@ -122,7 +142,7 @@ func TestHandleMessageEmptyJSON(t *testing.T) {
 
 	sub.handleMessage(context.Background(), "{}")
 
-	if cache.deleteByUserCalled || cache.deleteByChannelCalled || cache.deleteExactCalled {
+	if cache.deleteByUserCalled || cache.deleteByChannelCalled || cache.deleteExactCalled || cache.deleteAllCalled {
 		t.Error("no cache method should be called on empty JSON")
 	}
 }
@@ -134,6 +154,7 @@ type syncSpyCache struct {
 	deleteByUserCalled    bool
 	deleteByChannelCalled bool
 	deleteExactCalled     bool
+	deleteAllCalled       bool
 	lastUserID            uuid.UUID
 	lastChannelID         uuid.UUID
 }
@@ -164,6 +185,12 @@ func (c *syncSpyCache) DeleteExact(_ context.Context, userID, channelID uuid.UUI
 	c.deleteExactCalled = true
 	c.lastUserID = userID
 	c.lastChannelID = channelID
+	return nil
+}
+func (c *syncSpyCache) DeleteAll(_ context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.deleteAllCalled = true
 	return nil
 }
 

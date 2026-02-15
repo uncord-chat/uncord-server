@@ -196,7 +196,7 @@ CREATE UNIQUE INDEX idx_reactions_unique
 CREATE TABLE roles (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name            TEXT NOT NULL UNIQUE,
-    color           INTEGER NOT NULL DEFAULT 0,
+    colour          INTEGER NOT NULL DEFAULT 0,
     position        INTEGER NOT NULL,
     hoist           BOOLEAN NOT NULL DEFAULT false,
     permissions     BIGINT NOT NULL DEFAULT 0,  -- server-level bitfield

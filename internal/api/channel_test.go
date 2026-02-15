@@ -147,6 +147,7 @@ func (c *fakePermCache) Set(_ context.Context, _, _ uuid.UUID, _ permissions.Per
 func (c *fakePermCache) DeleteByUser(_ context.Context, _ uuid.UUID) error    { return nil }
 func (c *fakePermCache) DeleteByChannel(_ context.Context, _ uuid.UUID) error { return nil }
 func (c *fakePermCache) DeleteExact(_ context.Context, _, _ uuid.UUID) error  { return nil }
+func (c *fakePermCache) DeleteAll(_ context.Context) error                    { return nil }
 
 // denyViewPermStore returns a Store that denies ViewChannels for all users (no roles, not owner).
 type denyViewPermStore struct{}

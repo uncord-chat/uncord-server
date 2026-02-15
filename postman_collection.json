@@ -42,6 +42,10 @@
 		{
 			"key": "mfa_ticket",
 			"value": ""
+		},
+		{
+			"key": "role_id",
+			"value": ""
 		}
 	],
 	"item": [
@@ -596,6 +600,85 @@
 							"raw": "{{base_url}}/categories/{{category_id}}",
 							"host": ["{{base_url}}"],
 							"path": ["categories", "{{category_id}}"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Roles",
+			"item": [
+				{
+					"name": "List Roles",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/server/roles",
+							"host": ["{{base_url}}"],
+							"path": ["server", "roles"]
+						}
+					}
+				},
+				{
+					"name": "Create Role",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const data = pm.response.json().data;",
+									"    pm.collectionVariables.set('role_id', data.id);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Moderator\",\n  \"colour\": 3447003,\n  \"permissions\": 0,\n  \"hoist\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/server/roles",
+							"host": ["{{base_url}}"],
+							"path": ["server", "roles"]
+						}
+					}
+				},
+				{
+					"name": "Update Role",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Senior Moderator\",\n  \"colour\": 15158332,\n  \"permissions\": 8396931\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/server/roles/{{role_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["server", "roles", "{{role_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Delete Role",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/server/roles/{{role_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["server", "roles", "{{role_id}}"]
 						}
 					}
 				}

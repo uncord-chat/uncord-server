@@ -37,6 +37,7 @@ type Cache interface {
 	DeleteByUser(ctx context.Context, userID uuid.UUID) error
 	DeleteByChannel(ctx context.Context, channelID uuid.UUID) error
 	DeleteExact(ctx context.Context, userID, channelID uuid.UUID) error
+	DeleteAll(ctx context.Context) error
 }
 
 // ValkeyCache implements Cache using Valkey/Redis.
@@ -84,6 +85,10 @@ func (c *ValkeyCache) DeleteByChannel(ctx context.Context, channelID uuid.UUID) 
 
 func (c *ValkeyCache) DeleteExact(ctx context.Context, userID, channelID uuid.UUID) error {
 	return c.client.Del(ctx, cacheKey(userID, channelID)).Err()
+}
+
+func (c *ValkeyCache) DeleteAll(ctx context.Context) error {
+	return c.scanAndDelete(ctx, CachePrefix+":*")
 }
 
 func (c *ValkeyCache) scanAndDelete(ctx context.Context, pattern string) error {
