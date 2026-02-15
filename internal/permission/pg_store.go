@@ -73,6 +73,45 @@ func (s *PGStore) ChannelInfo(ctx context.Context, channelID uuid.UUID) (Channel
 	return info, nil
 }
 
+// Set upserts a permission override. If an override already exists for the given target and principal combination, the
+// allow and deny bitfields are updated. The full row is returned after the operation.
+func (s *PGStore) Set(ctx context.Context, targetType TargetType, targetID uuid.UUID, principalType PrincipalType, principalID uuid.UUID, allow, deny permissions.Permission) (*OverrideRow, error) {
+	var row OverrideRow
+	var targetTypeStr, principalTypeStr string
+	var allowVal, denyVal int64
+	err := s.db.QueryRow(ctx, `
+		INSERT INTO permission_overrides (target_type, target_id, principal_type, principal_id, allow, deny)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (target_type, target_id, principal_type, principal_id)
+		DO UPDATE SET allow = EXCLUDED.allow, deny = EXCLUDED.deny, updated_at = NOW()
+		RETURNING id, target_type, target_id, principal_type, principal_id, allow, deny, created_at, updated_at
+	`, string(targetType), targetID, string(principalType), principalID, int64(allow), int64(deny),
+	).Scan(&row.ID, &targetTypeStr, &row.TargetID, &principalTypeStr, &row.PrincipalID, &allowVal, &denyVal, &row.CreatedAt, &row.UpdatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("upsert override: %w", err)
+	}
+	row.TargetType = TargetType(targetTypeStr)
+	row.PrincipalType = PrincipalType(principalTypeStr)
+	row.Allow = permissions.Permission(allowVal)
+	row.Deny = permissions.Permission(denyVal)
+	return &row, nil
+}
+
+// Delete removes a permission override. Returns ErrOverrideNotFound if no matching row exists.
+func (s *PGStore) Delete(ctx context.Context, targetType TargetType, targetID uuid.UUID, principalType PrincipalType, principalID uuid.UUID) error {
+	tag, err := s.db.Exec(ctx,
+		"DELETE FROM permission_overrides WHERE target_type = $1 AND target_id = $2 AND principal_type = $3 AND principal_id = $4",
+		string(targetType), targetID, string(principalType), principalID,
+	)
+	if err != nil {
+		return fmt.Errorf("delete override: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrOverrideNotFound
+	}
+	return nil
+}
+
 // Overrides returns all permission overrides for the given target (channel or category).
 func (s *PGStore) Overrides(ctx context.Context, targetType TargetType, targetID uuid.UUID) ([]Override, error) {
 	rows, err := s.db.Query(ctx,

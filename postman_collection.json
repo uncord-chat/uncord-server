@@ -46,6 +46,10 @@
 		{
 			"key": "role_id",
 			"value": ""
+		},
+		{
+			"key": "override_target_id",
+			"value": ""
 		}
 	],
 	"item": [
@@ -679,6 +683,56 @@
 							"raw": "{{base_url}}/server/roles/{{role_id}}",
 							"host": ["{{base_url}}"],
 							"path": ["server", "roles", "{{role_id}}"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Permissions",
+			"item": [
+				{
+					"name": "Set Permission Override",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"type\": \"role\",\n  \"allow\": 1,\n  \"deny\": 0\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/channels/{{channel_id}}/overrides/{{override_target_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["channels", "{{channel_id}}", "overrides", "{{override_target_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Remove Permission Override",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/channels/{{channel_id}}/overrides/{{override_target_id}}?type=role",
+							"host": ["{{base_url}}"],
+							"path": ["channels", "{{channel_id}}", "overrides", "{{override_target_id}}"],
+							"query": [
+								{ "key": "type", "value": "role" }
+							]
+						}
+					}
+				},
+				{
+					"name": "Get My Permissions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/channels/{{channel_id}}/permissions/@me",
+							"host": ["{{base_url}}"],
+							"path": ["channels", "{{channel_id}}", "permissions", "@me"]
 						}
 					}
 				}

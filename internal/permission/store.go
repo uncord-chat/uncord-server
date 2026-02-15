@@ -2,10 +2,15 @@ package permission
 
 import (
 	"context"
+	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/uncord-chat/uncord-protocol/permissions"
 )
+
+// ErrOverrideNotFound is returned when a permission override does not exist.
+var ErrOverrideNotFound = errors.New("permission override not found")
 
 // TargetType identifies whether a permission override applies to a channel or category.
 type TargetType string
@@ -41,6 +46,25 @@ type ChannelInfo struct {
 type RolePermEntry struct {
 	RoleID      uuid.UUID
 	Permissions permissions.Permission
+}
+
+// OverrideRow represents a full permission override row from the database.
+type OverrideRow struct {
+	ID            uuid.UUID
+	TargetType    TargetType
+	TargetID      uuid.UUID
+	PrincipalType PrincipalType
+	PrincipalID   uuid.UUID
+	Allow         permissions.Permission
+	Deny          permissions.Permission
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+// OverrideStore provides write access to permission overrides.
+type OverrideStore interface {
+	Set(ctx context.Context, targetType TargetType, targetID uuid.UUID, principalType PrincipalType, principalID uuid.UUID, allow, deny permissions.Permission) (*OverrideRow, error)
+	Delete(ctx context.Context, targetType TargetType, targetID uuid.UUID, principalType PrincipalType, principalID uuid.UUID) error
 }
 
 // Store provides read access to permission-related data.

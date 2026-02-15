@@ -62,6 +62,7 @@ type server struct {
 	channelRepo   channel.Repository
 	categoryRepo  category.Repository
 	roleRepo      role.Repository
+	permStore     permission.OverrideStore
 	permResolver  *permission.Resolver
 	permPublisher *permission.Publisher
 }
@@ -289,6 +290,7 @@ func run() error {
 		categoryRepo:  categoryRepo,
 		roleRepo:      roleRepo,
 		authService:   authService,
+		permStore:     permStore,
 		permResolver:  permResolver,
 		permPublisher: permPublisher,
 	}
@@ -395,6 +397,17 @@ func (s *server) registerRoutes(app *fiber.App) {
 	channelGroup.Delete("/:channelID",
 		permission.RequirePermission(s.permResolver, permissions.ManageChannels),
 		channelHandler.DeleteChannel)
+
+	// Permission override routes
+	permHandler := api.NewPermissionHandler(s.permStore, s.permResolver, s.permPublisher, log.Logger)
+	channelGroup.Put("/:channelID/overrides/:targetID",
+		permission.RequireServerPermission(s.permResolver, permissions.ManageRoles),
+		permHandler.SetOverride)
+	channelGroup.Delete("/:channelID/overrides/:targetID",
+		permission.RequireServerPermission(s.permResolver, permissions.ManageRoles),
+		permHandler.DeleteOverride)
+	channelGroup.Get("/:channelID/permissions/@me",
+		permHandler.GetMyPermissions)
 
 	// Category routes
 	categoryHandler := api.NewCategoryHandler(s.categoryRepo, s.cfg.MaxCategories, log.Logger)
