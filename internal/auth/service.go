@@ -22,6 +22,10 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/user"
 )
 
+// verifyTokenBytes is the number of random bytes used to generate email verification tokens. 32 bytes yields 64 hex
+// characters and 256 bits of entropy.
+const verifyTokenBytes = 32
+
 // Sender sends transactional emails such as verification messages. Implementations must be safe for concurrent use.
 type Sender interface {
 	SendVerification(to, token, serverURL, serverName string) error
@@ -162,7 +166,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*AuthResul
 		return nil, fmt.Errorf("hash password: %w", err)
 	}
 
-	verifyToken, err := generateSecureToken(32)
+	verifyToken, err := generateSecureToken(verifyTokenBytes)
 	if err != nil {
 		return nil, fmt.Errorf("generate verification token: %w", err)
 	}
