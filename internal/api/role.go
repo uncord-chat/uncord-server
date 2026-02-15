@@ -30,11 +30,6 @@ func NewRoleHandler(roles role.Repository, perms *permission.Publisher, maxRoles
 
 // ListRoles handles GET /api/v1/server/roles.
 func (h *RoleHandler) ListRoles(c fiber.Ctx) error {
-	_, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
-	}
-
 	roles, err := h.roles.List(c)
 	if err != nil {
 		h.log.Error().Err(err).Str("handler", "role").Msg("list roles failed")
