@@ -35,6 +35,16 @@ JOIN users u ON u.id = m.user_id
 LEFT JOIN member_roles mr ON mr.user_id = m.user_id
 WHERE m.status != 'pending'`
 
+// memberQueryAnyStatus is identical to memberQuery but includes members in any status, including pending. Used by
+// CreatePending and Activate which need to return the member profile regardless of onboarding state.
+const memberQueryAnyStatus = `SELECT m.user_id, u.username, u.display_name, u.avatar_key,
+       m.nickname, m.status, m.timeout_until, m.joined_at,
+       COALESCE(array_agg(mr.role_id) FILTER (WHERE mr.role_id IS NOT NULL), '{}') AS role_ids
+FROM members m
+JOIN users u ON u.id = m.user_id
+LEFT JOIN member_roles mr ON mr.user_id = m.user_id
+WHERE 1=1`
+
 // List returns members ordered by (joined_at, user_id) using keyset pagination. The cursor is the user_id from the
 // last item on the previous page.
 func (r *PGRepository) List(ctx context.Context, after *uuid.UUID, limit int) ([]MemberWithProfile, error) {
@@ -255,6 +265,97 @@ func (r *PGRepository) RemoveRole(ctx context.Context, userID, roleID uuid.UUID)
 		return ErrNotFound
 	}
 	return nil
+}
+
+// CreatePending inserts a member with pending status, assigns the @everyone role, and returns the full profile. Returns
+// ErrAlreadyMember if the user already has a membership record.
+func (r *PGRepository) CreatePending(ctx context.Context, userID uuid.UUID) (*MemberWithProfile, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin create pending member tx: %w", err)
+	}
+	defer func() {
+		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			r.log.Warn().Err(err).Msg("create pending member tx rollback failed")
+		}
+	}()
+
+	_, err = tx.Exec(ctx, "INSERT INTO members (user_id, status) VALUES ($1, 'pending')", userID)
+	if err != nil {
+		if isUniqueViolation(err) {
+			return nil, ErrAlreadyMember
+		}
+		return nil, fmt.Errorf("insert pending member: %w", err)
+	}
+
+	_, err = tx.Exec(ctx,
+		"INSERT INTO member_roles (user_id, role_id) SELECT $1, id FROM roles WHERE is_everyone = true",
+		userID)
+	if err != nil {
+		return nil, fmt.Errorf("assign everyone role: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit create pending member tx: %w", err)
+	}
+
+	return r.getByUserIDAnyStatus(ctx, userID)
+}
+
+// Activate transitions a pending member to active status, assigns auto-roles, and returns the updated profile. Returns
+// ErrNotPending if the member is not in pending status.
+func (r *PGRepository) Activate(ctx context.Context, userID uuid.UUID, autoRoles []uuid.UUID) (*MemberWithProfile, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin activate member tx: %w", err)
+	}
+	defer func() {
+		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			r.log.Warn().Err(err).Msg("activate member tx rollback failed")
+		}
+	}()
+
+	tag, err := tx.Exec(ctx,
+		"UPDATE members SET status = 'active', onboarded_at = NOW() WHERE user_id = $1 AND status = 'pending'",
+		userID)
+	if err != nil {
+		return nil, fmt.Errorf("activate member: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, ErrNotPending
+	}
+
+	for _, roleID := range autoRoles {
+		_, err := tx.Exec(ctx,
+			"INSERT INTO member_roles (user_id, role_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+			userID, roleID)
+		if err != nil {
+			return nil, fmt.Errorf("assign auto-role: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit activate member tx: %w", err)
+	}
+
+	return r.getByUserIDAnyStatus(ctx, userID)
+}
+
+// getByUserIDAnyStatus returns a member profile regardless of status, including pending members.
+func (r *PGRepository) getByUserIDAnyStatus(ctx context.Context, userID uuid.UUID) (*MemberWithProfile, error) {
+	row := r.db.QueryRow(ctx,
+		memberQueryAnyStatus+` AND m.user_id = $1
+GROUP BY m.user_id, u.username, u.display_name, u.avatar_key,
+         m.nickname, m.status, m.timeout_until, m.joined_at`, userID)
+
+	m, err := scanMemberWithProfile(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("query member by user id (any status): %w", err)
+	}
+	return m, nil
 }
 
 // scanMemberWithProfile scans a row into a MemberWithProfile.

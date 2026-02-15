@@ -32,6 +32,7 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/disposable"
 	"github.com/uncord-chat/uncord-server/internal/email"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
+	"github.com/uncord-chat/uncord-server/internal/invite"
 	"github.com/uncord-chat/uncord-server/internal/member"
 	"github.com/uncord-chat/uncord-server/internal/page"
 	"github.com/uncord-chat/uncord-server/internal/permission"
@@ -64,6 +65,7 @@ type server struct {
 	categoryRepo  category.Repository
 	roleRepo      role.Repository
 	memberRepo    member.Repository
+	inviteRepo    invite.Repository
 	permStore     permission.OverrideStore
 	permReadStore permission.Store
 	permResolver  *permission.Resolver
@@ -229,6 +231,7 @@ func run() error {
 	categoryRepo := category.NewPGRepository(db, log.Logger)
 	roleRepo := role.NewPGRepository(db, log.Logger)
 	memberRepo := member.NewPGRepository(db, log.Logger)
+	inviteRepo := invite.NewPGRepository(db, log.Logger)
 	authService, err := auth.NewService(userRepo, rdb, cfg, blocklist, emailSender, serverRepo, permPublisher, log.Logger)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create auth service")
@@ -294,6 +297,7 @@ func run() error {
 		categoryRepo:  categoryRepo,
 		roleRepo:      roleRepo,
 		memberRepo:    memberRepo,
+		inviteRepo:    inviteRepo,
 		authService:   authService,
 		permStore:     permStore,
 		permReadStore: permStore,
@@ -443,6 +447,28 @@ func (s *server) registerRoutes(app *fiber.App) {
 	serverGroup.Delete("/roles/:roleID",
 		permission.RequireServerPermission(s.permResolver, permissions.ManageRoles),
 		roleHandler.DeleteRole)
+
+	// Invite management routes (under /api/v1/server, authenticated)
+	inviteHandler := api.NewInviteHandler(s.inviteRepo, s.memberRepo, s.userRepo, log.Logger)
+	serverGroup.Post("/invites",
+		permission.RequireServerPermission(s.permResolver, permissions.CreateInvites),
+		inviteHandler.CreateInvite)
+	serverGroup.Get("/invites",
+		permission.RequireServerPermission(s.permResolver, permissions.ManageInvites),
+		inviteHandler.ListInvites)
+
+	// Invite action routes (under /api/v1/invites, authenticated)
+	inviteGroup := app.Group("/api/v1/invites",
+		auth.RequireAuth(s.cfg.JWTSecret, s.cfg.ServerURL))
+	inviteGroup.Delete("/:code",
+		permission.RequireServerPermission(s.permResolver, permissions.ManageInvites),
+		inviteHandler.DeleteInvite)
+	inviteGroup.Post("/:code/join", inviteHandler.JoinViaInvite)
+
+	// Onboarding route (under /api/v1/, authenticated)
+	app.Post("/api/v1/onboarding/accept",
+		auth.RequireAuth(s.cfg.JWTSecret, s.cfg.ServerURL),
+		inviteHandler.AcceptOnboarding)
 
 	// Member routes
 	memberHandler := api.NewMemberHandler(s.memberRepo, s.roleRepo, s.permReadStore, s.permPublisher, log.Logger)

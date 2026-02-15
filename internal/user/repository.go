@@ -18,7 +18,7 @@ import (
 // selectColumns lists the columns returned by queries that produce a *User. Every method that scans into a User must
 // select these columns in this exact order.
 const selectColumns = `id, email, username, display_name, avatar_key, pronouns, banner_key, about,
-	theme_colour_primary, theme_colour_secondary, mfa_enabled, email_verified`
+	theme_colour_primary, theme_colour_secondary, mfa_enabled, email_verified, created_at`
 
 // selectCredentialsColumns lists the columns returned by queries that produce a *Credentials. The order must match
 // scanCredentials.
@@ -31,7 +31,7 @@ func scanUser(row pgx.Row) (*User, error) {
 	err := row.Scan(
 		&u.ID, &u.Email, &u.Username, &u.DisplayName, &u.AvatarKey,
 		&u.Pronouns, &u.BannerKey, &u.About, &u.ThemeColourPrimary, &u.ThemeColourSecondary,
-		&u.MFAEnabled, &u.EmailVerified,
+		&u.MFAEnabled, &u.EmailVerified, &u.CreatedAt,
 	)
 	if err != nil {
 		return nil, err

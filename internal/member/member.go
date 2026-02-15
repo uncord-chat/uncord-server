@@ -19,6 +19,7 @@ var (
 	ErrAlreadyBanned  = errors.New("user is already banned")
 	ErrEveryoneRole   = errors.New("the @everyone role cannot be manually assigned or removed")
 	ErrTimeoutInPast  = errors.New("timeout must be in the future")
+	ErrNotPending     = errors.New("member is not in pending status")
 )
 
 // Pagination defaults.
@@ -113,4 +114,8 @@ type Repository interface {
 	// Roles
 	AssignRole(ctx context.Context, userID, roleID uuid.UUID) error
 	RemoveRole(ctx context.Context, userID, roleID uuid.UUID) error
+
+	// Onboarding
+	CreatePending(ctx context.Context, userID uuid.UUID) (*MemberWithProfile, error)
+	Activate(ctx context.Context, userID uuid.UUID, autoRoles []uuid.UUID) (*MemberWithProfile, error)
 }

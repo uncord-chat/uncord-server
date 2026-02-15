@@ -180,6 +180,35 @@ func (r *fakeMemberRepo) RemoveRole(_ context.Context, userID, roleID uuid.UUID)
 	return member.ErrNotFound
 }
 
+func (r *fakeMemberRepo) CreatePending(_ context.Context, userID uuid.UUID) (*member.MemberWithProfile, error) {
+	for _, m := range r.members {
+		if m.UserID == userID {
+			return nil, member.ErrAlreadyMember
+		}
+	}
+	m := member.MemberWithProfile{
+		UserID:   userID,
+		Username: "pending",
+		Status:   "pending",
+		JoinedAt: time.Now(),
+	}
+	r.members = append(r.members, m)
+	return &r.members[len(r.members)-1], nil
+}
+
+func (r *fakeMemberRepo) Activate(_ context.Context, userID uuid.UUID, _ []uuid.UUID) (*member.MemberWithProfile, error) {
+	for i := range r.members {
+		if r.members[i].UserID == userID {
+			if r.members[i].Status != "pending" {
+				return nil, member.ErrNotPending
+			}
+			r.members[i].Status = "active"
+			return &r.members[i], nil
+		}
+	}
+	return nil, member.ErrNotPending
+}
+
 // --- seed helpers ---
 
 func seedMember(repo *fakeMemberRepo, userID uuid.UUID, username string) *member.MemberWithProfile {

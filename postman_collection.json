@@ -54,6 +54,10 @@
 		{
 			"key": "member_id",
 			"value": ""
+		},
+		{
+			"key": "invite_code",
+			"value": ""
 		}
 	],
 	"item": [
@@ -943,6 +947,106 @@
 							"raw": "{{base_url}}/server/bans/{{member_id}}",
 							"host": ["{{base_url}}"],
 							"path": ["server", "bans", "{{member_id}}"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Invites",
+			"item": [
+				{
+					"name": "Create Invite",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const data = pm.response.json().data;",
+									"    pm.collectionVariables.set('invite_code', data.code);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"channel_id\": \"{{channel_id}}\",\n  \"max_uses\": 10,\n  \"max_age_seconds\": 86400\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/server/invites",
+							"host": ["{{base_url}}"],
+							"path": ["server", "invites"]
+						}
+					}
+				},
+				{
+					"name": "List Invites",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/server/invites?limit=50",
+							"host": ["{{base_url}}"],
+							"path": ["server", "invites"],
+							"query": [
+								{ "key": "limit", "value": "50" },
+								{ "key": "after", "value": "", "disabled": true }
+							]
+						}
+					}
+				},
+				{
+					"name": "Delete Invite",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/invites/{{invite_code}}",
+							"host": ["{{base_url}}"],
+							"path": ["invites", "{{invite_code}}"]
+						}
+					}
+				},
+				{
+					"name": "Join via Invite",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/invites/{{invite_code}}/join",
+							"host": ["{{base_url}}"],
+							"path": ["invites", "{{invite_code}}", "join"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Onboarding",
+			"item": [
+				{
+					"name": "Accept Onboarding",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"accepted_rules\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/onboarding/accept",
+							"host": ["{{base_url}}"],
+							"path": ["onboarding", "accept"]
 						}
 					}
 				}

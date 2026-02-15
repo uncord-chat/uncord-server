@@ -36,6 +36,7 @@ type User struct {
 	ThemeColourSecondary *int
 	MFAEnabled           bool
 	EmailVerified        bool
+	CreatedAt            time.Time
 }
 
 // Credentials extends User with the password hash and optional MFA secret. Only repository methods that serve the
