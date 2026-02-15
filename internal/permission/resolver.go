@@ -110,26 +110,34 @@ func (r *Resolver) FilterPermitted(ctx context.Context, userID uuid.UUID, channe
 		return result, nil
 	}
 
+	// Bulk cache lookup: single MGET round trip instead of N individual GETs.
+	cached, cacheErr := r.cache.GetMany(ctx, userID, channelIDs)
+	if cacheErr != nil {
+		r.log.Warn().Err(cacheErr).Msg("Permission cache batch get failed, falling through to compute")
+		cached = nil
+	}
+
+	// Compute permissions for cache misses and collect them for a bulk SET.
+	toCache := make(map[uuid.UUID]permissions.Permission)
 	for i, chID := range channelIDs {
-		cached, ok, cacheErr := r.cache.Get(ctx, userID, chID)
-		if cacheErr != nil {
-			r.log.Warn().Err(cacheErr).Msg("Permission cache get failed in batch")
+		if effective, ok := cached[chID]; ok {
+			result[i] = effective.Has(perm)
+			continue
 		}
 
-		var effective permissions.Permission
-		if ok {
-			effective = cached
-		} else {
-			effective, err = r.channelOverrides(ctx, base, roleIDs, userID, chID)
-			if err != nil {
-				return nil, err
-			}
-			if cacheErr := r.cache.Set(ctx, userID, chID, effective); cacheErr != nil {
-				r.log.Warn().Err(cacheErr).Msg("Permission cache set failed in batch")
-			}
+		effective, computeErr := r.channelOverrides(ctx, base, roleIDs, userID, chID)
+		if computeErr != nil {
+			return nil, computeErr
 		}
-
 		result[i] = effective.Has(perm)
+		toCache[chID] = effective
+	}
+
+	// Bulk cache write: single pipelined round trip for all misses.
+	if len(toCache) > 0 {
+		if setErr := r.cache.SetMany(ctx, userID, toCache); setErr != nil {
+			r.log.Warn().Err(setErr).Msg("Permission cache batch set failed")
+		}
 	}
 
 	return result, nil

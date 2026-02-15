@@ -34,6 +34,8 @@ func cacheKey(userID, channelID uuid.UUID) string {
 type Cache interface {
 	Get(ctx context.Context, userID, channelID uuid.UUID) (permissions.Permission, bool, error)
 	Set(ctx context.Context, userID, channelID uuid.UUID, perm permissions.Permission) error
+	GetMany(ctx context.Context, userID uuid.UUID, channelIDs []uuid.UUID) (map[uuid.UUID]permissions.Permission, error)
+	SetMany(ctx context.Context, userID uuid.UUID, perms map[uuid.UUID]permissions.Permission) error
 	DeleteByUser(ctx context.Context, userID uuid.UUID) error
 	DeleteByChannel(ctx context.Context, channelID uuid.UUID) error
 	DeleteExact(ctx context.Context, userID, channelID uuid.UUID) error
@@ -71,6 +73,59 @@ func (c *ValkeyCache) Set(ctx context.Context, userID, channelID uuid.UUID, perm
 	err := c.client.Set(ctx, cacheKey(userID, channelID), strconv.FormatInt(int64(perm), 10), CacheTTL).Err()
 	if err != nil {
 		return fmt.Errorf("cache set: %w", err)
+	}
+	return nil
+}
+
+// GetMany retrieves cached permissions for multiple channels in a single MGET round trip. The returned map contains
+// only the channels that were found in the cache; missing channels are omitted.
+func (c *ValkeyCache) GetMany(ctx context.Context, userID uuid.UUID, channelIDs []uuid.UUID) (map[uuid.UUID]permissions.Permission, error) {
+	if len(channelIDs) == 0 {
+		return nil, nil
+	}
+
+	keys := make([]string, len(channelIDs))
+	for i, chID := range channelIDs {
+		keys[i] = cacheKey(userID, chID)
+	}
+
+	vals, err := c.client.MGet(ctx, keys...).Result()
+	if err != nil {
+		return nil, fmt.Errorf("cache mget: %w", err)
+	}
+
+	result := make(map[uuid.UUID]permissions.Permission, len(channelIDs))
+	for i, val := range vals {
+		if val == nil {
+			continue
+		}
+		s, ok := val.(string)
+		if !ok {
+			continue
+		}
+		n, parseErr := strconv.ParseInt(s, 10, 64)
+		if parseErr != nil {
+			continue
+		}
+		result[channelIDs[i]] = permissions.Permission(n)
+	}
+
+	return result, nil
+}
+
+// SetMany writes multiple permission entries in a single pipelined round trip.
+func (c *ValkeyCache) SetMany(ctx context.Context, userID uuid.UUID, perms map[uuid.UUID]permissions.Permission) error {
+	if len(perms) == 0 {
+		return nil
+	}
+
+	pipe := c.client.Pipeline()
+	for chID, perm := range perms {
+		pipe.Set(ctx, cacheKey(userID, chID), strconv.FormatInt(int64(perm), 10), CacheTTL)
+	}
+	_, err := pipe.Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("cache pipeline set: %w", err)
 	}
 	return nil
 }

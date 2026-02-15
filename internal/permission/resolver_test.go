@@ -83,6 +83,32 @@ func (c *fakeCache) Set(_ context.Context, userID, channelID uuid.UUID, perm per
 	return nil
 }
 
+func (c *fakeCache) GetMany(_ context.Context, userID uuid.UUID, channelIDs []uuid.UUID) (map[uuid.UUID]permissions.Permission, error) {
+	if c.getErr != nil {
+		return nil, c.getErr
+	}
+	result := make(map[uuid.UUID]permissions.Permission, len(channelIDs))
+	for _, chID := range channelIDs {
+		key := userID.String() + ":" + chID.String()
+		if perm, ok := c.data[key]; ok {
+			result[chID] = perm
+		}
+	}
+	return result, nil
+}
+
+func (c *fakeCache) SetMany(_ context.Context, userID uuid.UUID, perms map[uuid.UUID]permissions.Permission) error {
+	c.setCalled = true
+	if c.setErr != nil {
+		return c.setErr
+	}
+	for chID, perm := range perms {
+		key := userID.String() + ":" + chID.String()
+		c.data[key] = perm
+	}
+	return nil
+}
+
 func (c *fakeCache) DeleteByUser(_ context.Context, _ uuid.UUID) error    { return nil }
 func (c *fakeCache) DeleteByChannel(_ context.Context, _ uuid.UUID) error { return nil }
 func (c *fakeCache) DeleteExact(_ context.Context, _, _ uuid.UUID) error  { return nil }
@@ -793,5 +819,176 @@ func TestHasServerPermission(t *testing.T) {
 	}
 	if has {
 		t.Error("should not have ManageRoles")
+	}
+}
+
+// --- FilterPermitted tests ---
+
+func TestFilterPermitted_OwnerAllowed(t *testing.T) {
+	t.Parallel()
+	store := &fakeStore{isOwner: true}
+	cache := newFakeCache()
+	r := NewResolver(store, cache, zerolog.Nop())
+
+	channels := []uuid.UUID{uuid.New(), uuid.New(), uuid.New()}
+	result, err := r.FilterPermitted(context.Background(), uuid.New(), channels, permissions.ManageServer)
+	if err != nil {
+		t.Fatalf("FilterPermitted() error = %v", err)
+	}
+	for i, ok := range result {
+		if !ok {
+			t.Errorf("channel %d: owner should be permitted", i)
+		}
+	}
+}
+
+func TestFilterPermitted_CacheHitsSkipStore(t *testing.T) {
+	t.Parallel()
+	roleID := uuid.New()
+	userID := uuid.New()
+	ch1, ch2 := uuid.New(), uuid.New()
+
+	store := &fakeStore{
+		roleEntries: []RolePermEntry{
+			{RoleID: roleID, Permissions: permissions.ViewChannels},
+		},
+	}
+	cache := newFakeCache()
+	cache.data[userID.String()+":"+ch1.String()] = permissions.ViewChannels | permissions.SendMessages
+	cache.data[userID.String()+":"+ch2.String()] = permissions.ViewChannels
+
+	r := NewResolver(store, cache, zerolog.Nop())
+
+	result, err := r.FilterPermitted(context.Background(), userID, []uuid.UUID{ch1, ch2}, permissions.SendMessages)
+	if err != nil {
+		t.Fatalf("FilterPermitted() error = %v", err)
+	}
+	if !result[0] {
+		t.Error("ch1 should be permitted (cached with SendMessages)")
+	}
+	if result[1] {
+		t.Error("ch2 should not be permitted (cached without SendMessages)")
+	}
+
+	// ChannelInfo should not be called because both channels were cache hits.
+	if store.chanInfoCalled {
+		t.Error("Store.ChannelInfo should not be called when all channels are cache hits")
+	}
+}
+
+func TestFilterPermitted_MissesComputedAndCached(t *testing.T) {
+	t.Parallel()
+	roleID := uuid.New()
+	userID := uuid.New()
+	ch1, ch2 := uuid.New(), uuid.New()
+
+	store := &fakeStore{
+		roleEntries: []RolePermEntry{
+			{RoleID: roleID, Permissions: permissions.ViewChannels | permissions.SendMessages},
+		},
+		chanInfo: ChannelInfo{ID: ch1}, // returned for both (fakeStore returns same chanInfo)
+		overrides: map[string][]Override{
+			"channel:" + ch2.String(): {
+				{PrincipalType: PrincipalRole, PrincipalID: roleID, Deny: permissions.SendMessages},
+			},
+		},
+	}
+	cache := newFakeCache()
+	r := NewResolver(store, cache, zerolog.Nop())
+
+	result, err := r.FilterPermitted(context.Background(), userID, []uuid.UUID{ch1, ch2}, permissions.SendMessages)
+	if err != nil {
+		t.Fatalf("FilterPermitted() error = %v", err)
+	}
+	if !result[0] {
+		t.Error("ch1 should be permitted")
+	}
+	if result[1] {
+		t.Error("ch2 should be denied by channel override")
+	}
+
+	// Both results should be cached now.
+	if !cache.setCalled {
+		t.Error("Cache.SetMany should be called for misses")
+	}
+	if _, ok := cache.data[userID.String()+":"+ch1.String()]; !ok {
+		t.Error("ch1 should be cached after compute")
+	}
+	if _, ok := cache.data[userID.String()+":"+ch2.String()]; !ok {
+		t.Error("ch2 should be cached after compute")
+	}
+}
+
+func TestFilterPermitted_MixedCacheHitsAndMisses(t *testing.T) {
+	t.Parallel()
+	roleID := uuid.New()
+	userID := uuid.New()
+	ch1, ch2 := uuid.New(), uuid.New()
+
+	store := &fakeStore{
+		roleEntries: []RolePermEntry{
+			{RoleID: roleID, Permissions: permissions.ViewChannels | permissions.SendMessages},
+		},
+		chanInfo: ChannelInfo{ID: ch2},
+	}
+	cache := newFakeCache()
+	// ch1 is a cache hit
+	cache.data[userID.String()+":"+ch1.String()] = permissions.ViewChannels
+	// ch2 is a miss
+	r := NewResolver(store, cache, zerolog.Nop())
+
+	result, err := r.FilterPermitted(context.Background(), userID, []uuid.UUID{ch1, ch2}, permissions.ViewChannels)
+	if err != nil {
+		t.Fatalf("FilterPermitted() error = %v", err)
+	}
+	if !result[0] {
+		t.Error("ch1 should be permitted (cache hit)")
+	}
+	if !result[1] {
+		t.Error("ch2 should be permitted (computed)")
+	}
+}
+
+func TestFilterPermitted_CacheGetErrorFallsThrough(t *testing.T) {
+	t.Parallel()
+	roleID := uuid.New()
+	userID := uuid.New()
+	ch := uuid.New()
+
+	store := &fakeStore{
+		roleEntries: []RolePermEntry{
+			{RoleID: roleID, Permissions: permissions.ViewChannels},
+		},
+		chanInfo: ChannelInfo{ID: ch},
+	}
+	cache := newFakeCache()
+	cache.getErr = fmt.Errorf("cache unavailable")
+	r := NewResolver(store, cache, zerolog.Nop())
+
+	result, err := r.FilterPermitted(context.Background(), userID, []uuid.UUID{ch}, permissions.ViewChannels)
+	if err != nil {
+		t.Fatalf("FilterPermitted() should not fail on cache error, got: %v", err)
+	}
+	if !result[0] {
+		t.Error("should be permitted after falling through to compute")
+	}
+}
+
+func TestFilterPermitted_EmptyChannelList(t *testing.T) {
+	t.Parallel()
+	store := &fakeStore{
+		roleEntries: []RolePermEntry{
+			{RoleID: uuid.New(), Permissions: permissions.ViewChannels},
+		},
+	}
+	cache := newFakeCache()
+	r := NewResolver(store, cache, zerolog.Nop())
+
+	result, err := r.FilterPermitted(context.Background(), uuid.New(), nil, permissions.ViewChannels)
+	if err != nil {
+		t.Fatalf("FilterPermitted() error = %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("FilterPermitted(nil) = %v, want empty", result)
 	}
 }

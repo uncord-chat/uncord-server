@@ -168,3 +168,119 @@ func TestCacheTTLApplied(t *testing.T) {
 		t.Errorf("key TTL = %v, want <= %v", ttl, CacheTTL)
 	}
 }
+
+func TestGetManyAllHits(t *testing.T) {
+	t.Parallel()
+	_, cache := setupMiniRedis(t)
+	ctx := context.Background()
+	userID := uuid.New()
+	ch1, ch2 := uuid.New(), uuid.New()
+	perm1 := permissions.ViewChannels
+	perm2 := permissions.SendMessages
+
+	_ = cache.Set(ctx, userID, ch1, perm1)
+	_ = cache.Set(ctx, userID, ch2, perm2)
+
+	got, err := cache.GetMany(ctx, userID, []uuid.UUID{ch1, ch2})
+	if err != nil {
+		t.Fatalf("GetMany() error = %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("GetMany() returned %d entries, want 2", len(got))
+	}
+	if got[ch1] != perm1 {
+		t.Errorf("GetMany()[ch1] = %d, want %d", got[ch1], perm1)
+	}
+	if got[ch2] != perm2 {
+		t.Errorf("GetMany()[ch2] = %d, want %d", got[ch2], perm2)
+	}
+}
+
+func TestGetManyPartialHits(t *testing.T) {
+	t.Parallel()
+	_, cache := setupMiniRedis(t)
+	ctx := context.Background()
+	userID := uuid.New()
+	ch1, ch2 := uuid.New(), uuid.New()
+
+	_ = cache.Set(ctx, userID, ch1, permissions.ViewChannels)
+
+	got, err := cache.GetMany(ctx, userID, []uuid.UUID{ch1, ch2})
+	if err != nil {
+		t.Fatalf("GetMany() error = %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("GetMany() returned %d entries, want 1", len(got))
+	}
+	if _, ok := got[ch2]; ok {
+		t.Error("GetMany() should not contain missing channel")
+	}
+}
+
+func TestGetManyEmpty(t *testing.T) {
+	t.Parallel()
+	_, cache := setupMiniRedis(t)
+	ctx := context.Background()
+
+	got, err := cache.GetMany(ctx, uuid.New(), nil)
+	if err != nil {
+		t.Fatalf("GetMany() error = %v", err)
+	}
+	if got != nil {
+		t.Errorf("GetMany(nil) = %v, want nil", got)
+	}
+}
+
+func TestSetManyWritesAll(t *testing.T) {
+	t.Parallel()
+	_, cache := setupMiniRedis(t)
+	ctx := context.Background()
+	userID := uuid.New()
+	ch1, ch2 := uuid.New(), uuid.New()
+	perm1 := permissions.ViewChannels
+	perm2 := permissions.SendMessages | permissions.EmbedLinks
+
+	err := cache.SetMany(ctx, userID, map[uuid.UUID]permissions.Permission{ch1: perm1, ch2: perm2})
+	if err != nil {
+		t.Fatalf("SetMany() error = %v", err)
+	}
+
+	got1, ok1, _ := cache.Get(ctx, userID, ch1)
+	got2, ok2, _ := cache.Get(ctx, userID, ch2)
+	if !ok1 || got1 != perm1 {
+		t.Errorf("after SetMany: ch1 = %d (ok=%v), want %d", got1, ok1, perm1)
+	}
+	if !ok2 || got2 != perm2 {
+		t.Errorf("after SetMany: ch2 = %d (ok=%v), want %d", got2, ok2, perm2)
+	}
+}
+
+func TestSetManyEmpty(t *testing.T) {
+	t.Parallel()
+	_, cache := setupMiniRedis(t)
+	ctx := context.Background()
+
+	err := cache.SetMany(ctx, uuid.New(), nil)
+	if err != nil {
+		t.Fatalf("SetMany(nil) error = %v", err)
+	}
+}
+
+func TestSetManyTTLApplied(t *testing.T) {
+	t.Parallel()
+	mr, cache := setupMiniRedis(t)
+	ctx := context.Background()
+	userID := uuid.New()
+	ch := uuid.New()
+
+	_ = cache.SetMany(ctx, userID, map[uuid.UUID]permissions.Permission{ch: permissions.ViewChannels})
+
+	key := cacheKey(userID, ch)
+	ttl := mr.TTL(key)
+	if ttl <= 0 {
+		t.Errorf("SetMany key TTL = %v, want positive", ttl)
+	}
+	if ttl > CacheTTL {
+		t.Errorf("SetMany key TTL = %v, want <= %v", ttl, CacheTTL)
+	}
+}

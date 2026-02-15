@@ -31,6 +31,12 @@ func (c *spyCache) Get(_ context.Context, _, _ uuid.UUID) (permissions.Permissio
 func (c *spyCache) Set(_ context.Context, _, _ uuid.UUID, _ permissions.Permission) error {
 	return nil
 }
+func (c *spyCache) GetMany(_ context.Context, _ uuid.UUID, _ []uuid.UUID) (map[uuid.UUID]permissions.Permission, error) {
+	return nil, nil
+}
+func (c *spyCache) SetMany(_ context.Context, _ uuid.UUID, _ map[uuid.UUID]permissions.Permission) error {
+	return nil
+}
 func (c *spyCache) DeleteByUser(_ context.Context, userID uuid.UUID) error {
 	c.deleteByUserCalled = true
 	c.lastUserID = userID
@@ -163,6 +169,12 @@ func (c *syncSpyCache) Get(_ context.Context, _, _ uuid.UUID) (permissions.Permi
 	return 0, false, nil
 }
 func (c *syncSpyCache) Set(_ context.Context, _, _ uuid.UUID, _ permissions.Permission) error {
+	return nil
+}
+func (c *syncSpyCache) GetMany(_ context.Context, _ uuid.UUID, _ []uuid.UUID) (map[uuid.UUID]permissions.Permission, error) {
+	return nil, nil
+}
+func (c *syncSpyCache) SetMany(_ context.Context, _ uuid.UUID, _ map[uuid.UUID]permissions.Permission) error {
 	return nil
 }
 func (c *syncSpyCache) DeleteByUser(_ context.Context, userID uuid.UUID) error {
