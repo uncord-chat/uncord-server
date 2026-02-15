@@ -72,8 +72,8 @@ func TestGetMe_UserNotFound(t *testing.T) {
 		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusNotFound)
 	}
 	env := parseError(t, body)
-	if env.Error.Code != string(apierrors.NotFound) {
-		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.NotFound)
+	if env.Error.Code != string(apierrors.UnknownUser) {
+		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.UnknownUser)
 	}
 }
 

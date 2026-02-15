@@ -135,7 +135,7 @@ func toUserModel(u *user.User) models.User {
 func (h *UserHandler) mapUserError(c fiber.Ctx, err error) error {
 	switch {
 	case errors.Is(err, user.ErrNotFound):
-		return httputil.Fail(c, fiber.StatusNotFound, apierrors.NotFound, "User not found")
+		return httputil.Fail(c, fiber.StatusNotFound, apierrors.UnknownUser, "User not found")
 	case errors.Is(err, user.ErrDisplayNameLength):
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, err.Error())
 	case errors.Is(err, user.ErrPronounsLength):
