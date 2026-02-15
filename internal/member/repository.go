@@ -8,10 +8,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
 	"github.com/uncord-chat/uncord-protocol/models"
+
+	"github.com/uncord-chat/uncord-server/internal/postgres"
 )
 
 // PGRepository implements Repository using PostgreSQL.
@@ -175,7 +176,7 @@ func (r *PGRepository) Ban(ctx context.Context, userID, bannedBy uuid.UUID, reas
 		"INSERT INTO bans (user_id, reason, banned_by, expires_at) VALUES ($1, $2, $3, $4)",
 		userID, reason, bannedBy, expiresAt)
 	if err != nil {
-		if isUniqueViolation(err) {
+		if postgres.IsUniqueViolation(err) {
 			return ErrAlreadyBanned
 		}
 		return fmt.Errorf("insert ban: %w", err)
@@ -248,7 +249,7 @@ func (r *PGRepository) AssignRole(ctx context.Context, userID, roleID uuid.UUID)
 	_, err := r.db.Exec(ctx,
 		"INSERT INTO member_roles (user_id, role_id) VALUES ($1, $2)", userID, roleID)
 	if err != nil {
-		if isUniqueViolation(err) {
+		if postgres.IsUniqueViolation(err) {
 			return ErrAlreadyMember
 		}
 		return fmt.Errorf("assign role: %w", err)
@@ -284,7 +285,7 @@ func (r *PGRepository) CreatePending(ctx context.Context, userID uuid.UUID) (*Me
 
 	_, err = tx.Exec(ctx, "INSERT INTO members (user_id, status) VALUES ($1, $2)", userID, models.MemberStatusPending)
 	if err != nil {
-		if isUniqueViolation(err) {
+		if postgres.IsUniqueViolation(err) {
 			return nil, ErrAlreadyMember
 		}
 		return nil, fmt.Errorf("insert pending member: %w", err)
@@ -372,9 +373,4 @@ func scanMemberWithProfile(row pgx.Row) (*MemberWithProfile, error) {
 		return nil, err
 	}
 	return &m, nil
-}
-
-func isUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }

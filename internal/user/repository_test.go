@@ -4,59 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
-
-	"github.com/jackc/pgx/v5/pgconn"
 )
-
-func TestIsUniqueViolation(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{
-			name: "unique violation",
-			err:  &pgconn.PgError{Code: "23505"},
-			want: true,
-		},
-		{
-			name: "other pg error",
-			err:  &pgconn.PgError{Code: "23503"},
-			want: false,
-		},
-		{
-			name: "non-pg error",
-			err:  errors.New("generic error"),
-			want: false,
-		},
-		{
-			name: "nil error",
-			err:  nil,
-			want: false,
-		},
-		{
-			name: "wrapped unique violation",
-			err:  wrappedPgError("23505"),
-			want: true,
-		},
-		{
-			name: "wrapped other pg error",
-			err:  wrappedPgError("42601"),
-			want: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			if got := isUniqueViolation(tt.err); got != tt.want {
-				t.Errorf("isUniqueViolation() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
 
 func TestSentinelErrors(t *testing.T) {
 	t.Parallel()
@@ -383,8 +331,3 @@ func ptr(s string) *string { return &s }
 
 func intPtr(i int) *int { return &i }
 
-// wrappedPgError returns a PgError wrapped with fmt.Errorf to test errors.As unwrapping.
-func wrappedPgError(code string) error {
-	pgErr := &pgconn.PgError{Code: code}
-	return errors.Join(errors.New("context"), pgErr)
-}

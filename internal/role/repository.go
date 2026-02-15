@@ -9,9 +9,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
+
+	"github.com/uncord-chat/uncord-server/internal/postgres"
 )
 
 // selectColumns lists the columns returned by queries that produce a *Role. Every method that scans into a Role must
@@ -97,7 +98,7 @@ func (r *PGRepository) Create(ctx context.Context, params CreateParams, maxRoles
 	)
 	role, err := scanRole(row)
 	if err != nil {
-		if isUniqueViolation(err) {
+		if postgres.IsUniqueViolation(err) {
 			return nil, ErrAlreadyExists
 		}
 		return nil, fmt.Errorf("insert role: %w", err)
@@ -159,7 +160,7 @@ func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdatePa
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
-		if isUniqueViolation(err) {
+		if postgres.IsUniqueViolation(err) {
 			return nil, ErrAlreadyExists
 		}
 		return nil, fmt.Errorf("update role: %w", err)
@@ -220,9 +221,4 @@ func scanRole(row pgx.Row) (*Role, error) {
 		return nil, err
 	}
 	return &role, nil
-}
-
-func isUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }

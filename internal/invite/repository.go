@@ -10,9 +10,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
+
+	"github.com/uncord-chat/uncord-server/internal/postgres"
 )
 
 const (
@@ -57,13 +58,13 @@ func (r *PGRepository) Create(ctx context.Context, creatorID uuid.UUID, params C
 			code, params.ChannelID, creatorID, params.MaxUses, params.MaxAgeSeconds, expiresAt,
 		))
 		if err != nil {
-			if isForeignKeyViolation(err) {
+			if postgres.IsForeignKeyViolation(err) {
 				return nil, ErrChannelNotFound
 			}
-			if isUniqueViolation(err) && attempt < maxCodeRetries-1 {
+			if postgres.IsUniqueViolation(err) && attempt < maxCodeRetries-1 {
 				continue
 			}
-			if isUniqueViolation(err) {
+			if postgres.IsUniqueViolation(err) {
 				return nil, ErrCodeLength
 			}
 			return nil, fmt.Errorf("insert invite: %w", err)
@@ -233,14 +234,4 @@ func generateCode() (string, error) {
 		buf[i] = codeAlphabet[n.Int64()]
 	}
 	return string(buf), nil
-}
-
-func isUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23505"
-}
-
-func isForeignKeyViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23503"
 }

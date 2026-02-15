@@ -8,9 +8,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
+
+	"github.com/uncord-chat/uncord-server/internal/postgres"
 )
 
 const selectColumns = "id, name, position, created_at, updated_at"
@@ -94,7 +95,7 @@ func (r *PGRepository) Create(ctx context.Context, params CreateParams, maxCateg
 	)
 	cat, err := scanCategory(row)
 	if err != nil {
-		if isUniqueViolation(err) {
+		if postgres.IsUniqueViolation(err) {
 			return nil, ErrAlreadyExists
 		}
 		return nil, fmt.Errorf("insert category: %w", err)
@@ -141,7 +142,7 @@ func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdatePa
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
-		if isUniqueViolation(err) {
+		if postgres.IsUniqueViolation(err) {
 			return nil, ErrAlreadyExists
 		}
 		return nil, fmt.Errorf("update category: %w", err)
@@ -170,9 +171,4 @@ func scanCategory(row pgx.Row) (*Category, error) {
 		return nil, err
 	}
 	return &cat, nil
-}
-
-func isUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }

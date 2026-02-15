@@ -10,9 +10,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
+
+	"github.com/uncord-chat/uncord-server/internal/postgres"
 )
 
 // selectColumns lists the columns returned by queries that produce a *User. Every method that scans into a User must
@@ -86,7 +87,7 @@ func (r *PGRepository) Create(ctx context.Context, params CreateParams) (uuid.UU
 		params.Email, params.Username, params.PasswordHash,
 	).Scan(&userID)
 	if err != nil {
-		if isUniqueViolation(err) {
+		if postgres.IsUniqueViolation(err) {
 			return uuid.Nil, ErrAlreadyExists
 		}
 		return uuid.Nil, fmt.Errorf("insert user: %w", err)
@@ -517,9 +518,4 @@ func (r *PGRepository) PurgeTombstones(ctx context.Context, olderThan time.Time)
 		}
 	}
 	return total, nil
-}
-
-func isUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
