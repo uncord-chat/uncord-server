@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -148,8 +149,12 @@ func fetchDomains(ctx context.Context, client *http.Client, url string) (map[str
 		return nil, fmt.Errorf("blocklist returned status %d", resp.StatusCode)
 	}
 
+	// Cap the response body at 25 MiB to guard against a misconfigured or compromised upstream URL exhausting memory.
+	const maxBodySize = 25 << 20
+	limitedBody := io.LimitReader(resp.Body, maxBodySize)
+
 	domains := make(map[string]struct{})
-	scanner := bufio.NewScanner(resp.Body)
+	scanner := bufio.NewScanner(limitedBody)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
