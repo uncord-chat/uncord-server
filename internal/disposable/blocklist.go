@@ -68,8 +68,13 @@ func (b *Blocklist) Run(ctx context.Context, interval time.Duration) {
 		return
 	}
 
-	// Initial fetch.
-	b.Prefetch(ctx)
+	// Initial fetch (skipped if Prefetch was already called during startup).
+	b.mu.RLock()
+	loaded := b.loaded
+	b.mu.RUnlock()
+	if !loaded {
+		b.Prefetch(ctx)
+	}
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()

@@ -166,8 +166,10 @@ func run() error {
 	}
 
 	// Initialise disposable email blocklist with periodic refresh so newly added disposable domains are picked up
-	// without requiring a server restart.
+	// without requiring a server restart. Prefetch is called synchronously so the cache is warm before the server
+	// begins accepting requests.
 	blocklist := disposable.NewBlocklist(cfg.DisposableEmailBlocklistURL, cfg.DisposableEmailBlocklistEnabled, cfg.DisposableEmailBlocklistTimeout, log.Logger)
+	blocklist.Prefetch(ctx)
 
 	// Initialise permission engine
 	permStore := permission.NewPGStore(db)
