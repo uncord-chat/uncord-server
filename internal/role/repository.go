@@ -188,12 +188,16 @@ func (r *PGRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-// HighestPosition returns the lowest position number among the user's assigned roles (lower position = higher rank). If
-// the user holds no roles, math.MaxInt is returned, indicating the user has the lowest possible rank.
+// HighestPosition returns the lowest position number among the user's explicitly assigned roles (lower position =
+// higher rank). The @everyone role is excluded because every member holds it, so including it would make all users
+// appear to hold position 0 and defeat hierarchy enforcement. If the user holds no explicit roles, math.MaxInt is
+// returned, indicating the user has the lowest possible rank.
 func (r *PGRepository) HighestPosition(ctx context.Context, userID uuid.UUID) (int, error) {
 	var pos *int
 	err := r.db.QueryRow(ctx,
-		"SELECT MIN(r.position) FROM roles r JOIN member_roles mr ON r.id = mr.role_id WHERE mr.user_id = $1",
+		`SELECT MIN(r.position) FROM roles r
+		 JOIN member_roles mr ON r.id = mr.role_id
+		 WHERE mr.user_id = $1 AND r.is_everyone = false`,
 		userID,
 	).Scan(&pos)
 	if err != nil {
