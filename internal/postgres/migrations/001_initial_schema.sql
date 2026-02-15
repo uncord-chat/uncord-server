@@ -564,6 +564,7 @@ CREATE TABLE deletion_tombstones (
 );
 
 CREATE UNIQUE INDEX idx_tombstones_type_hash ON deletion_tombstones (identifier_type, hmac_hash);
+CREATE INDEX idx_tombstones_created ON deletion_tombstones (created_at);
 
 -- +goose Down
 

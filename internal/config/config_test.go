@@ -28,7 +28,8 @@ func TestLoadDefaults(t *testing.T) {
 		"MAX_UPLOAD_SIZE_MB",
 		"MAX_CHANNELS", "MAX_CATEGORIES",
 		"SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM",
-		"SERVER_SECRET", "DELETION_TOMBSTONE_USERNAMES",
+		"SERVER_SECRET", "DELETION_TOMBSTONE_USERNAMES", "DELETION_TOMBSTONE_RETENTION",
+		"LOGIN_ATTEMPT_RETENTION", "DATA_CLEANUP_INTERVAL",
 	}
 	for _, k := range keys {
 		t.Setenv(k, "")
@@ -163,6 +164,21 @@ func TestLoadDefaults(t *testing.T) {
 	// Account deletion defaults
 	if !cfg.DeletionTombstoneUsernames {
 		t.Error("DeletionTombstoneUsernames = false, want true")
+	}
+
+	// Auth retention defaults
+	if cfg.LoginAttemptRetention != 2160*time.Hour {
+		t.Errorf("LoginAttemptRetention = %v, want 2160h", cfg.LoginAttemptRetention)
+	}
+
+	// Account deletion defaults
+	if cfg.DeletionTombstoneRetention != 0 {
+		t.Errorf("DeletionTombstoneRetention = %v, want 0", cfg.DeletionTombstoneRetention)
+	}
+
+	// Data retention defaults
+	if cfg.DataCleanupInterval != 12*time.Hour {
+		t.Errorf("DataCleanupInterval = %v, want 12h", cfg.DataCleanupInterval)
 	}
 }
 
@@ -587,6 +603,70 @@ func TestLoadDeletionTombstoneUsernamesOverride(t *testing.T) {
 	}
 	if cfg.DeletionTombstoneUsernames {
 		t.Error("DeletionTombstoneUsernames = true, want false")
+	}
+}
+
+func TestLoadValidationLoginAttemptRetentionTooLow(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+	t.Setenv("SERVER_SECRET", testServerSecret)
+	t.Setenv("LOGIN_ATTEMPT_RETENTION", "30m")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() returned nil error, want validation error for LOGIN_ATTEMPT_RETENTION < 1h")
+	}
+	if !strings.Contains(err.Error(), "LOGIN_ATTEMPT_RETENTION must be at least 1h") {
+		t.Errorf("error %q does not mention LOGIN_ATTEMPT_RETENTION", err.Error())
+	}
+}
+
+func TestLoadValidationDataCleanupIntervalTooLow(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+	t.Setenv("SERVER_SECRET", testServerSecret)
+	t.Setenv("DATA_CLEANUP_INTERVAL", "30s")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() returned nil error, want validation error for DATA_CLEANUP_INTERVAL < 1m")
+	}
+	if !strings.Contains(err.Error(), "DATA_CLEANUP_INTERVAL must be at least 1m") {
+		t.Errorf("error %q does not mention DATA_CLEANUP_INTERVAL", err.Error())
+	}
+}
+
+func TestLoadValidationDeletionTombstoneRetentionNegative(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+	t.Setenv("SERVER_SECRET", testServerSecret)
+
+	cfg := &Config{
+		JWTSecret:                  "test-secret-for-defaults-minimum-32",
+		ServerPort:                 8080,
+		DatabaseMaxConn:            25,
+		DatabaseMinConn:            5,
+		JWTAccessTTL:               15 * time.Minute,
+		JWTRefreshTTL:              7 * 24 * time.Hour,
+		Argon2Memory:               65536,
+		Argon2Iterations:           3,
+		Argon2Parallelism:          2,
+		MaxUploadSizeMB:            100,
+		MaxChannels:                500,
+		MaxCategories:              50,
+		RateLimitAPIRequests:       60,
+		RateLimitAPIWindowSeconds:  60,
+		RateLimitAuthCount:         5,
+		RateLimitAuthWindowSeconds: 300,
+		ServerSecret:               testServerSecret,
+		MFATicketTTL:               5 * time.Minute,
+		LoginAttemptRetention:      2160 * time.Hour,
+		DeletionTombstoneRetention: -time.Hour,
+		DataCleanupInterval:        12 * time.Hour,
+	}
+	err := cfg.validate()
+	if err == nil {
+		t.Fatal("validate() returned nil error, want validation error for negative DELETION_TOMBSTONE_RETENTION")
+	}
+	if !strings.Contains(err.Error(), "DELETION_TOMBSTONE_RETENTION must not be negative") {
+		t.Errorf("error %q does not mention DELETION_TOMBSTONE_RETENTION", err.Error())
 	}
 }
 

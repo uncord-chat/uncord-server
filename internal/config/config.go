@@ -41,6 +41,9 @@ type Config struct {
 	JWTAccessTTL  time.Duration
 	JWTRefreshTTL time.Duration
 
+	// Login attempt retention
+	LoginAttemptRetention time.Duration // How long to retain login attempts. Default: 2160h (90 days).
+
 	// Abuse / Disposable Email
 	DisposableEmailBlocklistEnabled         bool
 	DisposableEmailBlocklistURL             string
@@ -89,8 +92,12 @@ type Config struct {
 	MFATicketTTL     time.Duration
 
 	// Account Deletion
-	ServerSecret               string // Required. Hex-encoded 32-byte HMAC key for tombstones and future use.
-	DeletionTombstoneUsernames bool   // Also tombstone usernames on deletion. Default: true.
+	ServerSecret               string        // Required. Hex-encoded 32-byte HMAC key for tombstones and future use.
+	DeletionTombstoneUsernames bool          // Also tombstone usernames on deletion. Default: true.
+	DeletionTombstoneRetention time.Duration // How long to retain deletion tombstones. 0 = permanent. Default: 0.
+
+	// Data Retention
+	DataCleanupInterval time.Duration // How often the retention cleanup goroutine runs. Default: 12h.
 
 	// CORS
 	CORSAllowOrigins string
@@ -122,9 +129,10 @@ func Load() (*Config, error) {
 		Argon2SaltLength:  p.uint32("ARGON2_SALT_LENGTH", 16),
 		Argon2KeyLength:   p.uint32("ARGON2_KEY_LENGTH", 32),
 
-		JWTSecret:     envStr("JWT_SECRET", ""),
-		JWTAccessTTL:  p.duration("JWT_ACCESS_TTL", 15*time.Minute),
-		JWTRefreshTTL: p.duration("JWT_REFRESH_TTL", 7*24*time.Hour),
+		JWTSecret:             envStr("JWT_SECRET", ""),
+		JWTAccessTTL:          p.duration("JWT_ACCESS_TTL", 15*time.Minute),
+		JWTRefreshTTL:         p.duration("JWT_REFRESH_TTL", 7*24*time.Hour),
+		LoginAttemptRetention: p.duration("LOGIN_ATTEMPT_RETENTION", 2160*time.Hour),
 
 		DisposableEmailBlocklistEnabled:         p.bool("ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_ENABLED", true),
 		DisposableEmailBlocklistURL:             envStr("ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_URL", "https://raw.githubusercontent.com/disposable-email-domains/disposable-email-domains/master/disposable_email_blocklist.conf"),
@@ -166,6 +174,9 @@ func Load() (*Config, error) {
 
 		ServerSecret:               envStr("SERVER_SECRET", ""),
 		DeletionTombstoneUsernames: p.bool("DELETION_TOMBSTONE_USERNAMES", true),
+		DeletionTombstoneRetention: p.duration("DELETION_TOMBSTONE_RETENTION", 0),
+
+		DataCleanupInterval: p.duration("DATA_CLEANUP_INTERVAL", 12*time.Hour),
 
 		CORSAllowOrigins: envStr("CORS_ALLOW_ORIGINS", "*"),
 	}
@@ -295,6 +306,16 @@ func (c *Config) validate() error {
 
 	if c.MFATicketTTL < time.Second {
 		errs = append(errs, fmt.Errorf("MFA_TICKET_TTL must be at least 1s"))
+	}
+
+	if c.LoginAttemptRetention < time.Hour {
+		errs = append(errs, fmt.Errorf("LOGIN_ATTEMPT_RETENTION must be at least 1h"))
+	}
+	if c.DeletionTombstoneRetention < 0 {
+		errs = append(errs, fmt.Errorf("DELETION_TOMBSTONE_RETENTION must not be negative"))
+	}
+	if c.DataCleanupInterval < time.Minute {
+		errs = append(errs, fmt.Errorf("DATA_CLEANUP_INTERVAL must be at least 1m"))
 	}
 
 	if c.SMTPHost != "" {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -467,6 +468,55 @@ func (r *PGRepository) CheckTombstone(ctx context.Context, identifierType Tombst
 		return false, fmt.Errorf("check tombstone: %w", err)
 	}
 	return exists, nil
+}
+
+// purgeBatchSize is the maximum number of rows deleted per batch to avoid long-running transactions.
+const purgeBatchSize = 1000
+
+// PurgeLoginAttempts deletes login attempt rows older than the given cutoff in batches.
+func (r *PGRepository) PurgeLoginAttempts(ctx context.Context, olderThan time.Time) (int64, error) {
+	if r.db == nil {
+		return 0, fmt.Errorf("purge login attempts: database pool is nil")
+	}
+
+	const query = `DELETE FROM login_attempts WHERE ctid IN (SELECT ctid FROM login_attempts WHERE created_at < $1 LIMIT 1000)`
+
+	var total int64
+	for {
+		tag, err := r.db.Exec(ctx, query, olderThan)
+		if err != nil {
+			return total, fmt.Errorf("purge login attempts: %w", err)
+		}
+		affected := tag.RowsAffected()
+		total += affected
+		if affected < purgeBatchSize {
+			break
+		}
+	}
+	return total, nil
+}
+
+// PurgeTombstones deletes deletion tombstone rows older than the given cutoff in batches.
+func (r *PGRepository) PurgeTombstones(ctx context.Context, olderThan time.Time) (int64, error) {
+	if r.db == nil {
+		return 0, fmt.Errorf("purge deletion tombstones: database pool is nil")
+	}
+
+	const query = `DELETE FROM deletion_tombstones WHERE ctid IN (SELECT ctid FROM deletion_tombstones WHERE created_at < $1 LIMIT 1000)`
+
+	var total int64
+	for {
+		tag, err := r.db.Exec(ctx, query, olderThan)
+		if err != nil {
+			return total, fmt.Errorf("purge deletion tombstones: %w", err)
+		}
+		affected := tag.RowsAffected()
+		total += affected
+		if affected < purgeBatchSize {
+			break
+		}
+	}
+	return total, nil
 }
 
 func isUniqueViolation(err error) bool {

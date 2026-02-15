@@ -158,10 +158,28 @@ func run() error {
 	permResolver := permission.NewResolver(permStore, permCache, log.Logger)
 	permPublisher := permission.NewPublisher(rdb)
 
+	// Initialise user repository early because the background purge goroutine needs it.
+	userRepo := user.NewPGRepository(db, log.Logger)
+
 	// Start background services with a shared cancellable context.
 	subCtx, subCancel := context.WithCancel(ctx)
 
 	go blocklist.Run(subCtx, cfg.DisposableEmailBlocklistRefreshInterval)
+
+	go func() {
+		purgeExpiredData(subCtx, userRepo, cfg)
+
+		ticker := time.NewTicker(cfg.DataCleanupInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-subCtx.Done():
+				return
+			case <-ticker.C:
+				purgeExpiredData(subCtx, userRepo, cfg)
+			}
+		}
+	}()
 
 	// Start permission cache invalidation subscriber with reconnection.
 	defer subCancel()
@@ -201,8 +219,7 @@ func run() error {
 		log.Warn().Msg("SMTP_HOST is not configured. Email verification will only work in development mode (token logged to console).")
 	}
 
-	// Initialise repositories and services
-	userRepo := user.NewPGRepository(db, log.Logger)
+	// Initialise remaining repositories and services
 	serverRepo := servercfg.NewPGRepository(db, log.Logger)
 	channelRepo := channel.NewPGRepository(db, log.Logger)
 	categoryRepo := category.NewPGRepository(db, log.Logger)
@@ -420,6 +437,27 @@ func (s *server) registerRoutes(app *fiber.App) {
 type redisPinger struct{ client *redis.Client }
 
 func (p redisPinger) Ping(ctx context.Context) error { return p.client.Ping(ctx).Err() }
+
+// purgeExpiredData deletes stale login attempts and (optionally) deletion tombstones. Each call logs the outcome so
+// operators can monitor retention enforcement.
+func purgeExpiredData(ctx context.Context, repo *user.PGRepository, cfg *config.Config) {
+	deleted, err := repo.PurgeLoginAttempts(ctx, time.Now().Add(-cfg.LoginAttemptRetention))
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to purge expired login attempts")
+	} else if deleted > 0 {
+		log.Info().Int64("deleted", deleted).Dur("retention", cfg.LoginAttemptRetention).Msg("Purged expired login attempts")
+	}
+
+	if cfg.DeletionTombstoneRetention > 0 {
+		deleted, err := repo.PurgeTombstones(ctx, time.Now().Add(-cfg.DeletionTombstoneRetention))
+		if err != nil {
+			log.Warn().Err(err).Msg("Failed to purge expired deletion tombstones")
+		} else if deleted > 0 {
+			log.Info().Int64("deleted", deleted).Dur("retention", cfg.DeletionTombstoneRetention).
+				Msg("Purged expired deletion tombstones")
+		}
+	}
+}
 
 // fiberStatusToAPICode maps an HTTP status code from Fiber's built-in errors (404, 405, etc.) to the closest protocol
 // error code.
