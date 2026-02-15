@@ -24,4 +24,5 @@ var (
 	ErrMFANotConfigured     = errors.New("MFA is not configured on this server")
 	ErrServerOwner          = errors.New("the server owner cannot delete their account")
 	ErrAccountTombstoned    = errors.New("email or username was previously used by a deleted account")
+	ErrMFASetupLocked       = errors.New("too many failed MFA setup attempts")
 )

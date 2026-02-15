@@ -190,6 +190,8 @@ func mapAuthServiceError(c fiber.Ctx, err error, log zerolog.Logger, handler str
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.MFANotEnabled, err.Error())
 	case errors.Is(err, auth.ErrMFAAlreadyEnabled):
 		return httputil.Fail(c, fiber.StatusConflict, apierrors.MFAAlreadyEnabled, err.Error())
+	case errors.Is(err, auth.ErrMFASetupLocked):
+		return httputil.Fail(c, fiber.StatusTooManyRequests, apierrors.RateLimited, err.Error())
 	case errors.Is(err, auth.ErrMFANotConfigured):
 		return httputil.Fail(c, fiber.StatusServiceUnavailable, apierrors.ServiceUnavailable, "MFA is not configured on this server")
 	case errors.Is(err, auth.ErrRefreshTokenReused):

@@ -100,3 +100,43 @@ func TestConsumePendingMFASecretExpired(t *testing.T) {
 		t.Errorf("ConsumePendingMFASecret() after expiry error = %v, want ErrInvalidToken", err)
 	}
 }
+
+func TestIncrementMFASetupAttempts(t *testing.T) {
+	t.Parallel()
+	_, rdb := setupMiniredis(t)
+	ctx := context.Background()
+	userID := uuid.New()
+
+	for i := int64(1); i <= 3; i++ {
+		count, err := IncrementMFASetupAttempts(ctx, rdb, userID)
+		if err != nil {
+			t.Fatalf("IncrementMFASetupAttempts() call %d error = %v", i, err)
+		}
+		if count != i {
+			t.Errorf("IncrementMFASetupAttempts() call %d = %d, want %d", i, count, i)
+		}
+	}
+}
+
+func TestResetMFASetupAttempts(t *testing.T) {
+	t.Parallel()
+	_, rdb := setupMiniredis(t)
+	ctx := context.Background()
+	userID := uuid.New()
+
+	for i := 0; i < 3; i++ {
+		if _, err := IncrementMFASetupAttempts(ctx, rdb, userID); err != nil {
+			t.Fatalf("IncrementMFASetupAttempts() error = %v", err)
+		}
+	}
+
+	ResetMFASetupAttempts(ctx, rdb, userID)
+
+	count, err := IncrementMFASetupAttempts(ctx, rdb, userID)
+	if err != nil {
+		t.Fatalf("IncrementMFASetupAttempts() after reset error = %v", err)
+	}
+	if count != 1 {
+		t.Errorf("IncrementMFASetupAttempts() after reset = %d, want 1", count)
+	}
+}

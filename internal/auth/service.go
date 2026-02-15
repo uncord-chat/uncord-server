@@ -397,6 +397,7 @@ func (s *Service) BeginMFASetup(ctx context.Context, userID uuid.UUID, password 
 	if err := StorePendingMFASecret(ctx, s.redis, userID, encrypted); err != nil {
 		return nil, err
 	}
+	ResetMFASetupAttempts(ctx, s.redis, userID)
 
 	return &MFASetupResult{
 		Secret: key.Secret(),
@@ -423,6 +424,15 @@ func (s *Service) ConfirmMFASetup(ctx context.Context, userID uuid.UUID, code st
 	}
 
 	if !totp.Validate(code, secret) {
+		attempts, err := IncrementMFASetupAttempts(ctx, s.redis, userID)
+		if err != nil {
+			s.log.Error().Err(err).Str("user_id", userID.String()).Msg("Failed to increment MFA setup attempts")
+		}
+
+		if attempts >= maxMFASetupAttempts {
+			return nil, ErrMFASetupLocked
+		}
+
 		// Re-store so the user can retry.
 		if storeErr := StorePendingMFASecret(ctx, s.redis, userID, encrypted); storeErr != nil {
 			s.log.Error().Err(storeErr).Str("user_id", userID.String()).Msg("Failed to re-store pending MFA secret")
