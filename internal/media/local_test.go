@@ -99,6 +99,61 @@ func TestLocalStorage_URL(t *testing.T) {
 	}
 }
 
+func TestLocalStorage_PutTraversalBlocked(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dir := t.TempDir()
+	store := NewLocalStorage(dir, "http://localhost:8080")
+
+	traversalKeys := []string{
+		"../escape.txt",
+		"../../etc/passwd",
+		"subdir/../../escape.txt",
+	}
+	for _, key := range traversalKeys {
+		if err := store.Put(ctx, key, bytes.NewReader([]byte("malicious"))); !errors.Is(err, ErrInvalidKey) {
+			t.Errorf("Put(%q) error = %v, want ErrInvalidKey", key, err)
+		}
+	}
+}
+
+func TestLocalStorage_GetTraversalBlocked(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dir := t.TempDir()
+	store := NewLocalStorage(dir, "http://localhost:8080")
+
+	traversalKeys := []string{
+		"../escape.txt",
+		"../../etc/passwd",
+		"subdir/../../escape.txt",
+	}
+	for _, key := range traversalKeys {
+		_, err := store.Get(ctx, key)
+		if !errors.Is(err, ErrInvalidKey) {
+			t.Errorf("Get(%q) error = %v, want ErrInvalidKey", key, err)
+		}
+	}
+}
+
+func TestLocalStorage_DeleteTraversalBlocked(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dir := t.TempDir()
+	store := NewLocalStorage(dir, "http://localhost:8080")
+
+	traversalKeys := []string{
+		"../escape.txt",
+		"../../etc/passwd",
+		"subdir/../../escape.txt",
+	}
+	for _, key := range traversalKeys {
+		if err := store.Delete(ctx, key); !errors.Is(err, ErrInvalidKey) {
+			t.Errorf("Delete(%q) error = %v, want ErrInvalidKey", key, err)
+		}
+	}
+}
+
 func TestLocalStorage_PutCreatesNestedDirs(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

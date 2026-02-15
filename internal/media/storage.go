@@ -13,6 +13,7 @@ var (
 	ErrUnsupportedContentType = errors.New("content type is not allowed")
 	ErrFileTooLarge           = errors.New("file exceeds the maximum upload size")
 	ErrStorageKeyNotFound     = errors.New("storage key not found")
+	ErrInvalidKey             = errors.New("storage key attempts to escape the base directory")
 )
 
 // StorageProvider abstracts file storage so the server can swap between local disk, S3, or other backends without

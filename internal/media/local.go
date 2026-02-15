@@ -19,15 +19,28 @@ type LocalStorage struct {
 // joining baseURL with the storage key.
 func NewLocalStorage(basePath, baseURL string) *LocalStorage {
 	return &LocalStorage{
-		basePath: basePath,
+		basePath: filepath.Clean(basePath),
 		baseURL:  strings.TrimRight(baseURL, "/"),
 	}
+}
+
+// safePath resolves key to an absolute path and verifies that the result lies within the storage base directory. This
+// prevents directory traversal attacks regardless of how the key was constructed.
+func (s *LocalStorage) safePath(key string) (string, error) {
+	full := filepath.Clean(filepath.Join(s.basePath, key))
+	if !strings.HasPrefix(full, s.basePath+string(filepath.Separator)) && full != s.basePath {
+		return "", ErrInvalidKey
+	}
+	return full, nil
 }
 
 // Put writes the contents of r to the file identified by key. Parent directories are created automatically. If the
 // write fails partway through, the partially written file is removed.
 func (s *LocalStorage) Put(_ context.Context, key string, r io.Reader) error {
-	fullPath := filepath.Join(s.basePath, key)
+	fullPath, err := s.safePath(key)
+	if err != nil {
+		return err
+	}
 
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
 		return fmt.Errorf("create storage directory: %w", err)
@@ -53,7 +66,10 @@ func (s *LocalStorage) Put(_ context.Context, key string, r io.Reader) error {
 
 // Get opens the file identified by key for reading. Returns ErrStorageKeyNotFound when the file does not exist.
 func (s *LocalStorage) Get(_ context.Context, key string) (io.ReadCloser, error) {
-	fullPath := filepath.Join(s.basePath, key)
+	fullPath, err := s.safePath(key)
+	if err != nil {
+		return nil, err
+	}
 	f, err := os.Open(fullPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -66,7 +82,10 @@ func (s *LocalStorage) Get(_ context.Context, key string) (io.ReadCloser, error)
 
 // Delete removes the file at key. If the file does not exist, no error is returned.
 func (s *LocalStorage) Delete(_ context.Context, key string) error {
-	fullPath := filepath.Join(s.basePath, key)
+	fullPath, err := s.safePath(key)
+	if err != nil {
+		return err
+	}
 	if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("delete storage file: %w", err)
 	}
