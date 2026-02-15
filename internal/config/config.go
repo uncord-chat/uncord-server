@@ -26,7 +26,8 @@ type Config struct {
 	DatabaseMinConn int
 
 	// Valkey
-	ValkeyURL string
+	ValkeyURL         string
+	ValkeyDialTimeout time.Duration
 
 	// Argon2 password hashing
 	Argon2Memory      uint32
@@ -44,10 +45,12 @@ type Config struct {
 	DisposableEmailBlocklistEnabled         bool
 	DisposableEmailBlocklistURL             string
 	DisposableEmailBlocklistRefreshInterval time.Duration
+	DisposableEmailBlocklistTimeout         time.Duration
 
 	// Typesense
-	TypesenseURL    string
-	TypesenseAPIKey string
+	TypesenseURL     string
+	TypesenseAPIKey  string
+	TypesenseTimeout time.Duration
 
 	// First-run owner
 	InitOwnerEmail    string
@@ -110,7 +113,8 @@ func Load() (*Config, error) {
 		DatabaseMaxConn: p.int("DATABASE_MAX_CONNS", 25),
 		DatabaseMinConn: p.int("DATABASE_MIN_CONNS", 5),
 
-		ValkeyURL: envStr("VALKEY_URL", "valkey://valkey:6379/0"),
+		ValkeyURL:         envStr("VALKEY_URL", "valkey://valkey:6379/0"),
+		ValkeyDialTimeout: p.duration("VALKEY_DIAL_TIMEOUT", 5*time.Second),
 
 		Argon2Memory:      p.uint32("ARGON2_MEMORY", 65536),
 		Argon2Iterations:  p.uint32("ARGON2_ITERATIONS", 3),
@@ -125,9 +129,11 @@ func Load() (*Config, error) {
 		DisposableEmailBlocklistEnabled:         p.bool("ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_ENABLED", true),
 		DisposableEmailBlocklistURL:             envStr("ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_URL", "https://raw.githubusercontent.com/disposable-email-domains/disposable-email-domains/master/disposable_email_blocklist.conf"),
 		DisposableEmailBlocklistRefreshInterval: p.duration("ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_REFRESH_INTERVAL", 24*time.Hour),
+		DisposableEmailBlocklistTimeout:         p.duration("ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_TIMEOUT", 10*time.Second),
 
-		TypesenseURL:    envStr("TYPESENSE_URL", "http://typesense:8108"),
-		TypesenseAPIKey: envStr("TYPESENSE_API_KEY", "change-me-in-production"),
+		TypesenseURL:     envStr("TYPESENSE_URL", "http://typesense:8108"),
+		TypesenseAPIKey:  envStr("TYPESENSE_API_KEY", "change-me-in-production"),
+		TypesenseTimeout: p.duration("TYPESENSE_TIMEOUT", 30*time.Second),
 
 		InitOwnerEmail:    envStr("INIT_OWNER_EMAIL", ""),
 		InitOwnerPassword: envStr("INIT_OWNER_PASSWORD", ""),

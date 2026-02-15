@@ -113,7 +113,7 @@ func run() error {
 	log.Info().Msg("Database migrations complete")
 
 	// Connect Valkey
-	rdb, err := valkey.Connect(ctx, cfg.ValkeyURL)
+	rdb, err := valkey.Connect(ctx, cfg.ValkeyURL, cfg.ValkeyDialTimeout)
 	if err != nil {
 		return fmt.Errorf("connect valkey: %w", err)
 	}
@@ -134,7 +134,7 @@ func run() error {
 	}
 
 	// Typesense collection (best-effort)
-	result, err := typesense.EnsureMessagesCollection(ctx, cfg.TypesenseURL, cfg.TypesenseAPIKey)
+	result, err := typesense.EnsureMessagesCollection(ctx, cfg.TypesenseURL, cfg.TypesenseAPIKey, cfg.TypesenseTimeout)
 	if err != nil {
 		log.Warn().Err(err).Msg("Typesense collection setup failed")
 	} else {
@@ -150,7 +150,7 @@ func run() error {
 
 	// Initialise disposable email blocklist with periodic refresh so newly added disposable domains are picked up
 	// without requiring a server restart.
-	blocklist := disposable.NewBlocklist(cfg.DisposableEmailBlocklistURL, cfg.DisposableEmailBlocklistEnabled, log.Logger)
+	blocklist := disposable.NewBlocklist(cfg.DisposableEmailBlocklistURL, cfg.DisposableEmailBlocklistEnabled, cfg.DisposableEmailBlocklistTimeout, log.Logger)
 
 	// Initialise permission engine
 	permStore := permission.NewPGStore(db)

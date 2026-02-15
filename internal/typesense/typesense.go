@@ -59,8 +59,8 @@ const (
 // EnsureMessagesCollection ensures the messages collection exists in Typesense with the correct schema. If the
 // collection exists but the schema differs, it is dropped and recreated. The returned Result indicates what action was
 // taken.
-func EnsureMessagesCollection(ctx context.Context, baseURL, apiKey string) (Result, error) {
-	client := &http.Client{Timeout: 30 * time.Second}
+func EnsureMessagesCollection(ctx context.Context, baseURL, apiKey string, timeout time.Duration) (Result, error) {
+	client := &http.Client{Timeout: timeout}
 
 	// Check whether the collection already exists.
 	existing, err := getCollection(ctx, client, baseURL, apiKey)

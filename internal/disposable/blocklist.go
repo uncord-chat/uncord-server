@@ -28,13 +28,13 @@ type Blocklist struct {
 }
 
 // NewBlocklist creates a new disposable email blocklist. If enabled is false, IsBlocked always returns false without
-// fetching the list.
-func NewBlocklist(url string, enabled bool, logger zerolog.Logger) *Blocklist {
+// fetching the list. The timeout parameter controls the HTTP client timeout for fetching the blocklist.
+func NewBlocklist(url string, enabled bool, timeout time.Duration, logger zerolog.Logger) *Blocklist {
 	return &Blocklist{
 		url:     url,
 		enabled: enabled,
 		log:     logger,
-		client:  &http.Client{Timeout: 10 * time.Second},
+		client:  &http.Client{Timeout: timeout},
 	}
 }
 

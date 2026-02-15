@@ -267,7 +267,7 @@ func testConfig() *config.Config {
 func newTestService(t *testing.T, repo *fakeRepository) *Service {
 	t.Helper()
 	_, rdb := setupMiniredis(t)
-	bl := disposable.NewBlocklist("", false, zerolog.Nop())
+	bl := disposable.NewBlocklist("", false, 10*time.Second, zerolog.Nop())
 	serverRepo := &fakeServerRepo{ownerID: uuid.New()}
 	permPub := permission.NewPublisher(rdb)
 	svc, err := NewService(repo, rdb, testConfig(), bl, nil, serverRepo, permPub, zerolog.Nop())
@@ -392,7 +392,7 @@ func TestServiceRegisterDisposableEmailBlocked(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	bl := disposable.NewBlocklist(srv.URL, true, zerolog.Nop())
+	bl := disposable.NewBlocklist(srv.URL, true, 10*time.Second, zerolog.Nop())
 	serverRepo := &fakeServerRepo{ownerID: uuid.New()}
 	permPub := permission.NewPublisher(rdb)
 	svc, err := NewService(repo, rdb, testConfig(), bl, nil, serverRepo, permPub, zerolog.Nop())
@@ -878,7 +878,7 @@ func (f *fakeSender) SendVerification(to, token, serverURL, serverName string) e
 func newTestServiceWithSender(t *testing.T, repo *fakeRepository, sender Sender) *Service {
 	t.Helper()
 	_, rdb := setupMiniredis(t)
-	bl := disposable.NewBlocklist("", false, zerolog.Nop())
+	bl := disposable.NewBlocklist("", false, 10*time.Second, zerolog.Nop())
 	serverRepo := &fakeServerRepo{ownerID: uuid.New()}
 	permPub := permission.NewPublisher(rdb)
 	svc, err := NewService(repo, rdb, testConfig(), bl, sender, serverRepo, permPub, zerolog.Nop())
@@ -1378,7 +1378,7 @@ func TestServiceBeginMFASetupNotConfigured(t *testing.T) {
 	t.Parallel()
 	repo := newFakeRepository()
 	_, rdb := setupMiniredis(t)
-	bl := disposable.NewBlocklist("", false, zerolog.Nop())
+	bl := disposable.NewBlocklist("", false, 10*time.Second, zerolog.Nop())
 	cfg := testConfig()
 	cfg.MFAEncryptionKey = "" // simulate unconfigured MFA
 	serverRepo := &fakeServerRepo{ownerID: uuid.New()}
@@ -1484,7 +1484,7 @@ func TestServiceDisableMFANotConfigured(t *testing.T) {
 func newTestServiceWithServerRepo(t *testing.T, repo *fakeRepository, srvRepo *fakeServerRepo) *Service {
 	t.Helper()
 	_, rdb := setupMiniredis(t)
-	bl := disposable.NewBlocklist("", false, zerolog.Nop())
+	bl := disposable.NewBlocklist("", false, 10*time.Second, zerolog.Nop())
 	permPub := permission.NewPublisher(rdb)
 	svc, err := NewService(repo, rdb, testConfig(), bl, nil, srvRepo, permPub, zerolog.Nop())
 	if err != nil {
@@ -1655,7 +1655,7 @@ func TestRegisterUsernameTombstoneDisabled(t *testing.T) {
 	t.Parallel()
 	repo := newFakeRepository()
 	_, rdb := setupMiniredis(t)
-	bl := disposable.NewBlocklist("", false, zerolog.Nop())
+	bl := disposable.NewBlocklist("", false, 10*time.Second, zerolog.Nop())
 	srvRepo := &fakeServerRepo{ownerID: uuid.New()}
 	permPub := permission.NewPublisher(rdb)
 	cfg := testConfig()
@@ -1700,7 +1700,7 @@ func TestRegisterUsernameTombstoneRetroactive(t *testing.T) {
 	t.Parallel()
 	repo := newFakeRepository()
 	_, rdb := setupMiniredis(t)
-	bl := disposable.NewBlocklist("", false, zerolog.Nop())
+	bl := disposable.NewBlocklist("", false, 10*time.Second, zerolog.Nop())
 	srvRepo := &fakeServerRepo{ownerID: uuid.New()}
 	permPub := permission.NewPublisher(rdb)
 

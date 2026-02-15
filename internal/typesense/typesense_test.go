@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // --- schemasMatch tests ---
@@ -380,7 +381,7 @@ func TestEnsureMessagesCollection(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		result, err := EnsureMessagesCollection(context.Background(), srv.URL, "key")
+		result, err := EnsureMessagesCollection(context.Background(), srv.URL, "key", 30*time.Second)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -396,7 +397,7 @@ func TestEnsureMessagesCollection(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		result, err := EnsureMessagesCollection(context.Background(), srv.URL, "key")
+		result, err := EnsureMessagesCollection(context.Background(), srv.URL, "key", 30*time.Second)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -419,7 +420,7 @@ func TestEnsureMessagesCollection(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		result, err := EnsureMessagesCollection(context.Background(), srv.URL, "key")
+		result, err := EnsureMessagesCollection(context.Background(), srv.URL, "key", 30*time.Second)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -435,7 +436,7 @@ func TestEnsureMessagesCollection(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		_, err := EnsureMessagesCollection(context.Background(), srv.URL, "key")
+		_, err := EnsureMessagesCollection(context.Background(), srv.URL, "key", 30*time.Second)
 		if err == nil {
 			t.Fatal("expected error when get fails")
 		}
@@ -456,7 +457,7 @@ func TestEnsureMessagesCollection(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		_, err := EnsureMessagesCollection(context.Background(), srv.URL, "key")
+		_, err := EnsureMessagesCollection(context.Background(), srv.URL, "key", 30*time.Second)
 		if err == nil {
 			t.Fatal("expected error when delete fails")
 		}
@@ -477,7 +478,7 @@ func TestEnsureMessagesCollection(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		_, err := EnsureMessagesCollection(context.Background(), srv.URL, "key")
+		_, err := EnsureMessagesCollection(context.Background(), srv.URL, "key", 30*time.Second)
 		if err == nil {
 			t.Fatal("expected error when create fails")
 		}
@@ -500,7 +501,7 @@ func TestEnsureMessagesCollection(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		_, err := EnsureMessagesCollection(context.Background(), srv.URL, "key")
+		_, err := EnsureMessagesCollection(context.Background(), srv.URL, "key", 30*time.Second)
 		if err == nil {
 			t.Fatal("expected error when recreate fails")
 		}

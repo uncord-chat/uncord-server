@@ -167,7 +167,7 @@ func testVerifyHandler(t *testing.T) *fiber.App {
 		DeletionTombstoneUsernames: true,
 	}
 
-	bl := disposable.NewBlocklist("", false, zerolog.Nop())
+	bl := disposable.NewBlocklist("", false, 10*time.Second, zerolog.Nop())
 	permPub := permission.NewPublisher(rdb)
 	svc, err := auth.NewService(newFakeRepo(), rdb, cfg, bl, nil, &fakeServerRepo{}, permPub, zerolog.Nop())
 	if err != nil {

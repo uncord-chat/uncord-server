@@ -5,13 +5,15 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
 
 // Connect parses the Valkey URL, connects, and pings to verify the connection. The valkey:// scheme is replaced with
-// redis:// for go-redis compatibility.
-func Connect(ctx context.Context, rawURL string) (*redis.Client, error) {
+// redis:// for go-redis compatibility. The dialTimeout parameter controls how long the client waits when establishing
+// new connections.
+func Connect(ctx context.Context, rawURL string, dialTimeout time.Duration) (*redis.Client, error) {
 	// go-redis only understands the redis:// scheme, so replace valkey:// (case-insensitive) before parsing.
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
@@ -25,6 +27,7 @@ func Connect(ctx context.Context, rawURL string) (*redis.Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse valkey URL: %w", err)
 	}
+	opts.DialTimeout = dialTimeout
 
 	client := redis.NewClient(opts)
 

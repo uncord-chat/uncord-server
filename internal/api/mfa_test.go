@@ -25,7 +25,7 @@ func testMFAApp(t *testing.T) (*fiber.App, *auth.Service) {
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 
-	bl := disposable.NewBlocklist("", false, zerolog.Nop())
+	bl := disposable.NewBlocklist("", false, 10*time.Second, zerolog.Nop())
 	repo := newFakeRepo()
 	permPub := permission.NewPublisher(rdb)
 	svc, err := auth.NewService(repo, rdb, testAuthConfig(), bl, nil, &fakeServerRepo{}, permPub, zerolog.Nop())

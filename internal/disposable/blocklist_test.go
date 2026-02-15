@@ -13,7 +13,7 @@ import (
 
 func TestBlocklistDisabled(t *testing.T) {
 	t.Parallel()
-	bl := NewBlocklist("http://unused", false, zerolog.Nop())
+	bl := NewBlocklist("http://unused", false, 10*time.Second, zerolog.Nop())
 
 	blocked, err := bl.IsBlocked(context.Background(), "mailinator.com")
 	if err != nil {
@@ -31,7 +31,7 @@ func TestBlocklistBlockedDomain(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	bl := NewBlocklist(srv.URL, true, zerolog.Nop())
+	bl := NewBlocklist(srv.URL, true, 10*time.Second, zerolog.Nop())
 
 	blocked, err := bl.IsBlocked(context.Background(), "mailinator.com")
 	if err != nil {
@@ -49,7 +49,7 @@ func TestBlocklistAllowedDomain(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	bl := NewBlocklist(srv.URL, true, zerolog.Nop())
+	bl := NewBlocklist(srv.URL, true, 10*time.Second, zerolog.Nop())
 
 	blocked, err := bl.IsBlocked(context.Background(), "gmail.com")
 	if err != nil {
@@ -67,7 +67,7 @@ func TestBlocklistFetchError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	bl := NewBlocklist(srv.URL, true, zerolog.Nop())
+	bl := NewBlocklist(srv.URL, true, 10*time.Second, zerolog.Nop())
 
 	_, err := bl.IsBlocked(context.Background(), "test.com")
 	if err == nil {
@@ -85,7 +85,7 @@ func TestBlocklistLazyCaching(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	bl := NewBlocklist(srv.URL, true, zerolog.Nop())
+	bl := NewBlocklist(srv.URL, true, 10*time.Second, zerolog.Nop())
 
 	// Call multiple times; should only fetch once
 	for i := 0; i < 5; i++ {
@@ -107,7 +107,7 @@ func TestBlocklistCaseInsensitive(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	bl := NewBlocklist(srv.URL, true, zerolog.Nop())
+	bl := NewBlocklist(srv.URL, true, 10*time.Second, zerolog.Nop())
 
 	blocked, err := bl.IsBlocked(context.Background(), "mailinator.com")
 	if err != nil {
@@ -125,7 +125,7 @@ func TestBlocklistCommentsAndBlanks(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	bl := NewBlocklist(srv.URL, true, zerolog.Nop())
+	bl := NewBlocklist(srv.URL, true, 10*time.Second, zerolog.Nop())
 
 	blocked, err := bl.IsBlocked(context.Background(), "mailinator.com")
 	if err != nil {
@@ -146,7 +146,7 @@ func TestPrefetchLoadsBlocklist(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	bl := NewBlocklist(srv.URL, true, zerolog.Nop())
+	bl := NewBlocklist(srv.URL, true, 10*time.Second, zerolog.Nop())
 	bl.Prefetch(context.Background())
 
 	// After prefetch, IsBlocked should not trigger another fetch
@@ -165,7 +165,7 @@ func TestPrefetchLoadsBlocklist(t *testing.T) {
 
 func TestPrefetchDisabledNoop(t *testing.T) {
 	t.Parallel()
-	bl := NewBlocklist("http://unused", false, zerolog.Nop())
+	bl := NewBlocklist("http://unused", false, 10*time.Second, zerolog.Nop())
 	bl.Prefetch(context.Background()) // should not panic or fetch
 }
 
@@ -179,7 +179,7 @@ func TestRunPeriodicRefresh(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	bl := NewBlocklist(srv.URL, true, zerolog.Nop())
+	bl := NewBlocklist(srv.URL, true, 10*time.Second, zerolog.Nop())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -215,7 +215,7 @@ func TestRunContextCancellation(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	bl := NewBlocklist(srv.URL, true, zerolog.Nop())
+	bl := NewBlocklist(srv.URL, true, 10*time.Second, zerolog.Nop())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel immediately
@@ -249,7 +249,7 @@ func TestRunRefreshFailureContinues(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	bl := NewBlocklist(srv.URL, true, zerolog.Nop())
+	bl := NewBlocklist(srv.URL, true, 10*time.Second, zerolog.Nop())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

@@ -185,7 +185,7 @@ func testAuthHandler(t *testing.T) (*AuthHandler, *fiber.App) {
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 
 	_ = mr
-	bl := disposable.NewBlocklist("", false, zerolog.Nop())
+	bl := disposable.NewBlocklist("", false, 10*time.Second, zerolog.Nop())
 	permPub := permission.NewPublisher(rdb)
 	srvRepo := &fakeServerRepo{cfg: &server.Config{OwnerID: uuid.New()}}
 	svc, err := auth.NewService(newFakeRepo(), rdb, testAuthConfig(), bl, nil, srvRepo, permPub, zerolog.Nop())
@@ -586,7 +586,7 @@ func testVerifyPasswordApp(t *testing.T) *fiber.App {
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 
-	bl := disposable.NewBlocklist("", false, zerolog.Nop())
+	bl := disposable.NewBlocklist("", false, 10*time.Second, zerolog.Nop())
 	repo := newFakeRepo()
 	permPub := permission.NewPublisher(rdb)
 	svc, err := auth.NewService(repo, rdb, testAuthConfig(), bl, nil, &fakeServerRepo{}, permPub, zerolog.Nop())

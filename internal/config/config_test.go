@@ -19,8 +19,9 @@ func TestLoadDefaults(t *testing.T) {
 		"ARGON2_MEMORY", "ARGON2_ITERATIONS", "ARGON2_PARALLELISM", "ARGON2_SALT_LENGTH", "ARGON2_KEY_LENGTH",
 		"JWT_SECRET", "JWT_ACCESS_TTL", "JWT_REFRESH_TTL",
 		"ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_ENABLED", "ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_URL",
-		"ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_REFRESH_INTERVAL",
-		"TYPESENSE_URL", "TYPESENSE_API_KEY",
+		"ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_REFRESH_INTERVAL", "ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_TIMEOUT",
+		"VALKEY_DIAL_TIMEOUT",
+		"TYPESENSE_URL", "TYPESENSE_API_KEY", "TYPESENSE_TIMEOUT",
 		"INIT_OWNER_EMAIL", "INIT_OWNER_PASSWORD",
 		"ONBOARDING_REQUIRE_RULES", "ONBOARDING_REQUIRE_EMAIL_VERIFICATION",
 		"ONBOARDING_MIN_ACCOUNT_AGE", "ONBOARDING_REQUIRE_PHONE", "ONBOARDING_REQUIRE_CAPTCHA",
@@ -95,6 +96,19 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.DisposableEmailBlocklistRefreshInterval != 24*time.Hour {
 		t.Errorf("DisposableEmailBlocklistRefreshInterval = %v, want 24h", cfg.DisposableEmailBlocklistRefreshInterval)
+	}
+	if cfg.DisposableEmailBlocklistTimeout != 10*time.Second {
+		t.Errorf("DisposableEmailBlocklistTimeout = %v, want 10s", cfg.DisposableEmailBlocklistTimeout)
+	}
+
+	// Valkey defaults
+	if cfg.ValkeyDialTimeout != 5*time.Second {
+		t.Errorf("ValkeyDialTimeout = %v, want 5s", cfg.ValkeyDialTimeout)
+	}
+
+	// Typesense defaults
+	if cfg.TypesenseTimeout != 30*time.Second {
+		t.Errorf("TypesenseTimeout = %v, want 30s", cfg.TypesenseTimeout)
 	}
 
 	// Onboarding defaults
@@ -190,6 +204,9 @@ func TestLoadOverrides(t *testing.T) {
 	t.Setenv("JWT_REFRESH_TTL", "24h")
 	t.Setenv("ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_ENABLED", "false")
 	t.Setenv("ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_REFRESH_INTERVAL", "12h")
+	t.Setenv("ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_TIMEOUT", "20s")
+	t.Setenv("VALKEY_DIAL_TIMEOUT", "10s")
+	t.Setenv("TYPESENSE_TIMEOUT", "1m")
 	t.Setenv("MAX_UPLOAD_SIZE_MB", "50")
 	t.Setenv("MAX_CHANNELS", "100")
 	t.Setenv("MAX_CATEGORIES", "25")
@@ -234,6 +251,15 @@ func TestLoadOverrides(t *testing.T) {
 	}
 	if cfg.DisposableEmailBlocklistRefreshInterval != 12*time.Hour {
 		t.Errorf("DisposableEmailBlocklistRefreshInterval = %v, want 12h", cfg.DisposableEmailBlocklistRefreshInterval)
+	}
+	if cfg.DisposableEmailBlocklistTimeout != 20*time.Second {
+		t.Errorf("DisposableEmailBlocklistTimeout = %v, want 20s", cfg.DisposableEmailBlocklistTimeout)
+	}
+	if cfg.ValkeyDialTimeout != 10*time.Second {
+		t.Errorf("ValkeyDialTimeout = %v, want 10s", cfg.ValkeyDialTimeout)
+	}
+	if cfg.TypesenseTimeout != time.Minute {
+		t.Errorf("TypesenseTimeout = %v, want 1m", cfg.TypesenseTimeout)
 	}
 	if cfg.MaxUploadSizeMB != 50 {
 		t.Errorf("MaxUploadSizeMB = %d, want 50", cfg.MaxUploadSizeMB)
