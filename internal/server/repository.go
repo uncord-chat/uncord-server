@@ -41,24 +41,24 @@ func (r *PGRepository) Get(ctx context.Context) (*Config, error) {
 
 // Update applies the non-nil fields in params to the server config row and returns the updated config.
 func (r *PGRepository) Update(ctx context.Context, params UpdateParams) (*Config, error) {
-	setClauses := make([]string, 0, 4)
-	args := make([]any, 0, 4)
+	var setClauses []string
+	namedArgs := pgx.NamedArgs{}
 
 	if params.Name != nil {
-		setClauses = append(setClauses, fmt.Sprintf("name = $%d", len(args)+1))
-		args = append(args, *params.Name)
+		setClauses = append(setClauses, "name = @name")
+		namedArgs["name"] = *params.Name
 	}
 	if params.Description != nil {
-		setClauses = append(setClauses, fmt.Sprintf("description = $%d", len(args)+1))
-		args = append(args, *params.Description)
+		setClauses = append(setClauses, "description = @description")
+		namedArgs["description"] = *params.Description
 	}
 	if params.IconKey != nil {
-		setClauses = append(setClauses, fmt.Sprintf("icon_key = $%d", len(args)+1))
-		args = append(args, *params.IconKey)
+		setClauses = append(setClauses, "icon_key = @icon_key")
+		namedArgs["icon_key"] = *params.IconKey
 	}
 	if params.BannerKey != nil {
-		setClauses = append(setClauses, fmt.Sprintf("banner_key = $%d", len(args)+1))
-		args = append(args, *params.BannerKey)
+		setClauses = append(setClauses, "banner_key = @banner_key")
+		namedArgs["banner_key"] = *params.BannerKey
 	}
 
 	// No fields to update. Return the current row without issuing an UPDATE so the database trigger does not bump
@@ -67,12 +67,10 @@ func (r *PGRepository) Update(ctx context.Context, params UpdateParams) (*Config
 		return r.Get(ctx)
 	}
 
-	query := fmt.Sprintf(
-		"UPDATE server_config SET %s RETURNING %s",
-		strings.Join(setClauses, ", "), selectColumns,
-	)
+	query := "UPDATE server_config SET " + strings.Join(setClauses, ", ") +
+		" RETURNING " + selectColumns
 
-	row := r.db.QueryRow(ctx, query, args...)
+	row := r.db.QueryRow(ctx, query, namedArgs)
 	cfg, err := scanConfig(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

@@ -106,34 +106,28 @@ func (r *PGRepository) Create(ctx context.Context, params CreateParams, maxRoles
 
 // Update applies the non-nil fields in params to the role row and returns the updated role.
 func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdateParams) (*Role, error) {
-	setClauses := make([]string, 0, 5)
-	args := make([]any, 0, 6)
-	argPos := 1
+	var setClauses []string
+	namedArgs := pgx.NamedArgs{"id": id}
 
 	if params.Name != nil {
-		setClauses = append(setClauses, fmt.Sprintf("name = $%d", argPos))
-		args = append(args, *params.Name)
-		argPos++
+		setClauses = append(setClauses, "name = @name")
+		namedArgs["name"] = *params.Name
 	}
 	if params.Colour != nil {
-		setClauses = append(setClauses, fmt.Sprintf("colour = $%d", argPos))
-		args = append(args, *params.Colour)
-		argPos++
+		setClauses = append(setClauses, "colour = @colour")
+		namedArgs["colour"] = *params.Colour
 	}
 	if params.Position != nil {
-		setClauses = append(setClauses, fmt.Sprintf("position = $%d", argPos))
-		args = append(args, *params.Position)
-		argPos++
+		setClauses = append(setClauses, "position = @position")
+		namedArgs["position"] = *params.Position
 	}
 	if params.Permissions != nil {
-		setClauses = append(setClauses, fmt.Sprintf("permissions = $%d", argPos))
-		args = append(args, *params.Permissions)
-		argPos++
+		setClauses = append(setClauses, "permissions = @permissions")
+		namedArgs["permissions"] = *params.Permissions
 	}
 	if params.Hoist != nil {
-		setClauses = append(setClauses, fmt.Sprintf("hoist = $%d", argPos))
-		args = append(args, *params.Hoist)
-		argPos++
+		setClauses = append(setClauses, "hoist = @hoist")
+		namedArgs["hoist"] = *params.Hoist
 	}
 
 	// No fields to update. Return the current row without issuing an UPDATE so the database trigger does not bump
@@ -142,13 +136,10 @@ func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdatePa
 		return r.GetByID(ctx, id)
 	}
 
-	query := fmt.Sprintf(
-		"UPDATE roles SET %s WHERE id = $%d RETURNING %s",
-		strings.Join(setClauses, ", "), argPos, selectColumns,
-	)
-	args = append(args, id)
+	query := "UPDATE roles SET " + strings.Join(setClauses, ", ") +
+		" WHERE id = @id RETURNING " + selectColumns
 
-	row := r.db.QueryRow(ctx, query, args...)
+	row := r.db.QueryRow(ctx, query, namedArgs)
 	role, err := scanRole(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

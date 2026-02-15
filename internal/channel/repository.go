@@ -112,14 +112,12 @@ func (r *PGRepository) Create(ctx context.Context, params CreateParams, maxChann
 
 // Update applies the non-nil fields in params to the channel row and returns the updated channel.
 func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdateParams) (*Channel, error) {
-	setClauses := make([]string, 0, 6)
-	args := make([]any, 0, 7)
-	argPos := 1
+	var setClauses []string
+	namedArgs := pgx.NamedArgs{"id": id}
 
 	if params.Name != nil {
-		setClauses = append(setClauses, fmt.Sprintf("name = $%d", argPos))
-		args = append(args, *params.Name)
-		argPos++
+		setClauses = append(setClauses, "name = @name")
+		namedArgs["name"] = *params.Name
 	}
 	if params.SetCategoryNull {
 		setClauses = append(setClauses, "category_id = NULL")
@@ -133,29 +131,24 @@ func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdatePa
 		if !exists {
 			return nil, ErrCategoryNotFound
 		}
-		setClauses = append(setClauses, fmt.Sprintf("category_id = $%d", argPos))
-		args = append(args, *params.CategoryID)
-		argPos++
+		setClauses = append(setClauses, "category_id = @category_id")
+		namedArgs["category_id"] = *params.CategoryID
 	}
 	if params.Topic != nil {
-		setClauses = append(setClauses, fmt.Sprintf("topic = $%d", argPos))
-		args = append(args, *params.Topic)
-		argPos++
+		setClauses = append(setClauses, "topic = @topic")
+		namedArgs["topic"] = *params.Topic
 	}
 	if params.Position != nil {
-		setClauses = append(setClauses, fmt.Sprintf("position = $%d", argPos))
-		args = append(args, *params.Position)
-		argPos++
+		setClauses = append(setClauses, "position = @position")
+		namedArgs["position"] = *params.Position
 	}
 	if params.SlowmodeSeconds != nil {
-		setClauses = append(setClauses, fmt.Sprintf("slowmode_seconds = $%d", argPos))
-		args = append(args, *params.SlowmodeSeconds)
-		argPos++
+		setClauses = append(setClauses, "slowmode_seconds = @slowmode_seconds")
+		namedArgs["slowmode_seconds"] = *params.SlowmodeSeconds
 	}
 	if params.NSFW != nil {
-		setClauses = append(setClauses, fmt.Sprintf("nsfw = $%d", argPos))
-		args = append(args, *params.NSFW)
-		argPos++
+		setClauses = append(setClauses, "nsfw = @nsfw")
+		namedArgs["nsfw"] = *params.NSFW
 	}
 
 	// No fields to update. Return the current row without issuing an UPDATE so the database trigger does not bump
@@ -164,13 +157,10 @@ func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdatePa
 		return r.GetByID(ctx, id)
 	}
 
-	query := fmt.Sprintf(
-		"UPDATE channels SET %s WHERE id = $%d RETURNING %s",
-		strings.Join(setClauses, ", "), argPos, selectColumns,
-	)
-	args = append(args, id)
+	query := "UPDATE channels SET " + strings.Join(setClauses, ", ") +
+		" WHERE id = @id RETURNING " + selectColumns
 
-	row := r.db.QueryRow(ctx, query, args...)
+	row := r.db.QueryRow(ctx, query, namedArgs)
 	ch, err := scanChannel(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

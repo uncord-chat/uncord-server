@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -206,35 +205,35 @@ func (r *PGRepository) UpdatePasswordHash(ctx context.Context, userID uuid.UUID,
 // row matches the given ID.
 func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdateParams) (*User, error) {
 	var setClauses []string
-	var args []any
+	namedArgs := pgx.NamedArgs{"id": id}
 
 	if params.DisplayName != nil {
-		args = append(args, *params.DisplayName)
-		setClauses = append(setClauses, "display_name = $"+strconv.Itoa(len(args)))
+		setClauses = append(setClauses, "display_name = @display_name")
+		namedArgs["display_name"] = *params.DisplayName
 	}
 	if params.AvatarKey != nil {
-		args = append(args, *params.AvatarKey)
-		setClauses = append(setClauses, "avatar_key = $"+strconv.Itoa(len(args)))
+		setClauses = append(setClauses, "avatar_key = @avatar_key")
+		namedArgs["avatar_key"] = *params.AvatarKey
 	}
 	if params.Pronouns != nil {
-		args = append(args, *params.Pronouns)
-		setClauses = append(setClauses, "pronouns = $"+strconv.Itoa(len(args)))
+		setClauses = append(setClauses, "pronouns = @pronouns")
+		namedArgs["pronouns"] = *params.Pronouns
 	}
 	if params.BannerKey != nil {
-		args = append(args, *params.BannerKey)
-		setClauses = append(setClauses, "banner_key = $"+strconv.Itoa(len(args)))
+		setClauses = append(setClauses, "banner_key = @banner_key")
+		namedArgs["banner_key"] = *params.BannerKey
 	}
 	if params.About != nil {
-		args = append(args, *params.About)
-		setClauses = append(setClauses, "about = $"+strconv.Itoa(len(args)))
+		setClauses = append(setClauses, "about = @about")
+		namedArgs["about"] = *params.About
 	}
 	if params.ThemeColourPrimary != nil {
-		args = append(args, *params.ThemeColourPrimary)
-		setClauses = append(setClauses, "theme_colour_primary = $"+strconv.Itoa(len(args)))
+		setClauses = append(setClauses, "theme_colour_primary = @theme_colour_primary")
+		namedArgs["theme_colour_primary"] = *params.ThemeColourPrimary
 	}
 	if params.ThemeColourSecondary != nil {
-		args = append(args, *params.ThemeColourSecondary)
-		setClauses = append(setClauses, "theme_colour_secondary = $"+strconv.Itoa(len(args)))
+		setClauses = append(setClauses, "theme_colour_secondary = @theme_colour_secondary")
+		namedArgs["theme_colour_secondary"] = *params.ThemeColourSecondary
 	}
 
 	// No fields to update. Return the current row without issuing an UPDATE so the database trigger does not bump
@@ -243,12 +242,10 @@ func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdatePa
 		return r.GetByID(ctx, id)
 	}
 
-	args = append(args, id)
 	query := "UPDATE users SET " + strings.Join(setClauses, ", ") +
-		" WHERE id = $" + strconv.Itoa(len(args)) +
-		" RETURNING " + selectColumns
+		" WHERE id = @id RETURNING " + selectColumns
 
-	u, err := scanUser(r.db.QueryRow(ctx, query, args...))
+	u, err := scanUser(r.db.QueryRow(ctx, query, namedArgs))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound

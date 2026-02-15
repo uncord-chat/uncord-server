@@ -103,19 +103,16 @@ func (r *PGRepository) Create(ctx context.Context, params CreateParams, maxCateg
 
 // Update applies the non-nil fields in params to the category row and returns the updated category.
 func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdateParams) (*Category, error) {
-	setClauses := make([]string, 0, 2)
-	args := make([]any, 0, 3)
-	argPos := 1
+	var setClauses []string
+	namedArgs := pgx.NamedArgs{"id": id}
 
 	if params.Name != nil {
-		setClauses = append(setClauses, fmt.Sprintf("name = $%d", argPos))
-		args = append(args, *params.Name)
-		argPos++
+		setClauses = append(setClauses, "name = @name")
+		namedArgs["name"] = *params.Name
 	}
 	if params.Position != nil {
-		setClauses = append(setClauses, fmt.Sprintf("position = $%d", argPos))
-		args = append(args, *params.Position)
-		argPos++
+		setClauses = append(setClauses, "position = @position")
+		namedArgs["position"] = *params.Position
 	}
 
 	// No fields to update. Return the current row without issuing an UPDATE so the database trigger does not bump
@@ -124,13 +121,10 @@ func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdatePa
 		return r.GetByID(ctx, id)
 	}
 
-	query := fmt.Sprintf(
-		"UPDATE categories SET %s WHERE id = $%d RETURNING %s",
-		strings.Join(setClauses, ", "), argPos, selectColumns,
-	)
-	args = append(args, id)
+	query := "UPDATE categories SET " + strings.Join(setClauses, ", ") +
+		" WHERE id = @id RETURNING " + selectColumns
 
-	row := r.db.QueryRow(ctx, query, args...)
+	row := r.db.QueryRow(ctx, query, namedArgs)
 	cat, err := scanCategory(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
