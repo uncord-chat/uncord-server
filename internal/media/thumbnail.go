@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"image"
 	_ "image/gif" // Register GIF decoder for image.Decode
 	"image/jpeg"
@@ -56,7 +57,7 @@ func NewThumbnailWorker(rdb *redis.Client, storage StorageProvider, updater Thum
 // EnsureStream creates the consumer group for the thumbnail stream, ignoring errors if the group already exists.
 func (w *ThumbnailWorker) EnsureStream(ctx context.Context) {
 	err := w.rdb.XGroupCreateMkStream(ctx, thumbnailStream, consumerGroup, "0").Err()
-	if err != nil && err.Error() != "BUSYGROUP Consumer Group name already exists" {
+	if err != nil && !strings.HasPrefix(err.Error(), "BUSYGROUP") {
 		w.log.Warn().Err(err).Msg("Failed to create thumbnail consumer group")
 	}
 }
