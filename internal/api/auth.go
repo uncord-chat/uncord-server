@@ -194,6 +194,8 @@ func mapAuthServiceError(c fiber.Ctx, err error, log zerolog.Logger, handler str
 		return httputil.Fail(c, fiber.StatusServiceUnavailable, apierrors.ServiceUnavailable, "MFA is not configured on this server")
 	case errors.Is(err, auth.ErrRefreshTokenReused):
 		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.TokenReused, "Refresh token has already been used")
+	case errors.Is(err, auth.ErrRefreshTokenNotFound):
+		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.InvalidToken, err.Error())
 	case errors.Is(err, auth.ErrInvalidToken):
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidToken, err.Error())
 	case errors.Is(err, auth.ErrServerOwner):
