@@ -31,9 +31,11 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/config"
 	"github.com/uncord-chat/uncord-server/internal/disposable"
 	"github.com/uncord-chat/uncord-server/internal/email"
+	"github.com/uncord-chat/uncord-server/internal/gateway"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 	"github.com/uncord-chat/uncord-server/internal/invite"
 	"github.com/uncord-chat/uncord-server/internal/member"
+	"github.com/uncord-chat/uncord-server/internal/message"
 	"github.com/uncord-chat/uncord-server/internal/page"
 	"github.com/uncord-chat/uncord-server/internal/permission"
 	"github.com/uncord-chat/uncord-server/internal/postgres"
@@ -55,21 +57,24 @@ var (
 
 // server holds the shared dependencies used by route handlers and middleware.
 type server struct {
-	cfg           *config.Config
-	db            *pgxpool.Pool
-	rdb           *redis.Client
-	userRepo      user.Repository
-	authService   *auth.Service
-	serverRepo    servercfg.Repository
-	channelRepo   channel.Repository
-	categoryRepo  category.Repository
-	roleRepo      role.Repository
-	memberRepo    member.Repository
-	inviteRepo    invite.Repository
-	permStore     permission.OverrideStore
-	permReadStore permission.Store
-	permResolver  *permission.Resolver
-	permPublisher *permission.Publisher
+	cfg              *config.Config
+	db               *pgxpool.Pool
+	rdb              *redis.Client
+	userRepo         user.Repository
+	authService      *auth.Service
+	serverRepo       servercfg.Repository
+	channelRepo      channel.Repository
+	categoryRepo     category.Repository
+	roleRepo         role.Repository
+	memberRepo       member.Repository
+	inviteRepo       invite.Repository
+	messageRepo      message.Repository
+	permStore        permission.OverrideStore
+	permReadStore    permission.Store
+	permResolver     *permission.Resolver
+	permPublisher    *permission.Publisher
+	typesenseIndexer *typesense.Indexer
+	gatewayPublisher *gateway.Publisher
 }
 
 func main() {
@@ -232,6 +237,9 @@ func run() error {
 	roleRepo := role.NewPGRepository(db, log.Logger)
 	memberRepo := member.NewPGRepository(db, log.Logger)
 	inviteRepo := invite.NewPGRepository(db, log.Logger)
+	messageRepo := message.NewPGRepository(db, log.Logger)
+	typesenseIndexer := typesense.NewIndexer(cfg.TypesenseURL, cfg.TypesenseAPIKey, cfg.TypesenseTimeout)
+	gatewayPub := gateway.NewPublisher(rdb, log.Logger)
 	authService, err := auth.NewService(userRepo, rdb, cfg, blocklist, emailSender, serverRepo, permPublisher, log.Logger)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create auth service")
@@ -288,21 +296,24 @@ func run() error {
 
 	// Register routes
 	srv := &server{
-		cfg:           cfg,
-		db:            db,
-		rdb:           rdb,
-		userRepo:      userRepo,
-		serverRepo:    serverRepo,
-		channelRepo:   channelRepo,
-		categoryRepo:  categoryRepo,
-		roleRepo:      roleRepo,
-		memberRepo:    memberRepo,
-		inviteRepo:    inviteRepo,
-		authService:   authService,
-		permStore:     permStore,
-		permReadStore: permStore,
-		permResolver:  permResolver,
-		permPublisher: permPublisher,
+		cfg:              cfg,
+		db:               db,
+		rdb:              rdb,
+		userRepo:         userRepo,
+		serverRepo:       serverRepo,
+		channelRepo:      channelRepo,
+		categoryRepo:     categoryRepo,
+		roleRepo:         roleRepo,
+		memberRepo:       memberRepo,
+		inviteRepo:       inviteRepo,
+		messageRepo:      messageRepo,
+		authService:      authService,
+		permStore:        permStore,
+		permReadStore:    permStore,
+		permResolver:     permResolver,
+		permPublisher:    permPublisher,
+		typesenseIndexer: typesenseIndexer,
+		gatewayPublisher: gatewayPub,
 	}
 	srv.registerRoutes(app)
 
@@ -418,6 +429,23 @@ func (s *server) registerRoutes(app *fiber.App) {
 		permHandler.DeleteOverride)
 	channelGroup.Get("/:channelID/permissions/@me",
 		permHandler.GetMyPermissions)
+
+	// Message routes (nested under channels for list and create)
+	messageHandler := api.NewMessageHandler(
+		s.messageRepo, s.permResolver, s.typesenseIndexer, s.gatewayPublisher,
+		s.cfg.MaxMessageLength, log.Logger)
+	channelGroup.Get("/:channelID/messages",
+		permission.RequirePermission(s.permResolver, permissions.ViewChannels|permissions.ReadMessageHistory),
+		messageHandler.ListMessages)
+	channelGroup.Post("/:channelID/messages",
+		permission.RequirePermission(s.permResolver, permissions.SendMessages),
+		messageHandler.CreateMessage)
+
+	// Message routes (standalone for edit and delete, ownership and permissions checked in handler)
+	messageGroup := app.Group("/api/v1/messages",
+		auth.RequireAuth(s.cfg.JWTSecret, s.cfg.ServerURL))
+	messageGroup.Patch("/:messageID", messageHandler.EditMessage)
+	messageGroup.Delete("/:messageID", messageHandler.DeleteMessage)
 
 	// Category routes
 	categoryHandler := api.NewCategoryHandler(s.categoryRepo, s.cfg.MaxCategories, log.Logger)

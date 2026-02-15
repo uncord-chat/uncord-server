@@ -76,9 +76,10 @@ type Config struct {
 	MaxUploadSizeMB int
 
 	// Entity Limits
-	MaxChannels   int
-	MaxCategories int
-	MaxRoles      int
+	MaxChannels      int
+	MaxCategories    int
+	MaxRoles         int
+	MaxMessageLength int
 
 	// SMTP
 	SMTPHost     string
@@ -159,9 +160,10 @@ func Load() (*Config, error) {
 
 		MaxUploadSizeMB: p.int("MAX_UPLOAD_SIZE_MB", 100),
 
-		MaxChannels:   p.int("MAX_CHANNELS", 500),
-		MaxCategories: p.int("MAX_CATEGORIES", 50),
-		MaxRoles:      p.int("MAX_ROLES", 250),
+		MaxChannels:      p.int("MAX_CHANNELS", 500),
+		MaxCategories:    p.int("MAX_CATEGORIES", 50),
+		MaxRoles:         p.int("MAX_ROLES", 250),
+		MaxMessageLength: p.int("MAX_MESSAGE_LENGTH", 4000),
 
 		SMTPHost:     envStr("SMTP_HOST", ""),
 		SMTPPort:     p.int("SMTP_PORT", 587),
@@ -273,6 +275,9 @@ func (c *Config) validate() error {
 	}
 	if c.MaxCategories < 1 {
 		errs = append(errs, fmt.Errorf("MAX_CATEGORIES must be at least 1"))
+	}
+	if c.MaxMessageLength < 1 {
+		errs = append(errs, fmt.Errorf("MAX_MESSAGE_LENGTH must be at least 1"))
 	}
 
 	if c.RateLimitAPIRequests < 1 {

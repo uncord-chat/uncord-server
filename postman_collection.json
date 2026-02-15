@@ -58,6 +58,10 @@
 		{
 			"key": "invite_code",
 			"value": ""
+		},
+		{
+			"key": "message_id",
+			"value": ""
 		}
 	],
 	"item": [
@@ -1024,6 +1028,88 @@
 							"raw": "{{base_url}}/invites/{{invite_code}}/join",
 							"host": ["{{base_url}}"],
 							"path": ["invites", "{{invite_code}}", "join"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Messages",
+			"item": [
+				{
+					"name": "List Messages",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/channels/{{channel_id}}/messages?limit=50",
+							"host": ["{{base_url}}"],
+							"path": ["channels", "{{channel_id}}", "messages"],
+							"query": [
+								{ "key": "limit", "value": "50" }
+							]
+						}
+					}
+				},
+				{
+					"name": "Send Message",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var data = pm.response.json().data;",
+									"    pm.collectionVariables.set('message_id', data.id);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"content\": \"Hello, world!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/channels/{{channel_id}}/messages",
+							"host": ["{{base_url}}"],
+							"path": ["channels", "{{channel_id}}", "messages"]
+						}
+					}
+				},
+				{
+					"name": "Edit Message",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"content\": \"Updated message content\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/messages/{{message_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["messages", "{{message_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Delete Message",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/messages/{{message_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["messages", "{{message_id}}"]
 						}
 					}
 				}
