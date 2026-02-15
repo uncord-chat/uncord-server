@@ -28,7 +28,7 @@ var validTypes = map[string]bool{
 	TypeStage:        true,
 }
 
-// Sentinel errors for the channel repository.
+// Sentinel errors for the channel package.
 var (
 	ErrNotFound           = errors.New("channel not found")
 	ErrMaxChannelsReached = errors.New("maximum number of channels reached")

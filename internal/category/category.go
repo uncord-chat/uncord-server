@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Sentinel errors for the category repository.
+// Sentinel errors for the category package.
 var (
 	ErrNotFound             = errors.New("category not found")
 	ErrAlreadyExists        = errors.New("category position already taken")

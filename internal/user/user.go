@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Sentinel errors for the user repository.
+// Sentinel errors for the user package.
 var (
 	ErrNotFound          = errors.New("user not found")
 	ErrAlreadyExists     = errors.New("email or username already taken")

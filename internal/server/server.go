@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Sentinel errors for the server config repository.
+// Sentinel errors for the server package.
 var (
 	ErrNotFound          = errors.New("server config not found")
 	ErrNameLength        = errors.New("name must be between 1 and 100 characters")
