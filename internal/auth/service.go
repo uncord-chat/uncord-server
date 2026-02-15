@@ -658,25 +658,31 @@ func credentialsToModel(creds *user.Credentials) models.User {
 }
 
 // tryRecoveryCode checks the provided code against all unused recovery codes for the user. If a match is found, the
-// code is marked as used and nil is returned. Otherwise, ErrInvalidMFACode is returned.
+// code is marked as used and nil is returned. Otherwise, ErrInvalidMFACode is returned. The function always evaluates
+// every stored code to prevent timing side channels from revealing how many unused codes remain.
 func (s *Service) tryRecoveryCode(ctx context.Context, userID uuid.UUID, code string) error {
 	codes, err := s.users.GetUnusedRecoveryCodes(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("get recovery codes: %w", err)
 	}
 
+	var matched *user.MFARecoveryCode
 	for _, rc := range codes {
 		match, err := VerifyRecoveryCode(code, rc.CodeHash)
 		if err != nil {
 			s.log.Warn().Err(err).Str("user_id", userID.String()).Msg("Recovery code verification error")
 			continue
 		}
-		if match {
-			if err := s.users.UseRecoveryCode(ctx, rc.ID); err != nil {
-				return fmt.Errorf("mark recovery code used: %w", err)
-			}
-			return nil
+		if match && matched == nil {
+			matched = &rc
 		}
+	}
+
+	if matched != nil {
+		if err := s.users.UseRecoveryCode(ctx, matched.ID); err != nil {
+			return fmt.Errorf("mark recovery code used: %w", err)
+		}
+		return nil
 	}
 
 	return ErrInvalidMFACode
