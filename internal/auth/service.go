@@ -276,20 +276,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResult, er
 
 	return &LoginResult{
 		Auth: &AuthResult{
-			User: models.User{
-				ID:                   u.ID.String(),
-				Email:                email,
-				Username:             u.Username,
-				DisplayName:          u.DisplayName,
-				AvatarKey:            u.AvatarKey,
-				Pronouns:             u.Pronouns,
-				BannerKey:            u.BannerKey,
-				About:                u.About,
-				ThemeColourPrimary:   u.ThemeColourPrimary,
-				ThemeColourSecondary: u.ThemeColourSecondary,
-				MFAEnabled:           u.MFAEnabled,
-				EmailVerified:        u.EmailVerified,
-			},
+			User:         credentialsToModel(u),
 			AccessToken:  tokens.AccessToken,
 			RefreshToken: tokens.RefreshToken,
 		},
@@ -642,23 +629,28 @@ func (s *Service) completeMFALogin(ctx context.Context, creds *user.Credentials)
 	}
 
 	return &AuthResult{
-		User: models.User{
-			ID:                   creds.ID.String(),
-			Email:                creds.Email,
-			Username:             creds.Username,
-			DisplayName:          creds.DisplayName,
-			AvatarKey:            creds.AvatarKey,
-			Pronouns:             creds.Pronouns,
-			BannerKey:            creds.BannerKey,
-			About:                creds.About,
-			ThemeColourPrimary:   creds.ThemeColourPrimary,
-			ThemeColourSecondary: creds.ThemeColourSecondary,
-			MFAEnabled:           true,
-			EmailVerified:        creds.EmailVerified,
-		},
+		User:         credentialsToModel(creds),
 		AccessToken:  tokens.AccessToken,
 		RefreshToken: tokens.RefreshToken,
 	}, nil
+}
+
+// credentialsToModel converts a user.Credentials value to the protocol models.User type.
+func credentialsToModel(creds *user.Credentials) models.User {
+	return models.User{
+		ID:                   creds.ID.String(),
+		Email:                creds.Email,
+		Username:             creds.Username,
+		DisplayName:          creds.DisplayName,
+		AvatarKey:            creds.AvatarKey,
+		Pronouns:             creds.Pronouns,
+		BannerKey:            creds.BannerKey,
+		About:                creds.About,
+		ThemeColourPrimary:   creds.ThemeColourPrimary,
+		ThemeColourSecondary: creds.ThemeColourSecondary,
+		MFAEnabled:           creds.MFAEnabled,
+		EmailVerified:        creds.EmailVerified,
+	}
 }
 
 // tryRecoveryCode checks the provided code against all unused recovery codes for the user. If a match is found, the
