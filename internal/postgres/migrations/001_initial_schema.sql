@@ -140,6 +140,7 @@ CREATE TRIGGER set_updated_at BEFORE UPDATE ON messages
 CREATE INDEX idx_messages_channel_time ON messages (channel_id, created_at DESC);
 CREATE INDEX idx_messages_author ON messages (author_id, created_at DESC);
 CREATE INDEX idx_messages_thread ON messages (thread_id) WHERE thread_id IS NOT NULL;
+CREATE INDEX idx_messages_reply ON messages (reply_to_id) WHERE reply_to_id IS NOT NULL;
 
 -- Message Attachments
 
@@ -177,6 +178,9 @@ CREATE TRIGGER set_updated_at BEFORE UPDATE ON threads
 ALTER TABLE messages ADD CONSTRAINT fk_messages_thread
     FOREIGN KEY (thread_id) REFERENCES threads(id) ON DELETE SET NULL;
 
+CREATE INDEX idx_threads_channel ON threads (channel_id);
+CREATE INDEX idx_threads_parent_message ON threads (parent_message_id);
+
 -- Reactions
 
 CREATE TABLE reactions (
@@ -190,6 +194,7 @@ CREATE TABLE reactions (
 
 CREATE UNIQUE INDEX idx_reactions_unique
     ON reactions (message_id, user_id, COALESCE(emoji_id, '00000000-0000-0000-0000-000000000000'), COALESCE(emoji_unicode, ''));
+CREATE INDEX idx_reactions_user ON reactions (user_id);
 
 -- Roles
 
@@ -219,6 +224,8 @@ CREATE TABLE member_roles (
     assigned_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (user_id, role_id)
 );
+
+CREATE INDEX idx_member_roles_role ON member_roles (role_id);
 
 -- Permission Overrides
 
@@ -291,12 +298,16 @@ CREATE TABLE dm_channels (
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON dm_channels
     FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
 
+CREATE INDEX idx_dm_channels_owner ON dm_channels (owner_id) WHERE owner_id IS NOT NULL;
+
 CREATE TABLE dm_participants (
     dm_channel_id   UUID NOT NULL REFERENCES dm_channels(id) ON DELETE CASCADE,
     user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     joined_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (dm_channel_id, user_id)
 );
+
+CREATE INDEX idx_dm_participants_user ON dm_participants (user_id);
 
 -- Custom Emoji
 
@@ -313,6 +324,8 @@ CREATE TABLE custom_emoji (
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON custom_emoji
     FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
 
+CREATE INDEX idx_custom_emoji_uploader ON custom_emoji (uploader_id);
+
 -- Invites
 
 CREATE TABLE invites (
@@ -328,6 +341,8 @@ CREATE TABLE invites (
 );
 
 CREATE INDEX idx_invites_code ON invites (code);
+CREATE INDEX idx_invites_channel ON invites (channel_id);
+CREATE INDEX idx_invites_creator ON invites (creator_id);
 
 -- Webhooks
 
@@ -347,6 +362,9 @@ CREATE TABLE webhooks (
 
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON webhooks
     FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
+
+CREATE INDEX idx_webhooks_channel ON webhooks (channel_id);
+CREATE INDEX idx_webhooks_creator ON webhooks (creator_id);
 
 -- Audit Log
 
@@ -375,6 +393,8 @@ CREATE TABLE bans (
     PRIMARY KEY (user_id)
 );
 
+CREATE INDEX idx_bans_banned_by ON bans (banned_by) WHERE banned_by IS NOT NULL;
+
 -- Reports
 
 CREATE TABLE reports (
@@ -392,6 +412,10 @@ CREATE TABLE reports (
 
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON reports
     FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
+
+CREATE INDEX idx_reports_reporter ON reports (reporter_id);
+CREATE INDEX idx_reports_message ON reports (message_id);
+CREATE INDEX idx_reports_resolved_by ON reports (resolved_by) WHERE resolved_by IS NOT NULL;
 
 -- Auto-Moderation Rules
 
@@ -411,6 +435,8 @@ CREATE TABLE automod_rules (
 
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON automod_rules
     FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
+
+CREATE INDEX idx_automod_rules_creator ON automod_rules (creator_id);
 
 -- Onboarding
 
@@ -477,6 +503,8 @@ CREATE TRIGGER set_updated_at BEFORE UPDATE ON abuse_flags
 
 CREATE INDEX idx_abuse_flags_user ON abuse_flags (flagged_user_id);
 CREATE INDEX idx_abuse_flags_status ON abuse_flags (status);
+CREATE INDEX idx_abuse_flags_related_user ON abuse_flags (related_user_id) WHERE related_user_id IS NOT NULL;
+CREATE INDEX idx_abuse_flags_reviewed_by ON abuse_flags (reviewed_by) WHERE reviewed_by IS NOT NULL;
 
 -- Registered Plugins
 
