@@ -28,14 +28,15 @@ func NewPGRepository(db *pgxpool.Pool, logger zerolog.Logger) *PGRepository {
 
 // memberQuery is the shared SELECT used by List and GetByUserID. It joins members with users and aggregates role IDs
 // from member_roles. Pending members are excluded because they have not completed the onboarding flow and should not
-// appear in member listings or be targetable by moderation actions.
-var memberQuery = `SELECT m.user_id, u.username, u.display_name, u.avatar_key,
+// appear in member listings or be targetable by moderation actions. The pending status is parameterised as $1 so that
+// callers start their own parameters at $2.
+const memberQuery = `SELECT m.user_id, u.username, u.display_name, u.avatar_key,
        m.nickname, m.status, m.timeout_until, m.joined_at,
        COALESCE(array_agg(mr.role_id) FILTER (WHERE mr.role_id IS NOT NULL), '{}') AS role_ids
 FROM members m
 JOIN users u ON u.id = m.user_id
 LEFT JOIN member_roles mr ON mr.user_id = m.user_id
-WHERE m.status != '` + models.MemberStatusPending + `'`
+WHERE m.status != $1`
 
 // memberQueryAnyStatus is identical to memberQuery but includes members in any status, including pending. Used by
 // CreatePending and Activate which need to return the member profile regardless of onboarding state.
@@ -60,16 +61,16 @@ func (r *PGRepository) List(ctx context.Context, after *uuid.UUID, limit int) ([
 GROUP BY m.user_id, u.username, u.display_name, u.avatar_key,
          m.nickname, m.status, m.timeout_until, m.joined_at
 ORDER BY m.joined_at, m.user_id
-LIMIT $1`, limit)
+LIMIT $2`, models.MemberStatusPending, limit)
 	} else {
 		rows, err = r.db.Query(ctx,
 			memberQuery+` AND (m.joined_at, m.user_id) > (
-      SELECT m2.joined_at, m2.user_id FROM members m2 WHERE m2.user_id = $1
+      SELECT m2.joined_at, m2.user_id FROM members m2 WHERE m2.user_id = $2
   )
 GROUP BY m.user_id, u.username, u.display_name, u.avatar_key,
          m.nickname, m.status, m.timeout_until, m.joined_at
 ORDER BY m.joined_at, m.user_id
-LIMIT $2`, *after, limit)
+LIMIT $3`, models.MemberStatusPending, *after, limit)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query members: %w", err)
@@ -93,9 +94,9 @@ LIMIT $2`, *after, limit)
 // GetByUserID returns a single member by user ID.
 func (r *PGRepository) GetByUserID(ctx context.Context, userID uuid.UUID) (*MemberWithProfile, error) {
 	row := r.db.QueryRow(ctx,
-		memberQuery+` AND m.user_id = $1
+		memberQuery+` AND m.user_id = $2
 GROUP BY m.user_id, u.username, u.display_name, u.avatar_key,
-         m.nickname, m.status, m.timeout_until, m.joined_at`, userID)
+         m.nickname, m.status, m.timeout_until, m.joined_at`, models.MemberStatusPending, userID)
 
 	m, err := scanMemberWithProfile(row)
 	if err != nil {
