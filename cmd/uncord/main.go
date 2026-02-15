@@ -205,23 +205,7 @@ func run() error {
 	// Start permission cache invalidation subscriber with reconnection.
 	defer subCancel()
 	permSub := permission.NewSubscriber(permCache, rdb, log.Logger)
-	go func() {
-		for {
-			if err := permSub.Run(subCtx); err != nil {
-				if errors.Is(err, context.Canceled) {
-					return
-				}
-				log.Error().Err(err).Msg("Permission cache subscriber stopped, restarting in 5s")
-				select {
-				case <-subCtx.Done():
-					return
-				case <-time.After(5 * time.Second):
-				}
-				continue
-			}
-			return
-		}
-	}()
+	go runWithBackoff(subCtx, "permission-cache-subscriber", permSub.Run)
 
 	// SMTP client for transactional email (verification, password reset, etc.)
 	var emailSender auth.Sender
@@ -266,23 +250,7 @@ func run() error {
 	// Start thumbnail worker with reconnection.
 	thumbWorker := media.NewThumbnailWorker(rdb, storage, attachmentRepo, log.Logger)
 	thumbWorker.EnsureStream(subCtx)
-	go func() {
-		for {
-			if err := thumbWorker.Run(subCtx); err != nil {
-				if errors.Is(err, context.Canceled) {
-					return
-				}
-				log.Error().Err(err).Msg("Thumbnail worker stopped, restarting in 5s")
-				select {
-				case <-subCtx.Done():
-					return
-				case <-time.After(5 * time.Second):
-				}
-				continue
-			}
-			return
-		}
-	}()
+	go runWithBackoff(subCtx, "thumbnail-worker", thumbWorker.Run)
 	authService, err := auth.NewService(userRepo, rdb, cfg, blocklist, emailSender, serverRepo, permPublisher, log.Logger)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create auth service")
@@ -291,23 +259,7 @@ func run() error {
 	// Initialise gateway WebSocket hub and start the pub/sub subscriber with reconnection.
 	sessionStore := gateway.NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 	gatewayHub := gateway.NewHub(rdb, cfg, sessionStore, permResolver, userRepo, serverRepo, channelRepo, roleRepo, memberRepo, log.Logger)
-	go func() {
-		for {
-			if err := gatewayHub.Run(subCtx); err != nil {
-				if errors.Is(err, context.Canceled) {
-					return
-				}
-				log.Error().Err(err).Msg("Gateway hub stopped, restarting in 5s")
-				select {
-				case <-subCtx.Done():
-					return
-				case <-time.After(5 * time.Second):
-				}
-				continue
-			}
-			return
-		}
-	}()
+	go runWithBackoff(subCtx, "gateway-hub", gatewayHub.Run)
 
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
@@ -691,6 +643,34 @@ func purgeExpiredData(ctx context.Context, repo *user.PGRepository, attachRepo *
 		}
 		log.Info().Int("deleted", len(orphanKeys)).Dur("ttl", cfg.AttachmentOrphanTTL).
 			Msg("Purged orphaned attachment files")
+	}
+}
+
+// runWithBackoff runs fn in a loop, restarting with exponential backoff when it returns a non-nil, non-cancelled error.
+// If fn returns nil or context.Canceled the goroutine exits. The delay starts at 1 second and doubles on each
+// consecutive failure up to a 2-minute cap.
+func runWithBackoff(ctx context.Context, name string, fn func(context.Context) error) {
+	const (
+		initialDelay = time.Second
+		maxDelay     = 2 * time.Minute
+	)
+	delay := initialDelay
+	for {
+		if err := fn(ctx); err != nil {
+			if errors.Is(err, context.Canceled) {
+				return
+			}
+			log.Error().Err(err).Str("service", name).Dur("retry_in", delay).
+				Msg("Background service stopped, restarting after delay")
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(delay):
+			}
+			delay = min(delay*2, maxDelay)
+			continue
+		}
+		return
 	}
 }
 
