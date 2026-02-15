@@ -28,6 +28,6 @@ COPY --from=build /bin/uncord /usr/local/bin/uncord
 
 USER uncord
 
-EXPOSE 8080 9090
+EXPOSE 8080
 
 ENTRYPOINT ["uncord"]
