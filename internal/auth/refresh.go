@@ -158,7 +158,7 @@ func RevokeAllRefreshTokens(ctx context.Context, rdb *redis.Client, userID uuid.
 		[]string{userRefreshKey(userID)},
 	).Result()
 
-	if err != nil && err != redis.Nil {
+	if err != nil && !errors.Is(err, redis.Nil) {
 		return fmt.Errorf("revoke refresh tokens: %w", err)
 	}
 
