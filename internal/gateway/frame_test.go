@@ -16,7 +16,7 @@ func TestNewHelloFrame(t *testing.T) {
 		t.Fatalf("NewHelloFrame() error = %v", err)
 	}
 
-	var f Frame
+	var f events.Frame
 	if err := json.Unmarshal(raw, &f); err != nil {
 		t.Fatalf("unmarshal frame: %v", err)
 	}
@@ -47,7 +47,7 @@ func TestNewHeartbeatACKFrame(t *testing.T) {
 		t.Fatalf("NewHeartbeatACKFrame() error = %v", err)
 	}
 
-	var f Frame
+	var f events.Frame
 	if err := json.Unmarshal(raw, &f); err != nil {
 		t.Fatalf("unmarshal frame: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestNewDispatchFrame(t *testing.T) {
 		t.Fatalf("NewDispatchFrame() error = %v", err)
 	}
 
-	var f Frame
+	var f events.Frame
 	if err := json.Unmarshal(raw, &f); err != nil {
 		t.Fatalf("unmarshal frame: %v", err)
 	}
@@ -102,7 +102,7 @@ func TestNewReconnectFrame(t *testing.T) {
 		t.Fatalf("NewReconnectFrame() error = %v", err)
 	}
 
-	var f Frame
+	var f events.Frame
 	if err := json.Unmarshal(raw, &f); err != nil {
 		t.Fatalf("unmarshal frame: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestNewInvalidSessionFrame(t *testing.T) {
 				t.Fatalf("NewInvalidSessionFrame(%v) error = %v", tt.resumable, err)
 			}
 
-			var f Frame
+			var f events.Frame
 			if err := json.Unmarshal(raw, &f); err != nil {
 				t.Fatalf("unmarshal frame: %v", err)
 			}

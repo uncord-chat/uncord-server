@@ -314,10 +314,7 @@ func (h *MessageHandler) DeleteMessage(c fiber.Ctx) error {
 	// Best-effort gateway event publish.
 	if h.gateway != nil {
 		go func() {
-			deletePayload := struct {
-				ID        string `json:"id"`
-				ChannelID string `json:"channel_id"`
-			}{
+			deletePayload := models.MessageDeleteData{
 				ID:        messageID.String(),
 				ChannelID: existing.ChannelID.String(),
 			}

@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
+	"github.com/uncord-chat/uncord-protocol/models"
 	"github.com/uncord-chat/uncord-protocol/permissions"
 
 	"github.com/uncord-chat/uncord-server/internal/channel"
@@ -182,7 +183,7 @@ func seedChannel(repo *fakeChannelRepo) *channel.Channel {
 	ch := channel.Channel{
 		ID:              uuid.New(),
 		Name:            "general",
-		Type:            channel.TypeText,
+		Type:            models.ChannelTypeText,
 		Topic:           "",
 		Position:        0,
 		SlowmodeSeconds: 0,
@@ -613,7 +614,7 @@ func TestUpdateChannel_RemoveCategory(t *testing.T) {
 		ID:         uuid.New(),
 		CategoryID: &catID,
 		Name:       "test",
-		Type:       channel.TypeText,
+		Type:       models.ChannelTypeText,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}

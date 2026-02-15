@@ -248,7 +248,7 @@ func TestHandlePubSubEventBroadcast(t *testing.T) {
 
 	select {
 	case msg := <-client.send:
-		var f Frame
+		var f events.Frame
 		if err := json.Unmarshal(msg, &f); err != nil {
 			t.Fatalf("unmarshal frame: %v", err)
 		}

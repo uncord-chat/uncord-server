@@ -8,24 +8,16 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
-)
-
-// Channel type constants matching the database CHECK constraint.
-const (
-	TypeText         = "text"
-	TypeVoice        = "voice"
-	TypeAnnouncement = "announcement"
-	TypeForum        = "forum"
-	TypeStage        = "stage"
+	"github.com/uncord-chat/uncord-protocol/models"
 )
 
 // validTypes is the set of allowed channel types.
 var validTypes = map[string]bool{
-	TypeText:         true,
-	TypeVoice:        true,
-	TypeAnnouncement: true,
-	TypeForum:        true,
-	TypeStage:        true,
+	models.ChannelTypeText:         true,
+	models.ChannelTypeVoice:        true,
+	models.ChannelTypeAnnouncement: true,
+	models.ChannelTypeForum:        true,
+	models.ChannelTypeStage:        true,
 }
 
 // Sentinel errors for the channel package.

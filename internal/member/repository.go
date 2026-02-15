@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
+	"github.com/uncord-chat/uncord-protocol/models"
 )
 
 // PGRepository implements Repository using PostgreSQL.
@@ -27,13 +28,13 @@ func NewPGRepository(db *pgxpool.Pool, logger zerolog.Logger) *PGRepository {
 // memberQuery is the shared SELECT used by List and GetByUserID. It joins members with users and aggregates role IDs
 // from member_roles. Pending members are excluded because they have not completed the onboarding flow and should not
 // appear in member listings or be targetable by moderation actions.
-const memberQuery = `SELECT m.user_id, u.username, u.display_name, u.avatar_key,
+var memberQuery = `SELECT m.user_id, u.username, u.display_name, u.avatar_key,
        m.nickname, m.status, m.timeout_until, m.joined_at,
        COALESCE(array_agg(mr.role_id) FILTER (WHERE mr.role_id IS NOT NULL), '{}') AS role_ids
 FROM members m
 JOIN users u ON u.id = m.user_id
 LEFT JOIN member_roles mr ON mr.user_id = m.user_id
-WHERE m.status != 'pending'`
+WHERE m.status != '` + models.MemberStatusPending + `'`
 
 // memberQueryAnyStatus is identical to memberQuery but includes members in any status, including pending. Used by
 // CreatePending and Activate which need to return the member profile regardless of onboarding state.
@@ -132,8 +133,8 @@ func (r *PGRepository) Delete(ctx context.Context, userID uuid.UUID) error {
 // SetTimeout applies a timeout to a member and returns the updated profile.
 func (r *PGRepository) SetTimeout(ctx context.Context, userID uuid.UUID, until time.Time) (*MemberWithProfile, error) {
 	tag, err := r.db.Exec(ctx,
-		"UPDATE members SET status = 'timed_out', timeout_until = $1 WHERE user_id = $2",
-		until, userID)
+		"UPDATE members SET status = $1, timeout_until = $2 WHERE user_id = $3",
+		models.MemberStatusTimedOut, until, userID)
 	if err != nil {
 		return nil, fmt.Errorf("set timeout: %w", err)
 	}
@@ -146,7 +147,8 @@ func (r *PGRepository) SetTimeout(ctx context.Context, userID uuid.UUID, until t
 // ClearTimeout removes a member's timeout and returns the updated profile.
 func (r *PGRepository) ClearTimeout(ctx context.Context, userID uuid.UUID) (*MemberWithProfile, error) {
 	tag, err := r.db.Exec(ctx,
-		"UPDATE members SET status = 'active', timeout_until = NULL WHERE user_id = $1", userID)
+		"UPDATE members SET status = $1, timeout_until = NULL WHERE user_id = $2",
+		models.MemberStatusActive, userID)
 	if err != nil {
 		return nil, fmt.Errorf("clear timeout: %w", err)
 	}
@@ -280,7 +282,7 @@ func (r *PGRepository) CreatePending(ctx context.Context, userID uuid.UUID) (*Me
 		}
 	}()
 
-	_, err = tx.Exec(ctx, "INSERT INTO members (user_id, status) VALUES ($1, 'pending')", userID)
+	_, err = tx.Exec(ctx, "INSERT INTO members (user_id, status) VALUES ($1, $2)", userID, models.MemberStatusPending)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return nil, ErrAlreadyMember
@@ -316,8 +318,8 @@ func (r *PGRepository) Activate(ctx context.Context, userID uuid.UUID, autoRoles
 	}()
 
 	tag, err := tx.Exec(ctx,
-		"UPDATE members SET status = 'active', onboarded_at = NOW() WHERE user_id = $1 AND status = 'pending'",
-		userID)
+		"UPDATE members SET status = $1, onboarded_at = NOW() WHERE user_id = $2 AND status = $3",
+		models.MemberStatusActive, userID, models.MemberStatusPending)
 	if err != nil {
 		return nil, fmt.Errorf("activate member: %w", err)
 	}

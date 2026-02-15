@@ -122,7 +122,7 @@ func (c *Client) readPump() {
 			return
 		}
 
-		var frame Frame
+		var frame events.Frame
 		if err := json.Unmarshal(message, &frame); err != nil {
 			c.closeWithCode(CloseDecodeError, "invalid JSON")
 			return

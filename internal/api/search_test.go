@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
+	"github.com/uncord-chat/uncord-protocol/models"
 
 	"github.com/uncord-chat/uncord-server/internal/search"
 )
@@ -77,7 +78,7 @@ func TestSearchMessages_Success(t *testing.T) {
 	}
 
 	env := parseSuccess(t, body)
-	var result search.Response
+	var result models.SearchResponse
 	if err := json.Unmarshal(env.Data, &result); err != nil {
 		t.Fatalf("unmarshal search response: %v", err)
 	}
@@ -204,7 +205,7 @@ func TestSearchMessages_NoPermittedChannels(t *testing.T) {
 	}
 
 	env := parseSuccess(t, body)
-	var result search.Response
+	var result models.SearchResponse
 	if err := json.Unmarshal(env.Data, &result); err != nil {
 		t.Fatalf("unmarshal search response: %v", err)
 	}
@@ -232,7 +233,7 @@ func TestSearchMessages_ChannelFilterNotPermitted(t *testing.T) {
 	}
 
 	env := parseSuccess(t, body)
-	var result search.Response
+	var result models.SearchResponse
 	if err := json.Unmarshal(env.Data, &result); err != nil {
 		t.Fatalf("unmarshal search response: %v", err)
 	}
@@ -258,7 +259,7 @@ func TestSearchMessages_PaginationDefaults(t *testing.T) {
 	}
 
 	env := parseSuccess(t, body)
-	var result search.Response
+	var result models.SearchResponse
 	if err := json.Unmarshal(env.Data, &result); err != nil {
 		t.Fatalf("unmarshal search response: %v", err)
 	}
@@ -287,7 +288,7 @@ func TestSearchMessages_PaginationClamp(t *testing.T) {
 	}
 
 	env := parseSuccess(t, body)
-	var result search.Response
+	var result models.SearchResponse
 	if err := json.Unmarshal(env.Data, &result); err != nil {
 		t.Fatalf("unmarshal search response: %v", err)
 	}
@@ -331,7 +332,7 @@ func TestSearchMessages_EmptyResults(t *testing.T) {
 	}
 
 	env := parseSuccess(t, body)
-	var result search.Response
+	var result models.SearchResponse
 	if err := json.Unmarshal(env.Data, &result); err != nil {
 		t.Fatalf("unmarshal search response: %v", err)
 	}

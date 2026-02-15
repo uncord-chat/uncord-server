@@ -75,7 +75,7 @@ func (h *ChannelHandler) CreateChannel(c fiber.Ctx) error {
 		return h.mapChannelError(c, err)
 	}
 
-	chType := channel.TypeText
+	chType := models.ChannelTypeText
 	if body.Type != nil {
 		chType = *body.Type
 	}

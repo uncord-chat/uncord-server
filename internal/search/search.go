@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
+	"github.com/uncord-chat/uncord-protocol/models"
 	"github.com/uncord-chat/uncord-protocol/permissions"
 
 	"github.com/uncord-chat/uncord-server/internal/channel"
@@ -56,24 +57,6 @@ type Options struct {
 	After     int64
 	Page      int
 	PerPage   int
-}
-
-// MessageHit is the API response shape for a single search result.
-type MessageHit struct {
-	ID         string   `json:"id"`
-	ChannelID  string   `json:"channel_id"`
-	AuthorID   string   `json:"author_id"`
-	Content    string   `json:"content"`
-	CreatedAt  int64    `json:"created_at"`
-	Highlights []string `json:"highlights,omitempty"`
-}
-
-// Response is the top-level search response returned inside the data envelope.
-type Response struct {
-	TotalCount int          `json:"total_count"`
-	Page       int          `json:"page"`
-	PerPage    int          `json:"per_page"`
-	Hits       []MessageHit `json:"hits"`
 }
 
 // ClampPagination normalises page and per-page values to valid ranges.
@@ -213,7 +196,7 @@ func NewService(channels ChannelLister, perms PermissionFilter, searcher Searche
 
 // Search executes a permission-scoped message search. Only messages from channels the user has ViewChannels access to
 // are returned.
-func (s *Service) Search(ctx context.Context, userID uuid.UUID, query string, opts Options) (*Response, error) {
+func (s *Service) Search(ctx context.Context, userID uuid.UUID, query string, opts Options) (*models.SearchResponse, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return nil, ErrEmptyQuery
@@ -273,9 +256,9 @@ func (s *Service) Search(ctx context.Context, userID uuid.UUID, query string, op
 		return nil, err
 	}
 
-	hits := make([]MessageHit, 0, len(result.Hits))
+	hits := make([]models.SearchMessageHit, 0, len(result.Hits))
 	for _, h := range result.Hits {
-		hit := MessageHit{
+		hit := models.SearchMessageHit{
 			ID:        h.Document.ID,
 			ChannelID: h.Document.ChannelID,
 			AuthorID:  h.Document.AuthorID,
@@ -291,7 +274,7 @@ func (s *Service) Search(ctx context.Context, userID uuid.UUID, query string, op
 		hits = append(hits, hit)
 	}
 
-	return &Response{
+	return &models.SearchResponse{
 		TotalCount: result.Found,
 		Page:       opts.Page,
 		PerPage:    opts.PerPage,
@@ -299,11 +282,11 @@ func (s *Service) Search(ctx context.Context, userID uuid.UUID, query string, op
 	}, nil
 }
 
-func emptyResponse(page, perPage int) *Response {
-	return &Response{
+func emptyResponse(page, perPage int) *models.SearchResponse {
+	return &models.SearchResponse{
 		TotalCount: 0,
 		Page:       page,
 		PerPage:    perPage,
-		Hits:       []MessageHit{},
+		Hits:       []models.SearchMessageHit{},
 	}
 }
