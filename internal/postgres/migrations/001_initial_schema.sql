@@ -296,7 +296,8 @@ CREATE TABLE dm_channels (
     owner_id        UUID REFERENCES users(id) ON DELETE SET NULL,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT chk_dm_channels_type CHECK (type IN ('dm', 'group_dm'))
+    CONSTRAINT chk_dm_channels_type CHECK (type IN ('dm', 'group_dm')),
+    CONSTRAINT chk_dm_channels_group_name CHECK (type = 'dm' OR name IS NOT NULL)
 );
 
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON dm_channels
