@@ -206,7 +206,7 @@ func run() error {
 	var emailSender auth.Sender
 	if cfg.SMTPConfigured() {
 		emailClient := email.NewClient(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom)
-		if err := emailClient.Ping(); err != nil {
+		if err := emailClient.Ping(ctx); err != nil {
 			log.Warn().Err(err).Msg("SMTP connection test failed. Verification emails may not be delivered.")
 		} else {
 			log.Info().Str("host", cfg.SMTPHost).Int("port", cfg.SMTPPort).Msg("SMTP connection verified")

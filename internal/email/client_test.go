@@ -48,7 +48,7 @@ func TestPingSuccess(t *testing.T) {
 	host, port := splitHostPort(t, ln.Addr().String())
 	c := NewClient(host, port, "", "", "test@example.com")
 
-	if err := c.Ping(); err != nil {
+	if err := c.Ping(context.Background()); err != nil {
 		t.Fatalf("Ping() error = %v", err)
 	}
 
@@ -65,7 +65,7 @@ func TestPingConnectionRefused(t *testing.T) {
 	_ = ln.Close()
 
 	c := NewClient("127.0.0.1", port, "", "", "test@example.com")
-	if err := c.Ping(); err == nil {
+	if err := c.Ping(context.Background()); err == nil {
 		t.Fatal("Ping() on closed port should return error")
 	}
 }
@@ -86,7 +86,7 @@ func TestSendSuccess(t *testing.T) {
 	host, port := splitHostPort(t, ln.Addr().String())
 	c := NewClient(host, port, "", "", "sender@example.com")
 
-	if err := c.Send("recipient@example.com", "Hello", "Test body"); err != nil {
+	if err := c.Send(context.Background(), "recipient@example.com", "Hello", "Test body"); err != nil {
 		t.Fatalf("Send() error = %v", err)
 	}
 

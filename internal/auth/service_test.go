@@ -870,7 +870,7 @@ type fakeSendCall struct {
 	ServerName string
 }
 
-func (f *fakeSender) SendVerification(to, token, serverURL, serverName string) error {
+func (f *fakeSender) SendVerification(_ context.Context, to, token, serverURL, serverName string) error {
 	f.calls = append(f.calls, fakeSendCall{To: to, Token: token, ServerURL: serverURL, ServerName: serverName})
 	return f.err
 }

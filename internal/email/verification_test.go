@@ -1,6 +1,7 @@
 package email
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -21,7 +22,7 @@ func TestSendVerificationComposition(t *testing.T) {
 	host, port := splitHostPort(t, ln.Addr().String())
 	c := NewClient(host, port, "", "", "noreply@example.com")
 
-	if err := c.SendVerification("alice@example.com", "abc123", "https://chat.example.com", "Test Server"); err != nil {
+	if err := c.SendVerification(context.Background(), "alice@example.com", "abc123", "https://chat.example.com", "Test Server"); err != nil {
 		t.Fatalf("SendVerification() error = %v", err)
 	}
 

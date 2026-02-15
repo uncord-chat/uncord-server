@@ -28,7 +28,7 @@ const verifyTokenBytes = 32
 
 // Sender sends transactional emails such as verification messages. Implementations must be safe for concurrent use.
 type Sender interface {
-	SendVerification(to, token, serverURL, serverName string) error
+	SendVerification(ctx context.Context, to, token, serverURL, serverName string) error
 }
 
 // Service implements authentication business logic, keeping HTTP handlers thin and focused on request parsing /
@@ -193,7 +193,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*AuthResul
 	}
 
 	if s.sender != nil {
-		if err := s.sender.SendVerification(email, verifyToken, s.config.ServerURL, s.config.ServerName); err != nil {
+		if err := s.sender.SendVerification(ctx, email, verifyToken, s.config.ServerURL, s.config.ServerName); err != nil {
 			s.log.Error().Err(err).Str("user_id", userID.String()).Msg("Failed to send verification email")
 		}
 	}

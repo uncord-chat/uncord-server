@@ -39,8 +39,8 @@ func NewClient(host string, port int, username, password, from string) *Client {
 
 // Ping verifies that the SMTP server is reachable and accepts authentication (if credentials are configured). It is
 // intended for startup health checks and logs a warning on failure rather than preventing startup.
-func (c *Client) Ping() error {
-	client, err := c.dial()
+func (c *Client) Ping(ctx context.Context) error {
+	client, err := c.dial(ctx)
 	if err != nil {
 		return err
 	}
@@ -57,24 +57,24 @@ func (c *Client) Ping() error {
 }
 
 // Send delivers an email with the given subject and plain text body to the specified recipient.
-func (c *Client) Send(to, subject, body string) error {
-	return c.sendMessage(to, subject, body, "text/plain; charset=UTF-8")
+func (c *Client) Send(ctx context.Context, to, subject, body string) error {
+	return c.sendMessage(ctx, to, subject, body, "text/plain; charset=UTF-8")
 }
 
 // SendVerification composes and sends an HTML email verification message containing a link the recipient must visit to
 // confirm their address.
-func (c *Client) SendVerification(to, token, serverURL, serverName string) error {
+func (c *Client) SendVerification(ctx context.Context, to, token, serverURL, serverName string) error {
 	subject := fmt.Sprintf("Verify your email for %s", serverName)
 	body, err := verificationBody(serverName, serverURL, token)
 	if err != nil {
 		return err
 	}
-	return c.sendMessage(to, subject, body, "text/html; charset=UTF-8")
+	return c.sendMessage(ctx, to, subject, body, "text/html; charset=UTF-8")
 }
 
 // sendMessage delivers an email with the given subject, body, and content type to the specified recipient.
-func (c *Client) sendMessage(to, subject, body, contentType string) error {
-	client, err := c.dial()
+func (c *Client) sendMessage(ctx context.Context, to, subject, body, contentType string) error {
+	client, err := c.dial(ctx)
 	if err != nil {
 		return err
 	}
@@ -112,9 +112,9 @@ func (c *Client) sendMessage(to, subject, body, contentType string) error {
 
 // dial opens a TCP connection to the SMTP server, performs the EHLO handshake, and upgrades to TLS if the server
 // advertises STARTTLS support.
-func (c *Client) dial() (*smtp.Client, error) {
+func (c *Client) dial(ctx context.Context) (*smtp.Client, error) {
 	dialer := net.Dialer{Timeout: 10 * time.Second}
-	conn, err := dialer.DialContext(context.Background(), "tcp", c.addr())
+	conn, err := dialer.DialContext(ctx, "tcp", c.addr())
 	if err != nil {
 		return nil, fmt.Errorf("dial %s: %w", c.addr(), err)
 	}
