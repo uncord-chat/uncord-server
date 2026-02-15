@@ -24,6 +24,7 @@ import (
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 
 	"github.com/uncord-chat/uncord-server/internal/api"
+	"github.com/uncord-chat/uncord-server/internal/attachment"
 	"github.com/uncord-chat/uncord-server/internal/auth"
 	"github.com/uncord-chat/uncord-server/internal/bootstrap"
 	"github.com/uncord-chat/uncord-server/internal/category"
@@ -34,6 +35,7 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/gateway"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 	"github.com/uncord-chat/uncord-server/internal/invite"
+	"github.com/uncord-chat/uncord-server/internal/media"
 	"github.com/uncord-chat/uncord-server/internal/member"
 	"github.com/uncord-chat/uncord-server/internal/message"
 	"github.com/uncord-chat/uncord-server/internal/page"
@@ -69,6 +71,8 @@ type server struct {
 	memberRepo       member.Repository
 	inviteRepo       invite.Repository
 	messageRepo      message.Repository
+	attachmentRepo   attachment.Repository
+	storage          media.StorageProvider
 	permStore        permission.OverrideStore
 	permReadStore    permission.Store
 	permResolver     *permission.Resolver
@@ -177,20 +181,24 @@ func run() error {
 
 	go blocklist.Run(subCtx, cfg.DisposableEmailBlocklistRefreshInterval)
 
-	go func() {
-		purgeExpiredData(subCtx, userRepo, cfg)
+	// The purge goroutine is started below after the attachment repository is initialised, because orphan attachment
+	// cleanup needs access to the repo and storage provider.
+	startPurgeGoroutine := func(attachRepo *attachment.PGRepository, storage media.StorageProvider) {
+		go func() {
+			purgeExpiredData(subCtx, userRepo, attachRepo, storage, cfg)
 
-		ticker := time.NewTicker(cfg.DataCleanupInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-subCtx.Done():
-				return
-			case <-ticker.C:
-				purgeExpiredData(subCtx, userRepo, cfg)
+			ticker := time.NewTicker(cfg.DataCleanupInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-subCtx.Done():
+					return
+				case <-ticker.C:
+					purgeExpiredData(subCtx, userRepo, attachRepo, storage, cfg)
+				}
 			}
-		}
-	}()
+		}()
+	}
 
 	// Start permission cache invalidation subscriber with reconnection.
 	defer subCancel()
@@ -230,6 +238,16 @@ func run() error {
 		log.Warn().Msg("SMTP_HOST is not configured. Email verification will only work in development mode (token logged to console).")
 	}
 
+	// Initialise storage provider.
+	var storage media.StorageProvider
+	switch cfg.StorageBackend {
+	case "local":
+		storage = media.NewLocalStorage(cfg.StorageLocalPath, cfg.ServerURL)
+		log.Info().Str("path", cfg.StorageLocalPath).Msg("Local file storage initialised")
+	default:
+		return fmt.Errorf("unsupported storage backend: %q", cfg.StorageBackend)
+	}
+
 	// Initialise remaining repositories and services
 	serverRepo := servercfg.NewPGRepository(db, log.Logger)
 	channelRepo := channel.NewPGRepository(db, log.Logger)
@@ -238,8 +256,31 @@ func run() error {
 	memberRepo := member.NewPGRepository(db, log.Logger)
 	inviteRepo := invite.NewPGRepository(db, log.Logger)
 	messageRepo := message.NewPGRepository(db, log.Logger)
+	attachmentRepo := attachment.NewPGRepository(db, log.Logger)
 	typesenseIndexer := typesense.NewIndexer(cfg.TypesenseURL, cfg.TypesenseAPIKey, cfg.TypesenseTimeout)
 	gatewayPub := gateway.NewPublisher(rdb, log.Logger)
+	startPurgeGoroutine(attachmentRepo, storage)
+
+	// Start thumbnail worker with reconnection.
+	thumbWorker := media.NewThumbnailWorker(rdb, storage, attachmentRepo, log.Logger)
+	thumbWorker.EnsureStream(subCtx)
+	go func() {
+		for {
+			if err := thumbWorker.Run(subCtx); err != nil {
+				if errors.Is(err, context.Canceled) {
+					return
+				}
+				log.Error().Err(err).Msg("Thumbnail worker stopped, restarting in 5s")
+				select {
+				case <-subCtx.Done():
+					return
+				case <-time.After(5 * time.Second):
+				}
+				continue
+			}
+			return
+		}
+	}()
 	authService, err := auth.NewService(userRepo, rdb, cfg, blocklist, emailSender, serverRepo, permPublisher, log.Logger)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create auth service")
@@ -307,6 +348,8 @@ func run() error {
 		memberRepo:       memberRepo,
 		inviteRepo:       inviteRepo,
 		messageRepo:      messageRepo,
+		attachmentRepo:   attachmentRepo,
+		storage:          storage,
 		authService:      authService,
 		permStore:        permStore,
 		permReadStore:    permStore,
@@ -430,10 +473,21 @@ func (s *server) registerRoutes(app *fiber.App) {
 	channelGroup.Get("/:channelID/permissions/@me",
 		permHandler.GetMyPermissions)
 
+	// Attachment upload route (nested under channels)
+	attachmentHandler := api.NewAttachmentHandler(
+		s.attachmentRepo, s.storage, s.rdb, s.cfg.MaxUploadSizeBytes(), log.Logger)
+	channelGroup.Post("/:channelID/attachments",
+		limiter.New(limiter.Config{
+			Max:        s.cfg.RateLimitUploadCount,
+			Expiration: time.Duration(s.cfg.RateLimitUploadWindowSeconds) * time.Second,
+		}),
+		permission.RequirePermission(s.permResolver, permissions.AttachFiles),
+		attachmentHandler.Upload)
+
 	// Message routes (nested under channels for list and create)
 	messageHandler := api.NewMessageHandler(
-		s.messageRepo, s.permResolver, s.typesenseIndexer, s.gatewayPublisher,
-		s.cfg.MaxMessageLength, log.Logger)
+		s.messageRepo, s.attachmentRepo, s.storage, s.permResolver, s.typesenseIndexer, s.gatewayPublisher,
+		s.cfg.MaxMessageLength, s.cfg.MaxAttachmentsPerMessage, log.Logger)
 	channelGroup.Get("/:channelID/messages",
 		permission.RequirePermission(s.permResolver, permissions.ViewChannels|permissions.ReadMessageHistory),
 		messageHandler.ListMessages)
@@ -534,6 +588,26 @@ func (s *server) registerRoutes(app *fiber.App) {
 	banGroup.Put("/:userID", memberHandler.BanMember)
 	banGroup.Delete("/:userID", memberHandler.UnbanMember)
 
+	// Public media file serving (outside /api/v1/, no auth required). The UUID component of each storage key provides
+	// sufficient entropy to prevent guessing. Directory traversal is prevented by Fiber's path parameter sanitisation.
+	if _, ok := s.storage.(*media.LocalStorage); ok {
+		app.Get("/media/*", func(c fiber.Ctx) error {
+			key := c.Params("*")
+			if key == "" || strings.Contains(key, "..") {
+				return fiber.ErrNotFound
+			}
+			rc, err := s.storage.Get(c.Context(), key)
+			if err != nil {
+				return fiber.ErrNotFound
+			}
+			defer func() { _ = rc.Close() }()
+
+			// Set a long cache header since attachment URLs include a unique UUID.
+			c.Set("Cache-Control", "public, max-age=31536000, immutable")
+			return c.SendStream(rc)
+		})
+	}
+
 	// Catch-all handler returns 404 for any request that does not match a defined route. Fiber v3 treats app.Use()
 	// middleware as route matches, so without this terminal handler the router considers unmatched requests "handled"
 	// and returns the default 200 status with an empty body.
@@ -547,9 +621,9 @@ type redisPinger struct{ client *redis.Client }
 
 func (p redisPinger) Ping(ctx context.Context) error { return p.client.Ping(ctx).Err() }
 
-// purgeExpiredData deletes stale login attempts and (optionally) deletion tombstones. Each call logs the outcome so
-// operators can monitor retention enforcement.
-func purgeExpiredData(ctx context.Context, repo *user.PGRepository, cfg *config.Config) {
+// purgeExpiredData deletes stale login attempts, deletion tombstones, and orphaned attachments. Each call logs the
+// outcome so operators can monitor retention enforcement.
+func purgeExpiredData(ctx context.Context, repo *user.PGRepository, attachRepo *attachment.PGRepository, storage media.StorageProvider, cfg *config.Config) {
 	deleted, err := repo.PurgeLoginAttempts(ctx, time.Now().Add(-cfg.LoginAttemptRetention))
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to purge expired login attempts")
@@ -565,6 +639,20 @@ func purgeExpiredData(ctx context.Context, repo *user.PGRepository, cfg *config.
 			log.Info().Int64("deleted", deleted).Dur("retention", cfg.DeletionTombstoneRetention).
 				Msg("Purged expired deletion tombstones")
 		}
+	}
+
+	// Purge orphaned attachments (uploaded but never linked to a message).
+	orphanKeys, err := attachRepo.PurgeOrphans(ctx, time.Now().Add(-cfg.AttachmentOrphanTTL))
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to purge orphaned attachments")
+	} else if len(orphanKeys) > 0 {
+		for _, key := range orphanKeys {
+			if delErr := storage.Delete(ctx, key); delErr != nil {
+				log.Warn().Err(delErr).Str("key", key).Msg("Failed to delete orphaned attachment file")
+			}
+		}
+		log.Info().Int("deleted", len(orphanKeys)).Dur("ttl", cfg.AttachmentOrphanTTL).
+			Msg("Purged orphaned attachment files")
 	}
 }
 

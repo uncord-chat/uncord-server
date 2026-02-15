@@ -25,7 +25,10 @@ func TestLoadDefaults(t *testing.T) {
 		"INIT_OWNER_EMAIL", "INIT_OWNER_PASSWORD",
 		"ONBOARDING_REQUIRE_RULES", "ONBOARDING_REQUIRE_EMAIL_VERIFICATION",
 		"ONBOARDING_MIN_ACCOUNT_AGE", "ONBOARDING_REQUIRE_PHONE", "ONBOARDING_REQUIRE_CAPTCHA",
-		"MAX_UPLOAD_SIZE_MB",
+		"MAX_UPLOAD_SIZE_MB", "MAX_AVATAR_SIZE_MB", "MAX_AVATAR_DIMENSION",
+		"STORAGE_BACKEND", "STORAGE_LOCAL_PATH",
+		"MAX_ATTACHMENTS_PER_MESSAGE", "ATTACHMENT_ORPHAN_TTL",
+		"RATE_LIMIT_UPLOAD_COUNT", "RATE_LIMIT_UPLOAD_WINDOW_SECONDS",
 		"MAX_CHANNELS", "MAX_CATEGORIES",
 		"SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM",
 		"SERVER_SECRET", "DELETION_TOMBSTONE_USERNAMES", "DELETION_TOMBSTONE_RETENTION",
@@ -140,6 +143,36 @@ func TestLoadDefaults(t *testing.T) {
 	// Upload limit defaults
 	if cfg.MaxUploadSizeMB != 100 {
 		t.Errorf("MaxUploadSizeMB = %d, want 100", cfg.MaxUploadSizeMB)
+	}
+	if cfg.MaxAvatarSizeMB != 8 {
+		t.Errorf("MaxAvatarSizeMB = %d, want 8", cfg.MaxAvatarSizeMB)
+	}
+	if cfg.MaxAvatarDimension != 1080 {
+		t.Errorf("MaxAvatarDimension = %d, want 1080", cfg.MaxAvatarDimension)
+	}
+
+	// Storage defaults
+	if cfg.StorageBackend != "local" {
+		t.Errorf("StorageBackend = %q, want %q", cfg.StorageBackend, "local")
+	}
+	if cfg.StorageLocalPath != "/data/uncord/media" {
+		t.Errorf("StorageLocalPath = %q, want %q", cfg.StorageLocalPath, "/data/uncord/media")
+	}
+
+	// Attachment defaults
+	if cfg.MaxAttachmentsPerMessage != 10 {
+		t.Errorf("MaxAttachmentsPerMessage = %d, want 10", cfg.MaxAttachmentsPerMessage)
+	}
+	if cfg.AttachmentOrphanTTL != time.Hour {
+		t.Errorf("AttachmentOrphanTTL = %v, want 1h", cfg.AttachmentOrphanTTL)
+	}
+
+	// Upload rate limit defaults
+	if cfg.RateLimitUploadCount != 10 {
+		t.Errorf("RateLimitUploadCount = %d, want 10", cfg.RateLimitUploadCount)
+	}
+	if cfg.RateLimitUploadWindowSeconds != 60 {
+		t.Errorf("RateLimitUploadWindowSeconds = %d, want 60", cfg.RateLimitUploadWindowSeconds)
 	}
 
 	// Entity limit defaults
@@ -354,6 +387,14 @@ func TestBodyLimitBytes(t *testing.T) {
 	want := 101 * 1024 * 1024 // 100 MB + 1 MB overhead
 	if got := cfg.BodyLimitBytes(); got != want {
 		t.Errorf("BodyLimitBytes() = %d, want %d", got, want)
+	}
+}
+
+func TestMaxUploadSizeBytes(t *testing.T) {
+	cfg := &Config{MaxUploadSizeMB: 50}
+	want := int64(50) * 1024 * 1024
+	if got := cfg.MaxUploadSizeBytes(); got != want {
+		t.Errorf("MaxUploadSizeBytes() = %d, want %d", got, want)
 	}
 }
 
@@ -639,27 +680,36 @@ func TestLoadValidationDeletionTombstoneRetentionNegative(t *testing.T) {
 	t.Setenv("SERVER_SECRET", testServerSecret)
 
 	cfg := &Config{
-		JWTSecret:                  "test-secret-for-defaults-minimum-32",
-		ServerPort:                 8080,
-		DatabaseMaxConn:            25,
-		DatabaseMinConn:            5,
-		JWTAccessTTL:               15 * time.Minute,
-		JWTRefreshTTL:              7 * 24 * time.Hour,
-		Argon2Memory:               65536,
-		Argon2Iterations:           3,
-		Argon2Parallelism:          2,
-		MaxUploadSizeMB:            100,
-		MaxChannels:                500,
-		MaxCategories:              50,
-		RateLimitAPIRequests:       60,
-		RateLimitAPIWindowSeconds:  60,
-		RateLimitAuthCount:         5,
-		RateLimitAuthWindowSeconds: 300,
-		ServerSecret:               testServerSecret,
-		MFATicketTTL:               5 * time.Minute,
-		LoginAttemptRetention:      2160 * time.Hour,
-		DeletionTombstoneRetention: -time.Hour,
-		DataCleanupInterval:        12 * time.Hour,
+		JWTSecret:                    "test-secret-for-defaults-minimum-32",
+		ServerPort:                   8080,
+		DatabaseMaxConn:              25,
+		DatabaseMinConn:              5,
+		JWTAccessTTL:                 15 * time.Minute,
+		JWTRefreshTTL:                7 * 24 * time.Hour,
+		Argon2Memory:                 65536,
+		Argon2Iterations:             3,
+		Argon2Parallelism:            2,
+		MaxUploadSizeMB:              100,
+		MaxAvatarSizeMB:              8,
+		MaxAvatarDimension:           1080,
+		StorageBackend:               "local",
+		StorageLocalPath:             "/data/uncord/media",
+		MaxAttachmentsPerMessage:     10,
+		AttachmentOrphanTTL:          time.Hour,
+		RateLimitUploadCount:         10,
+		RateLimitUploadWindowSeconds: 60,
+		MaxChannels:                  500,
+		MaxCategories:                50,
+		RateLimitAPIRequests:         60,
+		RateLimitAPIWindowSeconds:    60,
+		RateLimitAuthCount:           5,
+		RateLimitAuthWindowSeconds:   300,
+		ServerSecret:                 testServerSecret,
+		MFATicketTTL:                 5 * time.Minute,
+		LoginAttemptRetention:        2160 * time.Hour,
+		DeletionTombstoneRetention:   -time.Hour,
+		DataCleanupInterval:          12 * time.Hour,
+		MaxMessageLength:             4000,
 	}
 	err := cfg.validate()
 	if err == nil {
@@ -683,5 +733,47 @@ func TestSMTPConfigured(t *testing.T) {
 		if got := cfg.SMTPConfigured(); got != tt.want {
 			t.Errorf("SMTPConfigured() with host=%q = %v, want %v", tt.host, got, tt.want)
 		}
+	}
+}
+
+func TestLoadValidationStorageBackend(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+	t.Setenv("SERVER_SECRET", testServerSecret)
+	t.Setenv("STORAGE_BACKEND", "invalid")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() returned nil error, want validation error for invalid STORAGE_BACKEND")
+	}
+	if !strings.Contains(err.Error(), "STORAGE_BACKEND") {
+		t.Errorf("error %q does not mention STORAGE_BACKEND", err.Error())
+	}
+}
+
+func TestLoadValidationMaxAttachmentsPerMessage(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+	t.Setenv("SERVER_SECRET", testServerSecret)
+	t.Setenv("MAX_ATTACHMENTS_PER_MESSAGE", "0")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() returned nil error, want validation error for MAX_ATTACHMENTS_PER_MESSAGE < 1")
+	}
+	if !strings.Contains(err.Error(), "MAX_ATTACHMENTS_PER_MESSAGE") {
+		t.Errorf("error %q does not mention MAX_ATTACHMENTS_PER_MESSAGE", err.Error())
+	}
+}
+
+func TestLoadValidationAttachmentOrphanTTL(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+	t.Setenv("SERVER_SECRET", testServerSecret)
+	t.Setenv("ATTACHMENT_ORPHAN_TTL", "30s")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() returned nil error, want validation error for ATTACHMENT_ORPHAN_TTL < 1m")
+	}
+	if !strings.Contains(err.Error(), "ATTACHMENT_ORPHAN_TTL") {
+		t.Errorf("error %q does not mention ATTACHMENT_ORPHAN_TTL", err.Error())
 	}
 }

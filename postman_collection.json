@@ -62,6 +62,10 @@
 		{
 			"key": "message_id",
 			"value": ""
+		},
+		{
+			"key": "attachment_id",
+			"value": ""
 		}
 	],
 	"item": [
@@ -1052,6 +1056,42 @@
 					}
 				},
 				{
+					"name": "Upload Attachment",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var data = pm.response.json().data;",
+									"    pm.collectionVariables.set('attachment_id', data.id);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": ""
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/channels/{{channel_id}}/attachments",
+							"host": ["{{base_url}}"],
+							"path": ["channels", "{{channel_id}}", "attachments"]
+						}
+					}
+				},
+				{
 					"name": "Send Message",
 					"event": [
 						{
@@ -1074,7 +1114,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"content\": \"Hello, world!\"\n}"
+							"raw": "{\n  \"content\": \"Hello, world!\",\n  \"attachment_ids\": [\"{{attachment_id}}\"]\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/channels/{{channel_id}}/messages",

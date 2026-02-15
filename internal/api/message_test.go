@@ -13,6 +13,8 @@ import (
 	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 
+	"github.com/uncord-chat/uncord-server/internal/attachment"
+	"github.com/uncord-chat/uncord-server/internal/media"
 	"github.com/uncord-chat/uncord-server/internal/message"
 	"github.com/uncord-chat/uncord-server/internal/permission"
 )
@@ -132,9 +134,109 @@ func seedMessage(repo *fakeMessageRepo, channelID, authorID uuid.UUID) *message.
 	return &msg
 }
 
+// fakeAttachmentRepo implements attachment.Repository for handler tests.
+type fakeAttachmentRepo struct {
+	attachments []attachment.Attachment
+}
+
+func newFakeAttachmentRepo() *fakeAttachmentRepo {
+	return &fakeAttachmentRepo{}
+}
+
+func (r *fakeAttachmentRepo) Create(_ context.Context, params attachment.CreateParams) (*attachment.Attachment, error) {
+	a := attachment.Attachment{
+		ID:          uuid.New(),
+		ChannelID:   params.ChannelID,
+		UploaderID:  params.UploaderID,
+		Filename:    params.Filename,
+		ContentType: params.ContentType,
+		SizeBytes:   params.SizeBytes,
+		StorageKey:  params.StorageKey,
+		Width:       params.Width,
+		Height:      params.Height,
+		CreatedAt:   time.Now(),
+	}
+	r.attachments = append(r.attachments, a)
+	return &a, nil
+}
+
+func (r *fakeAttachmentRepo) GetByID(_ context.Context, id uuid.UUID) (*attachment.Attachment, error) {
+	for i := range r.attachments {
+		if r.attachments[i].ID == id {
+			return &r.attachments[i], nil
+		}
+	}
+	return nil, attachment.ErrNotFound
+}
+
+func (r *fakeAttachmentRepo) LinkToMessage(_ context.Context, ids []uuid.UUID, messageID uuid.UUID, uploaderID uuid.UUID) ([]attachment.Attachment, error) {
+	var result []attachment.Attachment
+	for _, id := range ids {
+		for i := range r.attachments {
+			a := &r.attachments[i]
+			if a.ID == id && a.UploaderID == uploaderID && a.MessageID == nil {
+				a.MessageID = &messageID
+				result = append(result, *a)
+			}
+		}
+	}
+	if len(result) != len(ids) {
+		return nil, attachment.ErrNotFound
+	}
+	return result, nil
+}
+
+func (r *fakeAttachmentRepo) ListByMessage(_ context.Context, messageID uuid.UUID) ([]attachment.Attachment, error) {
+	var result []attachment.Attachment
+	for i := range r.attachments {
+		if r.attachments[i].MessageID != nil && *r.attachments[i].MessageID == messageID {
+			result = append(result, r.attachments[i])
+		}
+	}
+	return result, nil
+}
+
+func (r *fakeAttachmentRepo) ListByMessages(_ context.Context, messageIDs []uuid.UUID) (map[uuid.UUID][]attachment.Attachment, error) {
+	result := make(map[uuid.UUID][]attachment.Attachment)
+	for _, mid := range messageIDs {
+		for i := range r.attachments {
+			if r.attachments[i].MessageID != nil && *r.attachments[i].MessageID == mid {
+				result[mid] = append(result[mid], r.attachments[i])
+			}
+		}
+	}
+	return result, nil
+}
+
+func (r *fakeAttachmentRepo) SetThumbnailKey(_ context.Context, id uuid.UUID, key string) error {
+	for i := range r.attachments {
+		if r.attachments[i].ID == id {
+			r.attachments[i].ThumbnailKey = &key
+			return nil
+		}
+	}
+	return attachment.ErrNotFound
+}
+
+func (r *fakeAttachmentRepo) PurgeOrphans(_ context.Context, _ time.Time) ([]string, error) {
+	return nil, nil
+}
+
 func testMessageApp(t *testing.T, repo message.Repository, resolver *permission.Resolver, userID uuid.UUID) *fiber.App {
 	t.Helper()
-	handler := NewMessageHandler(repo, resolver, nil, nil, testMaxContent, zerolog.Nop())
+	return testMessageAppWithAttachments(t, repo, newFakeAttachmentRepo(), resolver, userID)
+}
+
+func testMessageAppWithAttachments(
+	t *testing.T,
+	repo message.Repository,
+	attachRepo attachment.Repository,
+	resolver *permission.Resolver,
+	userID uuid.UUID,
+) *fiber.App {
+	t.Helper()
+	storage := media.NewLocalStorage(t.TempDir(), "http://localhost:8080")
+	handler := NewMessageHandler(repo, attachRepo, storage, resolver, nil, nil, testMaxContent, 10, zerolog.Nop())
 	app := fiber.New()
 
 	app.Use(fakeAuth(userID))
@@ -286,10 +388,10 @@ func TestCreateMessage_Success(t *testing.T) {
 
 	env := parseSuccess(t, body)
 	var msg struct {
-		ID          string   `json:"id"`
-		Content     string   `json:"content"`
-		ChannelID   string   `json:"channel_id"`
-		Attachments []string `json:"attachments"`
+		ID          string            `json:"id"`
+		Content     string            `json:"content"`
+		ChannelID   string            `json:"channel_id"`
+		Attachments []json.RawMessage `json:"attachments"`
 		Author      struct {
 			Username string `json:"username"`
 		} `json:"author"`
@@ -655,6 +757,141 @@ func TestDeleteMessage_InvalidID(t *testing.T) {
 	app := testMessageApp(t, repo, allowAllResolver(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodDelete, "/messages/not-a-uuid", ""))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusBadRequest)
+	}
+	env := parseError(t, body)
+	if env.Error.Code != string(apierrors.ValidationError) {
+		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.ValidationError)
+	}
+}
+
+// --- Attachment integration tests ---
+
+func TestCreateMessage_WithAttachments(t *testing.T) {
+	t.Parallel()
+	msgRepo := newFakeMessageRepo()
+	attRepo := newFakeAttachmentRepo()
+	channelID := uuid.New()
+	userID := uuid.New()
+
+	// Seed a pending attachment.
+	att, err := attRepo.Create(context.Background(), attachment.CreateParams{
+		ChannelID:   channelID,
+		UploaderID:  userID,
+		Filename:    "photo.jpg",
+		ContentType: "image/jpeg",
+		SizeBytes:   1024,
+		StorageKey:  "attachments/" + channelID.String() + "/abc.jpg",
+	})
+	if err != nil {
+		t.Fatalf("create attachment: %v", err)
+	}
+
+	app := testMessageAppWithAttachments(t, msgRepo, attRepo, allowAllResolver(), userID)
+
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/channels/"+channelID.String()+"/messages",
+		`{"content":"look at this","attachment_ids":["`+att.ID.String()+`"]}`))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusCreated {
+		t.Errorf("status = %d, want %d; body: %s", resp.StatusCode, fiber.StatusCreated, body)
+	}
+
+	env := parseSuccess(t, body)
+	var msg struct {
+		Attachments []struct {
+			ID       string `json:"id"`
+			Filename string `json:"filename"`
+		} `json:"attachments"`
+	}
+	if err := json.Unmarshal(env.Data, &msg); err != nil {
+		t.Fatalf("unmarshal message: %v", err)
+	}
+	if len(msg.Attachments) != 1 {
+		t.Fatalf("got %d attachments, want 1", len(msg.Attachments))
+	}
+	if msg.Attachments[0].Filename != "photo.jpg" {
+		t.Errorf("filename = %q, want %q", msg.Attachments[0].Filename, "photo.jpg")
+	}
+}
+
+func TestCreateMessage_AttachmentOnly(t *testing.T) {
+	t.Parallel()
+	msgRepo := newFakeMessageRepo()
+	attRepo := newFakeAttachmentRepo()
+	channelID := uuid.New()
+	userID := uuid.New()
+
+	att, err := attRepo.Create(context.Background(), attachment.CreateParams{
+		ChannelID:   channelID,
+		UploaderID:  userID,
+		Filename:    "doc.pdf",
+		ContentType: "application/pdf",
+		SizeBytes:   2048,
+		StorageKey:  "attachments/" + channelID.String() + "/def.pdf",
+	})
+	if err != nil {
+		t.Fatalf("create attachment: %v", err)
+	}
+
+	app := testMessageAppWithAttachments(t, msgRepo, attRepo, allowAllResolver(), userID)
+
+	// Empty content, only attachment IDs.
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/channels/"+channelID.String()+"/messages",
+		`{"content":"","attachment_ids":["`+att.ID.String()+`"]}`))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusCreated {
+		t.Errorf("status = %d, want %d; body: %s", resp.StatusCode, fiber.StatusCreated, body)
+	}
+}
+
+func TestCreateMessage_UnknownAttachment(t *testing.T) {
+	t.Parallel()
+	msgRepo := newFakeMessageRepo()
+	attRepo := newFakeAttachmentRepo()
+	channelID := uuid.New()
+	userID := uuid.New()
+
+	app := testMessageAppWithAttachments(t, msgRepo, attRepo, allowAllResolver(), userID)
+
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/channels/"+channelID.String()+"/messages",
+		`{"content":"hello","attachment_ids":["`+uuid.New().String()+`"]}`))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusBadRequest)
+	}
+	env := parseError(t, body)
+	if env.Error.Code != string(apierrors.UnknownAttachment) {
+		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.UnknownAttachment)
+	}
+}
+
+func TestCreateMessage_TooManyAttachments(t *testing.T) {
+	t.Parallel()
+	msgRepo := newFakeMessageRepo()
+	attRepo := newFakeAttachmentRepo()
+	channelID := uuid.New()
+	userID := uuid.New()
+
+	// Create 11 IDs to exceed the limit of 10.
+	ids := "["
+	for i := range 11 {
+		if i > 0 {
+			ids += ","
+		}
+		ids += `"` + uuid.New().String() + `"`
+	}
+	ids += "]"
+
+	app := testMessageAppWithAttachments(t, msgRepo, attRepo, allowAllResolver(), userID)
+
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/channels/"+channelID.String()+"/messages",
+		`{"content":"hello","attachment_ids":`+ids+`}`))
 	body := readBody(t, resp)
 
 	if resp.StatusCode != fiber.StatusBadRequest {

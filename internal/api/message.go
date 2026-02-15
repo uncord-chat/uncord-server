@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -13,8 +14,10 @@ import (
 	"github.com/uncord-chat/uncord-protocol/models"
 	"github.com/uncord-chat/uncord-protocol/permissions"
 
+	"github.com/uncord-chat/uncord-server/internal/attachment"
 	"github.com/uncord-chat/uncord-server/internal/gateway"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
+	"github.com/uncord-chat/uncord-server/internal/media"
 	"github.com/uncord-chat/uncord-server/internal/message"
 	"github.com/uncord-chat/uncord-server/internal/permission"
 	"github.com/uncord-chat/uncord-server/internal/typesense"
@@ -22,30 +25,39 @@ import (
 
 // MessageHandler serves message endpoints.
 type MessageHandler struct {
-	messages   message.Repository
-	resolver   *permission.Resolver
-	indexer    *typesense.Indexer
-	gateway    *gateway.Publisher
-	maxContent int
-	log        zerolog.Logger
+	messages       message.Repository
+	attachments    attachment.Repository
+	storage        media.StorageProvider
+	resolver       *permission.Resolver
+	indexer        *typesense.Indexer
+	gateway        *gateway.Publisher
+	maxContent     int
+	maxAttachments int
+	log            zerolog.Logger
 }
 
 // NewMessageHandler creates a new message handler.
 func NewMessageHandler(
 	messages message.Repository,
+	attachments attachment.Repository,
+	storage media.StorageProvider,
 	resolver *permission.Resolver,
 	indexer *typesense.Indexer,
 	gw *gateway.Publisher,
 	maxContent int,
+	maxAttachments int,
 	logger zerolog.Logger,
 ) *MessageHandler {
 	return &MessageHandler{
-		messages:   messages,
-		resolver:   resolver,
-		indexer:    indexer,
-		gateway:    gw,
-		maxContent: maxContent,
-		log:        logger,
+		messages:       messages,
+		attachments:    attachments,
+		storage:        storage,
+		resolver:       resolver,
+		indexer:        indexer,
+		gateway:        gw,
+		maxContent:     maxContent,
+		maxAttachments: maxAttachments,
+		log:            logger,
 	}
 }
 
@@ -74,9 +86,20 @@ func (h *MessageHandler) ListMessages(c fiber.Ctx) error {
 		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
 	}
 
+	// Batch-load attachments for all returned messages.
+	messageIDs := make([]uuid.UUID, len(messages))
+	for i := range messages {
+		messageIDs[i] = messages[i].ID
+	}
+	attachmentMap, err := h.attachments.ListByMessages(c, messageIDs)
+	if err != nil {
+		h.log.Error().Err(err).Str("handler", "message").Msg("list message attachments failed")
+		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
+	}
+
 	result := make([]models.Message, len(messages))
 	for i := range messages {
-		result[i] = toMessageModel(&messages[i])
+		result[i] = h.toMessageModel(&messages[i], attachmentMap[messages[i].ID])
 	}
 	return httputil.Success(c, result)
 }
@@ -98,9 +121,32 @@ func (h *MessageHandler) CreateMessage(c fiber.Ctx) error {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "Invalid request body")
 	}
 
+	hasAttachments := len(body.AttachmentIDs) > 0
+
+	// Validate attachment count.
+	if len(body.AttachmentIDs) > h.maxAttachments {
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError,
+			fmt.Sprintf("Too many attachments (maximum %d)", h.maxAttachments))
+	}
+
+	// Parse attachment IDs upfront.
+	var attachmentIDs []uuid.UUID
+	for _, raw := range body.AttachmentIDs {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid attachment_ids format")
+		}
+		attachmentIDs = append(attachmentIDs, id)
+	}
+
+	// Content is required only when no attachments are provided.
 	content, err := message.ValidateContent(body.Content, h.maxContent)
 	if err != nil {
-		return h.mapMessageError(c, err)
+		if errors.Is(err, message.ErrEmptyContent) && hasAttachments {
+			content = ""
+		} else {
+			return h.mapMessageError(c, err)
+		}
 	}
 
 	var replyToID *uuid.UUID
@@ -122,7 +168,16 @@ func (h *MessageHandler) CreateMessage(c fiber.Ctx) error {
 		return h.mapMessageError(c, err)
 	}
 
-	result := toMessageModel(msg)
+	// Link pending attachments to the new message.
+	var linked []attachment.Attachment
+	if len(attachmentIDs) > 0 {
+		linked, err = h.attachments.LinkToMessage(c, attachmentIDs, msg.ID, userID)
+		if err != nil {
+			return mapAttachmentError(c, err)
+		}
+	}
+
+	result := h.toMessageModel(msg, linked)
 
 	// Best-effort Typesense indexing.
 	if h.indexer != nil {
@@ -184,7 +239,13 @@ func (h *MessageHandler) EditMessage(c fiber.Ctx) error {
 		return h.mapMessageError(c, err)
 	}
 
-	result := toMessageModel(msg)
+	attachments, err := h.attachments.ListByMessage(c, msg.ID)
+	if err != nil {
+		h.log.Error().Err(err).Str("handler", "message").Msg("list message attachments failed")
+		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
+	}
+
+	result := h.toMessageModel(msg, attachments)
 
 	// Best-effort Typesense upsert.
 	if h.indexer != nil {
@@ -270,7 +331,7 @@ func (h *MessageHandler) DeleteMessage(c fiber.Ctx) error {
 }
 
 // toMessageModel converts the internal message type to the protocol response type.
-func toMessageModel(m *message.Message) models.Message {
+func (h *MessageHandler) toMessageModel(m *message.Message, attachments []attachment.Attachment) models.Message {
 	var replyToID *string
 	if m.ReplyToID != nil {
 		s := m.ReplyToID.String()
@@ -281,6 +342,12 @@ func toMessageModel(m *message.Message) models.Message {
 		s := m.EditedAt.Format(time.RFC3339)
 		editedAt = &s
 	}
+
+	modelAttachments := make([]models.Attachment, len(attachments))
+	for i := range attachments {
+		modelAttachments[i] = toAttachmentModel(&attachments[i], h.storage)
+	}
+
 	return models.Message{
 		ID:        m.ID.String(),
 		ChannelID: m.ChannelID.String(),
@@ -291,7 +358,7 @@ func toMessageModel(m *message.Message) models.Message {
 			AvatarKey:   m.AuthorAvatarKey,
 		},
 		Content:     m.Content,
-		Attachments: []string{},
+		Attachments: modelAttachments,
 		ReplyToID:   replyToID,
 		Pinned:      m.Pinned,
 		EditedAt:    editedAt,

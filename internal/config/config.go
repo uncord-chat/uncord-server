@@ -73,7 +73,21 @@ type Config struct {
 	RateLimitAuthWindowSeconds int
 
 	// Upload Limits
-	MaxUploadSizeMB int
+	MaxUploadSizeMB    int
+	MaxAvatarSizeMB    int
+	MaxAvatarDimension int
+
+	// Storage
+	StorageBackend   string // "local" or "s3"
+	StorageLocalPath string
+
+	// Attachments
+	MaxAttachmentsPerMessage int
+	AttachmentOrphanTTL      time.Duration
+
+	// Rate Limiting (Uploads)
+	RateLimitUploadCount         int
+	RateLimitUploadWindowSeconds int
 
 	// Entity Limits
 	MaxChannels      int
@@ -158,7 +172,18 @@ func Load() (*Config, error) {
 		RateLimitAuthCount:         p.int("RATE_LIMIT_AUTH_COUNT", 5),
 		RateLimitAuthWindowSeconds: p.int("RATE_LIMIT_AUTH_WINDOW_SECONDS", 300),
 
-		MaxUploadSizeMB: p.int("MAX_UPLOAD_SIZE_MB", 100),
+		MaxUploadSizeMB:    p.int("MAX_UPLOAD_SIZE_MB", 100),
+		MaxAvatarSizeMB:    p.int("MAX_AVATAR_SIZE_MB", 8),
+		MaxAvatarDimension: p.int("MAX_AVATAR_DIMENSION", 1080),
+
+		StorageBackend:   envStr("STORAGE_BACKEND", "local"),
+		StorageLocalPath: envStr("STORAGE_LOCAL_PATH", "/data/uncord/media"),
+
+		MaxAttachmentsPerMessage: p.int("MAX_ATTACHMENTS_PER_MESSAGE", 10),
+		AttachmentOrphanTTL:      p.duration("ATTACHMENT_ORPHAN_TTL", time.Hour),
+
+		RateLimitUploadCount:         p.int("RATE_LIMIT_UPLOAD_COUNT", 10),
+		RateLimitUploadWindowSeconds: p.int("RATE_LIMIT_UPLOAD_WINDOW_SECONDS", 60),
 
 		MaxChannels:      p.int("MAX_CHANNELS", 500),
 		MaxCategories:    p.int("MAX_CATEGORIES", 50),
@@ -226,6 +251,11 @@ func (c *Config) BodyLimitBytes() int {
 	return (c.MaxUploadSizeMB + 1) * 1024 * 1024
 }
 
+// MaxUploadSizeBytes returns the maximum file upload size in bytes.
+func (c *Config) MaxUploadSizeBytes() int64 {
+	return int64(c.MaxUploadSizeMB) * 1024 * 1024
+}
+
 func (c *Config) validate() error {
 	var errs []error
 
@@ -268,6 +298,33 @@ func (c *Config) validate() error {
 
 	if c.MaxUploadSizeMB < 1 {
 		errs = append(errs, fmt.Errorf("MAX_UPLOAD_SIZE_MB must be at least 1"))
+	}
+	if c.MaxAvatarSizeMB < 1 {
+		errs = append(errs, fmt.Errorf("MAX_AVATAR_SIZE_MB must be at least 1"))
+	}
+	if c.MaxAvatarDimension < 1 {
+		errs = append(errs, fmt.Errorf("MAX_AVATAR_DIMENSION must be at least 1"))
+	}
+
+	if c.StorageBackend != "local" && c.StorageBackend != "s3" {
+		errs = append(errs, fmt.Errorf("STORAGE_BACKEND must be \"local\" or \"s3\""))
+	}
+	if c.StorageBackend == "local" && c.StorageLocalPath == "" {
+		errs = append(errs, fmt.Errorf("STORAGE_LOCAL_PATH is required when STORAGE_BACKEND is \"local\""))
+	}
+
+	if c.MaxAttachmentsPerMessage < 1 {
+		errs = append(errs, fmt.Errorf("MAX_ATTACHMENTS_PER_MESSAGE must be at least 1"))
+	}
+	if c.AttachmentOrphanTTL < time.Minute {
+		errs = append(errs, fmt.Errorf("ATTACHMENT_ORPHAN_TTL must be at least 1m"))
+	}
+
+	if c.RateLimitUploadCount < 1 {
+		errs = append(errs, fmt.Errorf("RATE_LIMIT_UPLOAD_COUNT must be at least 1"))
+	}
+	if c.RateLimitUploadWindowSeconds < 1 {
+		errs = append(errs, fmt.Errorf("RATE_LIMIT_UPLOAD_WINDOW_SECONDS must be at least 1"))
 	}
 
 	if c.MaxChannels < 1 {

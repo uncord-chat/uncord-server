@@ -146,7 +146,9 @@ CREATE INDEX idx_messages_reply ON messages (reply_to_id) WHERE reply_to_id IS N
 
 CREATE TABLE message_attachments (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    message_id      UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    message_id      UUID REFERENCES messages(id) ON DELETE CASCADE,
+    channel_id      UUID NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+    uploader_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     filename        TEXT NOT NULL,
     content_type    TEXT NOT NULL,
     size_bytes      BIGINT NOT NULL,
@@ -157,7 +159,9 @@ CREATE TABLE message_attachments (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_attachments_message ON message_attachments (message_id);
+CREATE INDEX idx_attachments_message ON message_attachments (message_id) WHERE message_id IS NOT NULL;
+CREATE INDEX idx_attachments_uploader ON message_attachments (uploader_id);
+CREATE INDEX idx_attachments_pending ON message_attachments (created_at) WHERE message_id IS NULL;
 
 -- Threads
 
