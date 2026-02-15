@@ -375,7 +375,7 @@ func run() error {
 
 func (s *server) registerRoutes(app *fiber.App) {
 	// Browser-facing email verification page (outside /api/v1/ because users click this link directly from email)
-	verifyHandler := page.NewVerifyHandler(s.authService, s.cfg.ServerName)
+	verifyHandler := page.NewVerifyHandler(s.authService, s.cfg.ServerName, log.Logger)
 	app.Get("/verify-email", limiter.New(limiter.Config{
 		Max:        s.cfg.RateLimitAuthCount,
 		Expiration: time.Duration(s.cfg.RateLimitAuthWindowSeconds) * time.Second,

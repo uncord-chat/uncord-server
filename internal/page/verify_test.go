@@ -174,7 +174,7 @@ func testVerifyHandler(t *testing.T) *fiber.App {
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	handler := NewVerifyHandler(svc, cfg.ServerName)
+	handler := NewVerifyHandler(svc, cfg.ServerName, zerolog.Nop())
 	app := fiber.New()
 	app.Get("/verify-email", handler.VerifyEmail)
 	return app
