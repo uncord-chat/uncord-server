@@ -20,8 +20,12 @@ import (
 type fakeRoleRepo struct {
 	roles      []role.Role
 	maxReached bool
-	// callerPos controls the value returned by HighestPosition.
+	// callerPos controls the default value returned by HighestPosition. If positions contains an entry for the
+	// queried userID, that entry takes precedence.
 	callerPos int
+	// positions overrides HighestPosition for specific user IDs. Used by member handler tests that compare two
+	// different users' hierarchy ranks.
+	positions map[uuid.UUID]int
 }
 
 func newFakeRoleRepo() *fakeRoleRepo {
@@ -99,7 +103,12 @@ func (r *fakeRoleRepo) Delete(_ context.Context, id uuid.UUID) error {
 	return role.ErrNotFound
 }
 
-func (r *fakeRoleRepo) HighestPosition(_ context.Context, _ uuid.UUID) (int, error) {
+func (r *fakeRoleRepo) HighestPosition(_ context.Context, userID uuid.UUID) (int, error) {
+	if r.positions != nil {
+		if pos, ok := r.positions[userID]; ok {
+			return pos, nil
+		}
+	}
 	return r.callerPos, nil
 }
 

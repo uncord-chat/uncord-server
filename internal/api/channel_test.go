@@ -110,13 +110,14 @@ func (r *fakeChannelRepo) Delete(_ context.Context, id uuid.UUID) error {
 	return channel.ErrNotFound
 }
 
-// fakePermStore implements permission.Store for channel handler tests. It grants all permissions by default.
+// fakePermStore implements permission.Store for handler tests. IsOwner returns true only when the queried userID
+// matches ownerID. A zero-value ownerID means nobody is the owner.
 type fakePermStore struct {
-	isOwner bool
+	ownerID uuid.UUID
 }
 
-func (s *fakePermStore) IsOwner(_ context.Context, _ uuid.UUID) (bool, error) {
-	return s.isOwner, nil
+func (s *fakePermStore) IsOwner(_ context.Context, userID uuid.UUID) (bool, error) {
+	return userID == s.ownerID, nil
 }
 
 func (s *fakePermStore) RolePermissions(_ context.Context, _ uuid.UUID) ([]permission.RolePermEntry, error) {

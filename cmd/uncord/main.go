@@ -32,6 +32,7 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/disposable"
 	"github.com/uncord-chat/uncord-server/internal/email"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
+	"github.com/uncord-chat/uncord-server/internal/member"
 	"github.com/uncord-chat/uncord-server/internal/page"
 	"github.com/uncord-chat/uncord-server/internal/permission"
 	"github.com/uncord-chat/uncord-server/internal/postgres"
@@ -62,7 +63,9 @@ type server struct {
 	channelRepo   channel.Repository
 	categoryRepo  category.Repository
 	roleRepo      role.Repository
+	memberRepo    member.Repository
 	permStore     permission.OverrideStore
+	permReadStore permission.Store
 	permResolver  *permission.Resolver
 	permPublisher *permission.Publisher
 }
@@ -225,6 +228,7 @@ func run() error {
 	channelRepo := channel.NewPGRepository(db, log.Logger)
 	categoryRepo := category.NewPGRepository(db, log.Logger)
 	roleRepo := role.NewPGRepository(db, log.Logger)
+	memberRepo := member.NewPGRepository(db, log.Logger)
 	authService, err := auth.NewService(userRepo, rdb, cfg, blocklist, emailSender, serverRepo, permPublisher, log.Logger)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create auth service")
@@ -289,8 +293,10 @@ func run() error {
 		channelRepo:   channelRepo,
 		categoryRepo:  categoryRepo,
 		roleRepo:      roleRepo,
+		memberRepo:    memberRepo,
 		authService:   authService,
 		permStore:     permStore,
+		permReadStore: permStore,
 		permResolver:  permResolver,
 		permPublisher: permPublisher,
 	}
@@ -437,6 +443,42 @@ func (s *server) registerRoutes(app *fiber.App) {
 	serverGroup.Delete("/roles/:roleID",
 		permission.RequireServerPermission(s.permResolver, permissions.ManageRoles),
 		roleHandler.DeleteRole)
+
+	// Member routes
+	memberHandler := api.NewMemberHandler(s.memberRepo, s.roleRepo, s.permReadStore, s.permPublisher, log.Logger)
+	memberGroup := serverGroup.Group("/members")
+	memberGroup.Get("/", memberHandler.ListMembers)
+	memberGroup.Get("/@me", memberHandler.GetSelf)
+	memberGroup.Patch("/@me",
+		permission.RequireServerPermission(s.permResolver, permissions.ChangeNicknames),
+		memberHandler.UpdateSelf)
+	memberGroup.Delete("/@me", memberHandler.Leave)
+	memberGroup.Get("/:userID", memberHandler.GetMember)
+	memberGroup.Patch("/:userID",
+		permission.RequireServerPermission(s.permResolver, permissions.ManageNicknames),
+		memberHandler.UpdateMember)
+	memberGroup.Delete("/:userID",
+		permission.RequireServerPermission(s.permResolver, permissions.KickMembers),
+		memberHandler.KickMember)
+	memberGroup.Put("/:userID/timeout",
+		permission.RequireServerPermission(s.permResolver, permissions.TimeoutMembers),
+		memberHandler.SetTimeout)
+	memberGroup.Delete("/:userID/timeout",
+		permission.RequireServerPermission(s.permResolver, permissions.TimeoutMembers),
+		memberHandler.ClearTimeout)
+	memberGroup.Put("/:userID/roles/:roleID",
+		permission.RequireServerPermission(s.permResolver, permissions.AssignRoles),
+		memberHandler.AssignRole)
+	memberGroup.Delete("/:userID/roles/:roleID",
+		permission.RequireServerPermission(s.permResolver, permissions.AssignRoles),
+		memberHandler.RemoveRole)
+
+	// Ban routes
+	banGroup := serverGroup.Group("/bans",
+		permission.RequireServerPermission(s.permResolver, permissions.BanMembers))
+	banGroup.Get("/", memberHandler.ListBans)
+	banGroup.Put("/:userID", memberHandler.BanMember)
+	banGroup.Delete("/:userID", memberHandler.UnbanMember)
 
 	// Catch-all handler returns 404 for any request that does not match a defined route. Fiber v3 treats app.Use()
 	// middleware as route matches, so without this terminal handler the router considers unmatched requests "handled"

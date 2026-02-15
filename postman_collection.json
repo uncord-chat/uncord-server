@@ -50,6 +50,10 @@
 		{
 			"key": "override_target_id",
 			"value": ""
+		},
+		{
+			"key": "member_id",
+			"value": ""
 		}
 	],
 	"item": [
@@ -733,6 +737,212 @@
 							"raw": "{{base_url}}/channels/{{channel_id}}/permissions/@me",
 							"host": ["{{base_url}}"],
 							"path": ["channels", "{{channel_id}}", "permissions", "@me"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Members",
+			"item": [
+				{
+					"name": "List Members",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/server/members?limit=50",
+							"host": ["{{base_url}}"],
+							"path": ["server", "members"],
+							"query": [
+								{ "key": "limit", "value": "50" },
+								{ "key": "after", "value": "", "disabled": true }
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Self",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/server/members/@me",
+							"host": ["{{base_url}}"],
+							"path": ["server", "members", "@me"]
+						}
+					}
+				},
+				{
+					"name": "Update Self Nickname",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"nickname\": \"My Nickname\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/server/members/@me",
+							"host": ["{{base_url}}"],
+							"path": ["server", "members", "@me"]
+						}
+					}
+				},
+				{
+					"name": "Leave Server",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/server/members/@me",
+							"host": ["{{base_url}}"],
+							"path": ["server", "members", "@me"]
+						}
+					}
+				},
+				{
+					"name": "Get Member",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/server/members/{{member_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["server", "members", "{{member_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Update Member Nickname",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"nickname\": \"New Nickname\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/server/members/{{member_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["server", "members", "{{member_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Kick Member",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/server/members/{{member_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["server", "members", "{{member_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Set Timeout",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"until\": \"2026-03-01T00:00:00Z\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/server/members/{{member_id}}/timeout",
+							"host": ["{{base_url}}"],
+							"path": ["server", "members", "{{member_id}}", "timeout"]
+						}
+					}
+				},
+				{
+					"name": "Clear Timeout",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/server/members/{{member_id}}/timeout",
+							"host": ["{{base_url}}"],
+							"path": ["server", "members", "{{member_id}}", "timeout"]
+						}
+					}
+				},
+				{
+					"name": "Assign Role",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/server/members/{{member_id}}/roles/{{role_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["server", "members", "{{member_id}}", "roles", "{{role_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Remove Role",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/server/members/{{member_id}}/roles/{{role_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["server", "members", "{{member_id}}", "roles", "{{role_id}}"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Bans",
+			"item": [
+				{
+					"name": "List Bans",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/server/bans",
+							"host": ["{{base_url}}"],
+							"path": ["server", "bans"]
+						}
+					}
+				},
+				{
+					"name": "Ban Member",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"reason\": \"Violating server rules\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/server/bans/{{member_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["server", "bans", "{{member_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Unban Member",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/server/bans/{{member_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["server", "bans", "{{member_id}}"]
 						}
 					}
 				}
