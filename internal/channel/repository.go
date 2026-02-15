@@ -41,7 +41,7 @@ func (r *PGRepository) List(ctx context.Context) ([]Channel, error) {
 	for rows.Next() {
 		ch, err := scanChannel(rows)
 		if err != nil {
-			return nil, fmt.Errorf("scan channel: %w", err)
+			return nil, err
 		}
 		channels = append(channels, *ch)
 	}
@@ -201,7 +201,7 @@ func scanChannel(row pgx.Row) (*Channel, error) {
 		&ch.Position, &ch.SlowmodeSeconds, &ch.NSFW, &ch.CreatedAt, &ch.UpdatedAt,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan channel: %w", err)
 	}
 	return &ch, nil
 }

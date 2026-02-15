@@ -128,7 +128,7 @@ func (r *PGRepository) List(ctx context.Context, channelID uuid.UUID, before *uu
 	for rows.Next() {
 		msg, err := scanMessage(rows)
 		if err != nil {
-			return nil, fmt.Errorf("scan message: %w", err)
+			return nil, err
 		}
 		messages = append(messages, *msg)
 	}
@@ -181,7 +181,7 @@ func scanMessage(row pgx.Row) (*Message, error) {
 		&msg.AuthorUsername, &msg.AuthorDisplayName, &msg.AuthorAvatarKey,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan message: %w", err)
 	}
 	return &msg, nil
 }

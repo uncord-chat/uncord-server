@@ -217,7 +217,7 @@ func scanInvite(row pgx.Row) (*Invite, error) {
 		&inv.MaxUses, &inv.UseCount, &inv.MaxAgeSeconds, &inv.ExpiresAt, &inv.CreatedAt,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan invite: %w", err)
 	}
 	return &inv, nil
 }

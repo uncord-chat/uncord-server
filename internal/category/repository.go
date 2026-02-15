@@ -41,7 +41,7 @@ func (r *PGRepository) List(ctx context.Context) ([]Category, error) {
 	for rows.Next() {
 		cat, err := scanCategory(rows)
 		if err != nil {
-			return nil, fmt.Errorf("scan category: %w", err)
+			return nil, err
 		}
 		categories = append(categories, *cat)
 	}
@@ -162,7 +162,7 @@ func scanCategory(row pgx.Row) (*Category, error) {
 	var cat Category
 	err := row.Scan(&cat.ID, &cat.Name, &cat.Position, &cat.CreatedAt, &cat.UpdatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan category: %w", err)
 	}
 	return &cat, nil
 }

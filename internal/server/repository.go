@@ -91,7 +91,7 @@ func scanConfig(row pgx.Row) (*Config, error) {
 		&cfg.OwnerID, &cfg.CreatedAt, &cfg.UpdatedAt,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan server config: %w", err)
 	}
 	return &cfg, nil
 }

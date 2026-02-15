@@ -81,7 +81,7 @@ LIMIT $3`, models.MemberStatusPending, *after, limit)
 	for rows.Next() {
 		m, err := scanMemberWithProfile(rows)
 		if err != nil {
-			return nil, fmt.Errorf("scan member: %w", err)
+			return nil, err
 		}
 		members = append(members, *m)
 	}
@@ -346,7 +346,7 @@ func scanMemberWithProfile(row pgx.Row) (*MemberWithProfile, error) {
 		&m.RoleIDs,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan member: %w", err)
 	}
 	return &m, nil
 }

@@ -35,7 +35,7 @@ func scanUser(row pgx.Row) (*User, error) {
 		&u.MFAEnabled, &u.EmailVerified, &u.CreatedAt,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan user: %w", err)
 	}
 	return &u, nil
 }
@@ -50,7 +50,7 @@ func scanCredentials(row pgx.Row) (*Credentials, error) {
 		&c.MFAEnabled, &c.MFASecret, &c.EmailVerified,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan credentials: %w", err)
 	}
 	return &c, nil
 }

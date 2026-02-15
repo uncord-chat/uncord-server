@@ -44,7 +44,7 @@ func (r *PGRepository) List(ctx context.Context) ([]Role, error) {
 	for rows.Next() {
 		role, err := scanRole(rows)
 		if err != nil {
-			return nil, fmt.Errorf("scan role: %w", err)
+			return nil, err
 		}
 		roles = append(roles, *role)
 	}
@@ -212,7 +212,7 @@ func scanRole(row pgx.Row) (*Role, error) {
 		&role.Permissions, &role.IsEveryone, &role.CreatedAt, &role.UpdatedAt,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan role: %w", err)
 	}
 	return &role, nil
 }

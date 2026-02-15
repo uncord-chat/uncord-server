@@ -72,7 +72,7 @@ func (r *PGRepository) LinkToMessage(ctx context.Context, attachmentIDs []uuid.U
 	for rows.Next() {
 		a, err := scanAttachment(rows)
 		if err != nil {
-			return nil, fmt.Errorf("scan linked attachment: %w", err)
+			return nil, err
 		}
 		result = append(result, *a)
 	}
@@ -118,7 +118,7 @@ func (r *PGRepository) ListByMessages(ctx context.Context, messageIDs []uuid.UUI
 	for rows.Next() {
 		a, err := scanAttachment(rows)
 		if err != nil {
-			return nil, fmt.Errorf("scan attachment: %w", err)
+			return nil, err
 		}
 		if a.MessageID != nil {
 			result[*a.MessageID] = append(result[*a.MessageID], *a)
@@ -184,7 +184,7 @@ func scanAttachment(row pgx.Row) (*Attachment, error) {
 		&a.SizeBytes, &a.StorageKey, &a.Width, &a.Height, &a.ThumbnailKey, &a.CreatedAt,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan attachment: %w", err)
 	}
 	return &a, nil
 }
@@ -194,7 +194,7 @@ func collectAttachments(rows pgx.Rows) ([]Attachment, error) {
 	for rows.Next() {
 		a, err := scanAttachment(rows)
 		if err != nil {
-			return nil, fmt.Errorf("scan attachment: %w", err)
+			return nil, err
 		}
 		result = append(result, *a)
 	}
