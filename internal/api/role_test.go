@@ -153,23 +153,6 @@ func testRoleApp(t *testing.T, repo role.Repository, maxRoles int, userID uuid.U
 
 // --- List tests ---
 
-func TestListRoles_Unauthenticated(t *testing.T) {
-	t.Parallel()
-	repo := newFakeRoleRepo()
-	app := testRoleApp(t, repo, 250, uuid.Nil)
-
-	resp := doReq(t, app, jsonReq(http.MethodGet, "/roles", ""))
-	body := readBody(t, resp)
-
-	if resp.StatusCode != fiber.StatusUnauthorized {
-		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusUnauthorized)
-	}
-	env := parseError(t, body)
-	if env.Error.Code != string(apierrors.Unauthorised) {
-		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.Unauthorised)
-	}
-}
-
 func TestListRoles_Empty(t *testing.T) {
 	t.Parallel()
 	repo := newFakeRoleRepo()

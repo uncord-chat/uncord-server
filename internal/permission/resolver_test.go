@@ -682,6 +682,93 @@ func TestResolveServer_RolePermissionsError(t *testing.T) {
 	}
 }
 
+func TestNoRolesGivesZeroPermissions(t *testing.T) {
+	t.Parallel()
+	channelID := uuid.New()
+	store := &fakeStore{
+		roleEntries: nil, // user holds no roles
+		chanInfo:    ChannelInfo{ID: channelID},
+	}
+	cache := newFakeCache()
+	r := NewResolver(store, cache, zerolog.Nop())
+
+	perm, err := r.Resolve(context.Background(), uuid.New(), channelID)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if perm != 0 {
+		t.Errorf("no-role permissions = %d, want 0", perm)
+	}
+}
+
+func TestUserDenyBeatsRoleAllow(t *testing.T) {
+	t.Parallel()
+	roleID := uuid.New()
+	userID := uuid.New()
+	channelID := uuid.New()
+
+	store := &fakeStore{
+		roleEntries: []RolePermEntry{
+			{RoleID: roleID, Permissions: permissions.ViewChannels},
+		},
+		chanInfo: ChannelInfo{ID: channelID},
+		overrides: map[string][]Override{
+			"channel:" + channelID.String(): {
+				{PrincipalType: PrincipalRole, PrincipalID: roleID, Allow: permissions.SendMessages},
+				{PrincipalType: PrincipalUser, PrincipalID: userID, Deny: permissions.SendMessages},
+			},
+		},
+	}
+	cache := newFakeCache()
+	r := NewResolver(store, cache, zerolog.Nop())
+
+	perm, err := r.Resolve(context.Background(), userID, channelID)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+
+	if perm.Has(permissions.SendMessages) {
+		t.Error("SendMessages should be denied by user-specific override even though role allows it")
+	}
+	if !perm.Has(permissions.ViewChannels) {
+		t.Error("ViewChannels should still be allowed")
+	}
+}
+
+func TestCategoryUserOverrideOverriddenByChannelUserOverride(t *testing.T) {
+	t.Parallel()
+	roleID := uuid.New()
+	userID := uuid.New()
+	channelID := uuid.New()
+	categoryID := uuid.New()
+
+	store := &fakeStore{
+		roleEntries: []RolePermEntry{
+			{RoleID: roleID, Permissions: permissions.ViewChannels | permissions.SendMessages},
+		},
+		chanInfo: ChannelInfo{ID: channelID, CategoryID: &categoryID},
+		overrides: map[string][]Override{
+			"category:" + categoryID.String(): {
+				{PrincipalType: PrincipalUser, PrincipalID: userID, Deny: permissions.SendMessages},
+			},
+			"channel:" + channelID.String(): {
+				{PrincipalType: PrincipalUser, PrincipalID: userID, Allow: permissions.SendMessages},
+			},
+		},
+	}
+	cache := newFakeCache()
+	r := NewResolver(store, cache, zerolog.Nop())
+
+	perm, err := r.Resolve(context.Background(), userID, channelID)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+
+	if !perm.Has(permissions.SendMessages) {
+		t.Error("SendMessages should be re-allowed by channel-level user override")
+	}
+}
+
 func TestHasServerPermission(t *testing.T) {
 	t.Parallel()
 	store := &fakeStore{
