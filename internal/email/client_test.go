@@ -22,6 +22,7 @@ func TestBuildMessage(t *testing.T) {
 		{"From header", "From: sender@example.com\r\n"},
 		{"To header", "To: recipient@example.com\r\n"},
 		{"Subject header", "Subject: Test Subject\r\n"},
+		{"Date header", "Date: "},
 		{"MIME version", "MIME-Version: 1.0\r\n"},
 		{"Content-Type", "Content-Type: text/plain; charset=UTF-8\r\n"},
 		{"body", "Hello, world!"},
