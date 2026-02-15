@@ -24,6 +24,7 @@ import (
 var (
 	ErrSearchUnavailable = errors.New("search service is unavailable")
 	ErrEmptyQuery        = errors.New("search query must not be empty")
+	ErrInvalidFilter     = errors.New("filter parameter is not a valid UUID")
 )
 
 // Pagination defaults and limits.
@@ -200,6 +201,17 @@ func (s *Service) Search(ctx context.Context, userID uuid.UUID, query string, op
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return nil, ErrEmptyQuery
+	}
+
+	if opts.ChannelID != "" {
+		if _, err := uuid.Parse(opts.ChannelID); err != nil {
+			return nil, ErrInvalidFilter
+		}
+	}
+	if opts.AuthorID != "" {
+		if _, err := uuid.Parse(opts.AuthorID); err != nil {
+			return nil, ErrInvalidFilter
+		}
 	}
 
 	all, err := s.channels.List(ctx)

@@ -92,6 +92,8 @@ func (h *SearchHandler) mapSearchError(c fiber.Ctx, err error) error {
 	switch {
 	case errors.Is(err, search.ErrEmptyQuery):
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, err.Error())
+	case errors.Is(err, search.ErrInvalidFilter):
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, err.Error())
 	case errors.Is(err, search.ErrSearchUnavailable):
 		return httputil.Fail(c, fiber.StatusServiceUnavailable, apierrors.SearchUnavailable, err.Error())
 	default:
