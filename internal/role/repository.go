@@ -14,6 +14,8 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// selectColumns lists the columns returned by queries that produce a *Role. Every method that scans into a Role must
+// select these columns in this exact order. See scanRole.
 const selectColumns = "id, name, colour, position, hoist, permissions, is_everyone, created_at, updated_at"
 
 // PGRepository implements Repository using PostgreSQL.
@@ -203,7 +205,7 @@ func (r *PGRepository) HighestPosition(ctx context.Context, userID uuid.UUID) (i
 	return *pos, nil
 }
 
-// scanRole scans a single row into a Role struct.
+// scanRole scans a single row into a *Role. The row must contain the columns listed in selectColumns.
 func scanRole(row pgx.Row) (*Role, error) {
 	var role Role
 	err := row.Scan(
