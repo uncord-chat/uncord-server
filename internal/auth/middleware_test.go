@@ -16,7 +16,7 @@ import (
 func TestRequireAuthNoHeader(t *testing.T) {
 	t.Parallel()
 	app := fiber.New()
-	app.Use(RequireAuth("secret", ""))
+	app.Use(RequireAuth("secret", testIssuer))
 	app.Get("/test", func(c fiber.Ctx) error {
 		return c.SendStatus(200)
 	})
@@ -41,7 +41,7 @@ func TestRequireAuthNoHeader(t *testing.T) {
 func TestRequireAuthBadFormat(t *testing.T) {
 	t.Parallel()
 	app := fiber.New()
-	app.Use(RequireAuth("secret", ""))
+	app.Use(RequireAuth("secret", testIssuer))
 	app.Get("/test", func(c fiber.Ctx) error {
 		return c.SendStatus(200)
 	})
@@ -63,13 +63,13 @@ func TestRequireAuthExpiredToken(t *testing.T) {
 	t.Parallel()
 	app := fiber.New()
 	secret := "test-secret"
-	app.Use(RequireAuth(secret, ""))
+	app.Use(RequireAuth(secret, testIssuer))
 	app.Get("/test", func(c fiber.Ctx) error {
 		return c.SendStatus(200)
 	})
 
 	// Create an expired token
-	tokenStr, err := NewAccessToken(uuid.New(), secret, -1*time.Second, "")
+	tokenStr, err := NewAccessToken(uuid.New(), secret, -1*time.Second, testIssuer)
 	if err != nil {
 		t.Fatalf("NewAccessToken() error = %v", err)
 	}
@@ -98,7 +98,7 @@ func TestRequireAuthValid(t *testing.T) {
 	secret := "test-secret"
 	userID := uuid.New()
 
-	app.Use(RequireAuth(secret, ""))
+	app.Use(RequireAuth(secret, testIssuer))
 	app.Get("/test", func(c fiber.Ctx) error {
 		id, ok := c.Locals("userID").(uuid.UUID)
 		if !ok {
@@ -107,7 +107,7 @@ func TestRequireAuthValid(t *testing.T) {
 		return c.SendString(id.String())
 	})
 
-	tokenStr, err := NewAccessToken(userID, secret, 15*time.Minute, "")
+	tokenStr, err := NewAccessToken(userID, secret, 15*time.Minute, testIssuer)
 	if err != nil {
 		t.Fatalf("NewAccessToken() error = %v", err)
 	}
@@ -133,12 +133,12 @@ func TestRequireAuthValid(t *testing.T) {
 func TestRequireAuthWrongSignature(t *testing.T) {
 	t.Parallel()
 	app := fiber.New()
-	app.Use(RequireAuth("correct-secret", ""))
+	app.Use(RequireAuth("correct-secret", testIssuer))
 	app.Get("/test", func(c fiber.Ctx) error {
 		return c.SendStatus(200)
 	})
 
-	tokenStr, _ := NewAccessToken(uuid.New(), "wrong-secret", 15*time.Minute, "")
+	tokenStr, _ := NewAccessToken(uuid.New(), "wrong-secret", 15*time.Minute, testIssuer)
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenStr)

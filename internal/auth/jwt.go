@@ -13,10 +13,14 @@ type AccessClaims struct {
 	jwt.RegisteredClaims
 }
 
-// NewAccessToken creates a signed JWT access token for the given user.
+// NewAccessToken creates a signed JWT access token for the given user. The issuer is embedded in the token and must be
+// verified during validation.
 func NewAccessToken(userID uuid.UUID, secret string, ttl time.Duration, issuer string) (string, error) {
 	if secret == "" {
 		return "", fmt.Errorf("JWT secret must not be empty")
+	}
+	if issuer == "" {
+		return "", fmt.Errorf("JWT issuer must not be empty")
 	}
 
 	now := time.Now()
@@ -38,22 +42,19 @@ func NewAccessToken(userID uuid.UUID, secret string, ttl time.Duration, issuer s
 	return signed, nil
 }
 
-// ValidateAccessToken parses and validates a JWT access token string, enforcing HMAC signing method and optional
-// issuer check.
+// ValidateAccessToken parses and validates a JWT access token string, enforcing HMAC signing method and issuer claim.
 func ValidateAccessToken(tokenStr, secret, issuer string) (*AccessClaims, error) {
-	claims := &AccessClaims{}
-
-	var parserOpts []jwt.ParserOption
-	if issuer != "" {
-		parserOpts = append(parserOpts, jwt.WithIssuer(issuer))
+	if issuer == "" {
+		return nil, fmt.Errorf("JWT issuer must not be empty")
 	}
 
+	claims := &AccessClaims{}
 	token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
 		return []byte(secret), nil
-	}, parserOpts...)
+	}, jwt.WithIssuer(issuer))
 	if err != nil {
 		return nil, err
 	}
