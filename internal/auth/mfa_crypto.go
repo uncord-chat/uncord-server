@@ -75,17 +75,17 @@ func DecryptTOTPSecret(encoded, hexKey string) (string, error) {
 
 const recoveryCodeCount = 10
 
-// GenerateRecoveryCodes generates a set of recovery codes in the format "xxxx-xxxx" where each half is 4 hex
-// characters. Each code represents 4 random bytes (32 bits of entropy).
+// GenerateRecoveryCodes generates a set of recovery codes in the format "xxxx-xxxx-xxxx-xxxx" where each group is 4 hex
+// characters. Each code represents 8 random bytes (64 bits of entropy).
 func GenerateRecoveryCodes() ([]string, error) {
 	codes := make([]string, recoveryCodeCount)
 	for i := range codes {
-		b := make([]byte, 4)
+		b := make([]byte, 8)
 		if _, err := rand.Read(b); err != nil {
 			return nil, fmt.Errorf("generate recovery code: %w", err)
 		}
 		h := hex.EncodeToString(b)
-		codes[i] = h[:4] + "-" + h[4:]
+		codes[i] = h[:4] + "-" + h[4:8] + "-" + h[8:12] + "-" + h[12:]
 	}
 	return codes, nil
 }
