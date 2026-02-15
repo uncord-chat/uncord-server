@@ -1203,6 +1203,31 @@
 					}
 				}
 			]
+		},
+		{
+			"name": "Gateway",
+			"description": "WebSocket gateway for real-time events. Connect via `ws://localhost:8080/api/v1/gateway`. After the upgrade, the server sends a Hello frame (op 10) with the heartbeat interval. The client must respond with Identify (op 2, with a JWT token) or Resume (op 6) within 30 seconds.",
+			"item": [
+				{
+					"name": "Gateway WebSocket",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "GET",
+						"header": [
+							{ "key": "Connection", "value": "Upgrade" },
+							{ "key": "Upgrade", "value": "websocket" },
+							{ "key": "Sec-WebSocket-Version", "value": "13" },
+							{ "key": "Sec-WebSocket-Key", "value": "dGhlIHNhbXBsZSBub25jZQ==" }
+						],
+						"url": {
+							"raw": "{{base_url}}/gateway",
+							"host": ["{{base_url}}"],
+							"path": ["gateway"]
+						},
+						"description": "Upgrades to a WebSocket connection. Authentication happens inside the WebSocket via Identify (op 2) after the upgrade completes."
+					}
+				}
+			]
 		}
 	]
 }

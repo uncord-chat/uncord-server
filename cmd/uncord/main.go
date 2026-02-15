@@ -80,6 +80,7 @@ type server struct {
 	permPublisher    *permission.Publisher
 	typesenseIndexer *typesense.Indexer
 	gatewayPublisher *gateway.Publisher
+	gatewayHub       *gateway.Hub
 }
 
 func main() {
@@ -287,6 +288,27 @@ func run() error {
 		log.Fatal().Err(err).Msg("Failed to create auth service")
 	}
 
+	// Initialise gateway WebSocket hub and start the pub/sub subscriber with reconnection.
+	sessionStore := gateway.NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
+	gatewayHub := gateway.NewHub(rdb, cfg, sessionStore, permResolver, userRepo, serverRepo, channelRepo, roleRepo, memberRepo, log.Logger)
+	go func() {
+		for {
+			if err := gatewayHub.Run(subCtx); err != nil {
+				if errors.Is(err, context.Canceled) {
+					return
+				}
+				log.Error().Err(err).Msg("Gateway hub stopped, restarting in 5s")
+				select {
+				case <-subCtx.Done():
+					return
+				case <-time.After(5 * time.Second):
+				}
+				continue
+			}
+			return
+		}
+	}()
+
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
 		AppName:   "Uncord",
@@ -358,6 +380,7 @@ func run() error {
 		permPublisher:    permPublisher,
 		typesenseIndexer: typesenseIndexer,
 		gatewayPublisher: gatewayPub,
+		gatewayHub:       gatewayHub,
 	}
 	srv.registerRoutes(app)
 
@@ -368,6 +391,7 @@ func run() error {
 	go func() {
 		<-quit
 		log.Info().Msg("Shutting down server")
+		gatewayHub.Shutdown()
 		subCancel()
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer shutdownCancel()
@@ -616,6 +640,10 @@ func (s *server) registerRoutes(app *fiber.App) {
 			return c.SendStream(rc)
 		})
 	}
+
+	// Gateway WebSocket endpoint (unauthenticated; authentication happens inside the WebSocket via Identify/Resume).
+	gatewayHandler := api.NewGatewayHandler(s.gatewayHub)
+	app.Get("/api/v1/gateway", gatewayHandler.Upgrade)
 
 	// Catch-all handler returns 404 for any request that does not match a defined route. Fiber v3 treats app.Use()
 	// middleware as route matches, so without this terminal handler the router considers unmatched requests "handled"

@@ -66,11 +66,19 @@ type Config struct {
 	OnboardingRequirePhone             bool
 	OnboardingRequireCaptcha           bool
 
+	// Gateway
+	GatewayHeartbeatIntervalMS int           // Heartbeat interval sent to clients in the Hello frame. Default: 45000.
+	GatewaySessionTTL          time.Duration // How long a disconnected session remains resumable. Default: 300s.
+	GatewayReplayBufferSize    int           // Maximum number of events retained for session replay. Default: 1000.
+	GatewayMaxConnections      int           // Maximum concurrent WebSocket connections. Default: 10000.
+
 	// Rate Limiting
 	RateLimitAPIRequests       int
 	RateLimitAPIWindowSeconds  int
 	RateLimitAuthCount         int
 	RateLimitAuthWindowSeconds int
+	RateLimitWSCount           int // Maximum WebSocket messages per window. Default: 120.
+	RateLimitWSWindowSeconds   int // WebSocket rate limit window in seconds. Default: 60.
 
 	// Upload Limits
 	MaxUploadSizeMB    int
@@ -167,10 +175,17 @@ func Load() (*Config, error) {
 		OnboardingRequirePhone:             p.bool("ONBOARDING_REQUIRE_PHONE", false),
 		OnboardingRequireCaptcha:           p.bool("ONBOARDING_REQUIRE_CAPTCHA", false),
 
+		GatewayHeartbeatIntervalMS: p.int("GATEWAY_HEARTBEAT_INTERVAL_MS", 45000),
+		GatewaySessionTTL:          time.Duration(p.int("GATEWAY_SESSION_TTL_SECONDS", 300)) * time.Second,
+		GatewayReplayBufferSize:    p.int("GATEWAY_REPLAY_BUFFER_SIZE", 1000),
+		GatewayMaxConnections:      p.int("GATEWAY_MAX_CONNECTIONS", 10000),
+
 		RateLimitAPIRequests:       p.int("RATE_LIMIT_API_REQUESTS", 60),
 		RateLimitAPIWindowSeconds:  p.int("RATE_LIMIT_API_WINDOW_SECONDS", 60),
 		RateLimitAuthCount:         p.int("RATE_LIMIT_AUTH_COUNT", 5),
 		RateLimitAuthWindowSeconds: p.int("RATE_LIMIT_AUTH_WINDOW_SECONDS", 300),
+		RateLimitWSCount:           p.int("RATE_LIMIT_WS_COUNT", 120),
+		RateLimitWSWindowSeconds:   p.int("RATE_LIMIT_WS_WINDOW_SECONDS", 60),
 
 		MaxUploadSizeMB:    p.int("MAX_UPLOAD_SIZE_MB", 100),
 		MaxAvatarSizeMB:    p.int("MAX_AVATAR_SIZE_MB", 8),
@@ -348,6 +363,25 @@ func (c *Config) validate() error {
 	}
 	if c.RateLimitAuthWindowSeconds < 1 {
 		errs = append(errs, fmt.Errorf("RATE_LIMIT_AUTH_WINDOW_SECONDS must be at least 1"))
+	}
+	if c.RateLimitWSCount < 1 {
+		errs = append(errs, fmt.Errorf("RATE_LIMIT_WS_COUNT must be at least 1"))
+	}
+	if c.RateLimitWSWindowSeconds < 1 {
+		errs = append(errs, fmt.Errorf("RATE_LIMIT_WS_WINDOW_SECONDS must be at least 1"))
+	}
+
+	if c.GatewayHeartbeatIntervalMS < 1000 {
+		errs = append(errs, fmt.Errorf("GATEWAY_HEARTBEAT_INTERVAL_MS must be at least 1000"))
+	}
+	if c.GatewaySessionTTL < 10*time.Second {
+		errs = append(errs, fmt.Errorf("GATEWAY_SESSION_TTL_SECONDS must be at least 10"))
+	}
+	if c.GatewayReplayBufferSize < 1 {
+		errs = append(errs, fmt.Errorf("GATEWAY_REPLAY_BUFFER_SIZE must be at least 1"))
+	}
+	if c.GatewayMaxConnections < 1 {
+		errs = append(errs, fmt.Errorf("GATEWAY_MAX_CONNECTIONS must be at least 1"))
 	}
 
 	if c.MFAEncryptionKey != "" {

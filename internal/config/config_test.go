@@ -33,6 +33,9 @@ func TestLoadDefaults(t *testing.T) {
 		"SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM",
 		"SERVER_SECRET", "DELETION_TOMBSTONE_USERNAMES", "DELETION_TOMBSTONE_RETENTION",
 		"LOGIN_ATTEMPT_RETENTION", "DATA_CLEANUP_INTERVAL",
+		"GATEWAY_HEARTBEAT_INTERVAL_MS", "GATEWAY_SESSION_TTL_SECONDS",
+		"GATEWAY_REPLAY_BUFFER_SIZE", "GATEWAY_MAX_CONNECTIONS",
+		"RATE_LIMIT_WS_COUNT", "RATE_LIMIT_WS_WINDOW_SECONDS",
 	}
 	for _, k := range keys {
 		t.Setenv(k, "")
@@ -132,12 +135,32 @@ func TestLoadDefaults(t *testing.T) {
 		t.Error("OnboardingRequireCaptcha = true, want false")
 	}
 
+	// Gateway defaults
+	if cfg.GatewayHeartbeatIntervalMS != 45000 {
+		t.Errorf("GatewayHeartbeatIntervalMS = %d, want 45000", cfg.GatewayHeartbeatIntervalMS)
+	}
+	if cfg.GatewaySessionTTL != 300*time.Second {
+		t.Errorf("GatewaySessionTTL = %v, want 5m0s", cfg.GatewaySessionTTL)
+	}
+	if cfg.GatewayReplayBufferSize != 1000 {
+		t.Errorf("GatewayReplayBufferSize = %d, want 1000", cfg.GatewayReplayBufferSize)
+	}
+	if cfg.GatewayMaxConnections != 10000 {
+		t.Errorf("GatewayMaxConnections = %d, want 10000", cfg.GatewayMaxConnections)
+	}
+
 	// Rate limit defaults
 	if cfg.RateLimitAPIRequests != 60 {
 		t.Errorf("RateLimitAPIRequests = %d, want 60", cfg.RateLimitAPIRequests)
 	}
 	if cfg.RateLimitAuthCount != 5 {
 		t.Errorf("RateLimitAuthCount = %d, want 5", cfg.RateLimitAuthCount)
+	}
+	if cfg.RateLimitWSCount != 120 {
+		t.Errorf("RateLimitWSCount = %d, want 120", cfg.RateLimitWSCount)
+	}
+	if cfg.RateLimitWSWindowSeconds != 60 {
+		t.Errorf("RateLimitWSWindowSeconds = %d, want 60", cfg.RateLimitWSWindowSeconds)
 	}
 
 	// Upload limit defaults
@@ -775,5 +798,95 @@ func TestLoadValidationAttachmentOrphanTTL(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "ATTACHMENT_ORPHAN_TTL") {
 		t.Errorf("error %q does not mention ATTACHMENT_ORPHAN_TTL", err.Error())
+	}
+}
+
+func TestLoadGatewayOverrides(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+	t.Setenv("SERVER_SECRET", testServerSecret)
+	t.Setenv("GATEWAY_HEARTBEAT_INTERVAL_MS", "30000")
+	t.Setenv("GATEWAY_SESSION_TTL_SECONDS", "600")
+	t.Setenv("GATEWAY_REPLAY_BUFFER_SIZE", "500")
+	t.Setenv("GATEWAY_MAX_CONNECTIONS", "5000")
+	t.Setenv("RATE_LIMIT_WS_COUNT", "60")
+	t.Setenv("RATE_LIMIT_WS_WINDOW_SECONDS", "30")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() returned unexpected error: %v", err)
+	}
+	if cfg.GatewayHeartbeatIntervalMS != 30000 {
+		t.Errorf("GatewayHeartbeatIntervalMS = %d, want 30000", cfg.GatewayHeartbeatIntervalMS)
+	}
+	if cfg.GatewaySessionTTL != 600*time.Second {
+		t.Errorf("GatewaySessionTTL = %v, want 10m0s", cfg.GatewaySessionTTL)
+	}
+	if cfg.GatewayReplayBufferSize != 500 {
+		t.Errorf("GatewayReplayBufferSize = %d, want 500", cfg.GatewayReplayBufferSize)
+	}
+	if cfg.GatewayMaxConnections != 5000 {
+		t.Errorf("GatewayMaxConnections = %d, want 5000", cfg.GatewayMaxConnections)
+	}
+	if cfg.RateLimitWSCount != 60 {
+		t.Errorf("RateLimitWSCount = %d, want 60", cfg.RateLimitWSCount)
+	}
+	if cfg.RateLimitWSWindowSeconds != 30 {
+		t.Errorf("RateLimitWSWindowSeconds = %d, want 30", cfg.RateLimitWSWindowSeconds)
+	}
+}
+
+func TestLoadValidationGatewayHeartbeatTooLow(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+	t.Setenv("SERVER_SECRET", testServerSecret)
+	t.Setenv("GATEWAY_HEARTBEAT_INTERVAL_MS", "500")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() returned nil error, want validation error for GATEWAY_HEARTBEAT_INTERVAL_MS < 1000")
+	}
+	if !strings.Contains(err.Error(), "GATEWAY_HEARTBEAT_INTERVAL_MS must be at least 1000") {
+		t.Errorf("error %q does not mention GATEWAY_HEARTBEAT_INTERVAL_MS", err.Error())
+	}
+}
+
+func TestLoadValidationGatewaySessionTTLTooLow(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+	t.Setenv("SERVER_SECRET", testServerSecret)
+	t.Setenv("GATEWAY_SESSION_TTL_SECONDS", "5")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() returned nil error, want validation error for GATEWAY_SESSION_TTL_SECONDS < 10")
+	}
+	if !strings.Contains(err.Error(), "GATEWAY_SESSION_TTL_SECONDS must be at least 10") {
+		t.Errorf("error %q does not mention GATEWAY_SESSION_TTL_SECONDS", err.Error())
+	}
+}
+
+func TestLoadValidationGatewayReplayBufferTooLow(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+	t.Setenv("SERVER_SECRET", testServerSecret)
+	t.Setenv("GATEWAY_REPLAY_BUFFER_SIZE", "0")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() returned nil error, want validation error for GATEWAY_REPLAY_BUFFER_SIZE < 1")
+	}
+	if !strings.Contains(err.Error(), "GATEWAY_REPLAY_BUFFER_SIZE must be at least 1") {
+		t.Errorf("error %q does not mention GATEWAY_REPLAY_BUFFER_SIZE", err.Error())
+	}
+}
+
+func TestLoadValidationGatewayMaxConnectionsTooLow(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+	t.Setenv("SERVER_SECRET", testServerSecret)
+	t.Setenv("GATEWAY_MAX_CONNECTIONS", "0")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() returned nil error, want validation error for GATEWAY_MAX_CONNECTIONS < 1")
+	}
+	if !strings.Contains(err.Error(), "GATEWAY_MAX_CONNECTIONS must be at least 1") {
+		t.Errorf("error %q does not mention GATEWAY_MAX_CONNECTIONS", err.Error())
 	}
 }
