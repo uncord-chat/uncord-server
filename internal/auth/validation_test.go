@@ -100,8 +100,11 @@ func TestValidatePassword(t *testing.T) {
 		{"valid 8 chars", "12345678", false, ""},
 		{"valid 128 chars", strings.Repeat("a", 128), false, ""},
 		{"valid normal", "mySecurePassword123!", false, ""},
+		{"valid 8 multibyte runes", strings.Repeat("日", 8), false, ""},
 		{"too short", "1234567", true, "at least 8"},
+		{"too short multibyte", strings.Repeat("日", 7), true, "at least 8"},
 		{"too long", strings.Repeat("a", 129), true, "at most 128"},
+		{"too long multibyte", strings.Repeat("日", 129), true, "at most 128"},
 		{"empty", "", true, "at least 8"},
 	}
 

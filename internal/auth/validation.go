@@ -4,6 +4,7 @@ import (
 	"net/mail"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 var usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9_.]+$`)
@@ -44,12 +45,14 @@ func ValidateUsername(username string) error {
 	return nil
 }
 
-// ValidatePassword checks that a password is between 8 and 128 characters.
+// ValidatePassword checks that a password is between 8 and 128 Unicode characters. utf8.RuneCountInString is used
+// because passwords can contain arbitrary Unicode, and the length constraint is communicated to users in characters.
 func ValidatePassword(password string) error {
-	if len(password) < 8 {
+	n := utf8.RuneCountInString(password)
+	if n < 8 {
 		return ErrPasswordTooShort
 	}
-	if len(password) > 128 {
+	if n > 128 {
 		return ErrPasswordTooLong
 	}
 	return nil
