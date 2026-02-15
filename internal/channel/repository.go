@@ -10,6 +10,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
+
+	"github.com/uncord-chat/uncord-server/internal/postgres"
 )
 
 const selectColumns = "id, category_id, name, type, topic, position, slowmode_seconds, nsfw, created_at, updated_at"
@@ -67,49 +69,43 @@ func (r *PGRepository) GetByID(ctx context.Context, id uuid.UUID) (*Channel, err
 // Create inserts a new channel inside a transaction that enforces the maximum count, validates the category reference,
 // and auto-assigns a position.
 func (r *PGRepository) Create(ctx context.Context, params CreateParams, maxChannels int) (*Channel, error) {
-	tx, err := r.db.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("begin create channel tx: %w", err)
-	}
-	defer func() {
-		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-			r.log.Warn().Err(err).Msg("tx rollback failed")
+	var ch *Channel
+	err := postgres.WithTx(ctx, r.db, func(tx pgx.Tx) error {
+		var count int
+		if err := tx.QueryRow(ctx, "SELECT COUNT(*) FROM channels").Scan(&count); err != nil {
+			return fmt.Errorf("count channels: %w", err)
 		}
-	}()
+		if count >= maxChannels {
+			return ErrMaxChannelsReached
+		}
 
-	var count int
-	if err := tx.QueryRow(ctx, "SELECT COUNT(*) FROM channels").Scan(&count); err != nil {
-		return nil, fmt.Errorf("count channels: %w", err)
-	}
-	if count >= maxChannels {
-		return nil, ErrMaxChannelsReached
-	}
+		if params.CategoryID != nil {
+			var exists bool
+			err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM categories WHERE id = $1)", *params.CategoryID).Scan(&exists)
+			if err != nil {
+				return fmt.Errorf("check category exists: %w", err)
+			}
+			if !exists {
+				return ErrCategoryNotFound
+			}
+		}
 
-	if params.CategoryID != nil {
-		var exists bool
-		err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM categories WHERE id = $1)", *params.CategoryID).Scan(&exists)
+		row := tx.QueryRow(ctx,
+			fmt.Sprintf(
+				`INSERT INTO channels (name, type, category_id, topic, slowmode_seconds, nsfw, position)
+				 VALUES ($1, $2, $3, $4, $5, $6, COALESCE((SELECT MAX(position) FROM channels), -1) + 1)
+				 RETURNING %s`, selectColumns),
+			params.Name, params.Type, params.CategoryID, params.Topic, params.SlowmodeSeconds, params.NSFW,
+		)
+		var err error
+		ch, err = scanChannel(row)
 		if err != nil {
-			return nil, fmt.Errorf("check category exists: %w", err)
+			return fmt.Errorf("insert channel: %w", err)
 		}
-		if !exists {
-			return nil, ErrCategoryNotFound
-		}
-	}
-
-	row := tx.QueryRow(ctx,
-		fmt.Sprintf(
-			`INSERT INTO channels (name, type, category_id, topic, slowmode_seconds, nsfw, position)
-			 VALUES ($1, $2, $3, $4, $5, $6, COALESCE((SELECT MAX(position) FROM channels), -1) + 1)
-			 RETURNING %s`, selectColumns),
-		params.Name, params.Type, params.CategoryID, params.Topic, params.SlowmodeSeconds, params.NSFW,
-	)
-	ch, err := scanChannel(row)
+		return nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("insert channel: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("commit create channel tx: %w", err)
+		return nil, err
 	}
 	return ch, nil
 }

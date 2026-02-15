@@ -162,35 +162,24 @@ func (r *PGRepository) ClearTimeout(ctx context.Context, userID uuid.UUID) (*Mem
 // Ban inserts a ban record and removes the member in a single transaction. Returns ErrAlreadyBanned if a ban already
 // exists for the user.
 func (r *PGRepository) Ban(ctx context.Context, userID, bannedBy uuid.UUID, reason *string, expiresAt *time.Time) error {
-	tx, err := r.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin ban tx: %w", err)
-	}
-	defer func() {
-		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-			r.log.Warn().Err(err).Msg("ban tx rollback failed")
+	return postgres.WithTx(ctx, r.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx,
+			"INSERT INTO bans (user_id, reason, banned_by, expires_at) VALUES ($1, $2, $3, $4)",
+			userID, reason, bannedBy, expiresAt)
+		if err != nil {
+			if postgres.IsUniqueViolation(err) {
+				return ErrAlreadyBanned
+			}
+			return fmt.Errorf("insert ban: %w", err)
 		}
-	}()
 
-	_, err = tx.Exec(ctx,
-		"INSERT INTO bans (user_id, reason, banned_by, expires_at) VALUES ($1, $2, $3, $4)",
-		userID, reason, bannedBy, expiresAt)
-	if err != nil {
-		if postgres.IsUniqueViolation(err) {
-			return ErrAlreadyBanned
+		_, err = tx.Exec(ctx, "DELETE FROM members WHERE user_id = $1", userID)
+		if err != nil {
+			return fmt.Errorf("remove member on ban: %w", err)
 		}
-		return fmt.Errorf("insert ban: %w", err)
-	}
 
-	_, err = tx.Exec(ctx, "DELETE FROM members WHERE user_id = $1", userID)
-	if err != nil {
-		return fmt.Errorf("remove member on ban: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit ban tx: %w", err)
-	}
-	return nil
+		return nil
+	})
 }
 
 // Unban removes a ban record. Returns ErrBanNotFound if no ban exists.
@@ -273,33 +262,26 @@ func (r *PGRepository) RemoveRole(ctx context.Context, userID, roleID uuid.UUID)
 // CreatePending inserts a member with pending status, assigns the @everyone role, and returns the full profile. Returns
 // ErrAlreadyMember if the user already has a membership record.
 func (r *PGRepository) CreatePending(ctx context.Context, userID uuid.UUID) (*MemberWithProfile, error) {
-	tx, err := r.db.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("begin create pending member tx: %w", err)
-	}
-	defer func() {
-		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-			r.log.Warn().Err(err).Msg("create pending member tx rollback failed")
+	err := postgres.WithTx(ctx, r.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, "INSERT INTO members (user_id, status) VALUES ($1, $2)", userID, models.MemberStatusPending)
+		if err != nil {
+			if postgres.IsUniqueViolation(err) {
+				return ErrAlreadyMember
+			}
+			return fmt.Errorf("insert pending member: %w", err)
 		}
-	}()
 
-	_, err = tx.Exec(ctx, "INSERT INTO members (user_id, status) VALUES ($1, $2)", userID, models.MemberStatusPending)
-	if err != nil {
-		if postgres.IsUniqueViolation(err) {
-			return nil, ErrAlreadyMember
+		_, err = tx.Exec(ctx,
+			"INSERT INTO member_roles (user_id, role_id) SELECT $1, id FROM roles WHERE is_everyone = true",
+			userID)
+		if err != nil {
+			return fmt.Errorf("assign everyone role: %w", err)
 		}
-		return nil, fmt.Errorf("insert pending member: %w", err)
-	}
 
-	_, err = tx.Exec(ctx,
-		"INSERT INTO member_roles (user_id, role_id) SELECT $1, id FROM roles WHERE is_everyone = true",
-		userID)
+		return nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("assign everyone role: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("commit create pending member tx: %w", err)
+		return nil, err
 	}
 
 	return r.getByUserIDAnyStatus(ctx, userID)
@@ -308,37 +290,30 @@ func (r *PGRepository) CreatePending(ctx context.Context, userID uuid.UUID) (*Me
 // Activate transitions a pending member to active status, assigns auto-roles, and returns the updated profile. Returns
 // ErrNotPending if the member is not in pending status.
 func (r *PGRepository) Activate(ctx context.Context, userID uuid.UUID, autoRoles []uuid.UUID) (*MemberWithProfile, error) {
-	tx, err := r.db.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("begin activate member tx: %w", err)
-	}
-	defer func() {
-		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-			r.log.Warn().Err(err).Msg("activate member tx rollback failed")
-		}
-	}()
-
-	tag, err := tx.Exec(ctx,
-		"UPDATE members SET status = $1, onboarded_at = NOW() WHERE user_id = $2 AND status = $3",
-		models.MemberStatusActive, userID, models.MemberStatusPending)
-	if err != nil {
-		return nil, fmt.Errorf("activate member: %w", err)
-	}
-	if tag.RowsAffected() == 0 {
-		return nil, ErrNotPending
-	}
-
-	for _, roleID := range autoRoles {
-		_, err := tx.Exec(ctx,
-			"INSERT INTO member_roles (user_id, role_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-			userID, roleID)
+	err := postgres.WithTx(ctx, r.db, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx,
+			"UPDATE members SET status = $1, onboarded_at = NOW() WHERE user_id = $2 AND status = $3",
+			models.MemberStatusActive, userID, models.MemberStatusPending)
 		if err != nil {
-			return nil, fmt.Errorf("assign auto-role: %w", err)
+			return fmt.Errorf("activate member: %w", err)
 		}
-	}
+		if tag.RowsAffected() == 0 {
+			return ErrNotPending
+		}
 
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("commit activate member tx: %w", err)
+		for _, roleID := range autoRoles {
+			_, err := tx.Exec(ctx,
+				"INSERT INTO member_roles (user_id, role_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+				userID, roleID)
+			if err != nil {
+				return fmt.Errorf("assign auto-role: %w", err)
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return r.getByUserIDAnyStatus(ctx, userID)

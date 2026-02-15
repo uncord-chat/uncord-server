@@ -68,41 +68,35 @@ func (r *PGRepository) GetByID(ctx context.Context, id uuid.UUID) (*Category, er
 
 // Create inserts a new category inside a transaction that enforces the maximum count and auto-assigns a position.
 func (r *PGRepository) Create(ctx context.Context, params CreateParams, maxCategories int) (*Category, error) {
-	tx, err := r.db.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("begin create category tx: %w", err)
-	}
-	defer func() {
-		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-			r.log.Warn().Err(err).Msg("tx rollback failed")
+	var cat *Category
+	err := postgres.WithTx(ctx, r.db, func(tx pgx.Tx) error {
+		var count int
+		if err := tx.QueryRow(ctx, "SELECT COUNT(*) FROM categories").Scan(&count); err != nil {
+			return fmt.Errorf("count categories: %w", err)
 		}
-	}()
-
-	var count int
-	if err := tx.QueryRow(ctx, "SELECT COUNT(*) FROM categories").Scan(&count); err != nil {
-		return nil, fmt.Errorf("count categories: %w", err)
-	}
-	if count >= maxCategories {
-		return nil, ErrMaxCategoriesReached
-	}
-
-	row := tx.QueryRow(ctx,
-		fmt.Sprintf(
-			`INSERT INTO categories (name, position)
-			 VALUES ($1, COALESCE((SELECT MAX(position) FROM categories), -1) + 1)
-			 RETURNING %s`, selectColumns),
-		params.Name,
-	)
-	cat, err := scanCategory(row)
-	if err != nil {
-		if postgres.IsUniqueViolation(err) {
-			return nil, ErrAlreadyExists
+		if count >= maxCategories {
+			return ErrMaxCategoriesReached
 		}
-		return nil, fmt.Errorf("insert category: %w", err)
-	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("commit create category tx: %w", err)
+		row := tx.QueryRow(ctx,
+			fmt.Sprintf(
+				`INSERT INTO categories (name, position)
+				 VALUES ($1, COALESCE((SELECT MAX(position) FROM categories), -1) + 1)
+				 RETURNING %s`, selectColumns),
+			params.Name,
+		)
+		var err error
+		cat, err = scanCategory(row)
+		if err != nil {
+			if postgres.IsUniqueViolation(err) {
+				return ErrAlreadyExists
+			}
+			return fmt.Errorf("insert category: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return cat, nil
 }

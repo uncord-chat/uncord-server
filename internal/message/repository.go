@@ -9,6 +9,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
+
+	"github.com/uncord-chat/uncord-server/internal/postgres"
 )
 
 const selectColumns = `m.id, m.channel_id, m.author_id, m.content, m.edited_at, m.reply_to_id,
@@ -31,57 +33,49 @@ func NewPGRepository(db *pgxpool.Pool, logger zerolog.Logger) *PGRepository {
 // Create inserts a new message and returns it with joined author information. When reply_to_id is set, the referenced
 // message must exist, be in the same channel, and not be deleted.
 func (r *PGRepository) Create(ctx context.Context, params CreateParams) (*Message, error) {
-	tx, err := r.db.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("begin create message tx: %w", err)
-	}
-	defer func() {
-		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-			r.log.Warn().Err(err).Msg("tx rollback failed")
-		}
-	}()
-
-	if params.ReplyToID != nil {
-		var exists bool
-		err := tx.QueryRow(ctx,
-			"SELECT EXISTS(SELECT 1 FROM messages WHERE id = $1 AND channel_id = $2 AND deleted = false)",
-			*params.ReplyToID, params.ChannelID,
-		).Scan(&exists)
-		if err != nil {
-			return nil, fmt.Errorf("check reply target: %w", err)
-		}
-		if !exists {
-			return nil, ErrReplyNotFound
-		}
-	}
-
-	row := tx.QueryRow(ctx,
-		`INSERT INTO messages (channel_id, author_id, content, reply_to_id)
-		 VALUES ($1, $2, $3, $4)
-		 RETURNING id, created_at, updated_at`,
-		params.ChannelID, params.AuthorID, params.Content, params.ReplyToID,
-	)
-
 	var msg Message
-	msg.ChannelID = params.ChannelID
-	msg.AuthorID = params.AuthorID
-	msg.Content = params.Content
-	msg.ReplyToID = params.ReplyToID
-	if err := row.Scan(&msg.ID, &msg.CreatedAt, &msg.UpdatedAt); err != nil {
-		return nil, fmt.Errorf("insert message: %w", err)
-	}
+	err := postgres.WithTx(ctx, r.db, func(tx pgx.Tx) error {
+		if params.ReplyToID != nil {
+			var exists bool
+			err := tx.QueryRow(ctx,
+				"SELECT EXISTS(SELECT 1 FROM messages WHERE id = $1 AND channel_id = $2 AND deleted = false)",
+				*params.ReplyToID, params.ChannelID,
+			).Scan(&exists)
+			if err != nil {
+				return fmt.Errorf("check reply target: %w", err)
+			}
+			if !exists {
+				return ErrReplyNotFound
+			}
+		}
 
-	// Fetch author info within the same transaction for consistency.
-	err = tx.QueryRow(ctx,
-		"SELECT username, display_name, avatar_key FROM users WHERE id = $1",
-		params.AuthorID,
-	).Scan(&msg.AuthorUsername, &msg.AuthorDisplayName, &msg.AuthorAvatarKey)
+		row := tx.QueryRow(ctx,
+			`INSERT INTO messages (channel_id, author_id, content, reply_to_id)
+			 VALUES ($1, $2, $3, $4)
+			 RETURNING id, created_at, updated_at`,
+			params.ChannelID, params.AuthorID, params.Content, params.ReplyToID,
+		)
+
+		msg.ChannelID = params.ChannelID
+		msg.AuthorID = params.AuthorID
+		msg.Content = params.Content
+		msg.ReplyToID = params.ReplyToID
+		if err := row.Scan(&msg.ID, &msg.CreatedAt, &msg.UpdatedAt); err != nil {
+			return fmt.Errorf("insert message: %w", err)
+		}
+
+		// Fetch author info within the same transaction for consistency.
+		err := tx.QueryRow(ctx,
+			"SELECT username, display_name, avatar_key FROM users WHERE id = $1",
+			params.AuthorID,
+		).Scan(&msg.AuthorUsername, &msg.AuthorDisplayName, &msg.AuthorAvatarKey)
+		if err != nil {
+			return fmt.Errorf("fetch author info: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("fetch author info: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("commit create message tx: %w", err)
+		return nil, err
 	}
 	return &msg, nil
 }

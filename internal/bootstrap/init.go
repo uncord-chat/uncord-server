@@ -2,7 +2,6 @@ package bootstrap
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/uncord-chat/uncord-server/internal/auth"
 	"github.com/uncord-chat/uncord-server/internal/config"
+	"github.com/uncord-chat/uncord-server/internal/postgres"
 )
 
 var sanitizeUsername = regexp.MustCompile(`[^a-zA-Z0-9_.]`)
@@ -74,115 +74,103 @@ func RunFirstInit(ctx context.Context, db *pgxpool.Pool, cfg *config.Config, log
 		return fmt.Errorf("derived owner username %q from email is invalid: %w", username, err)
 	}
 
-	tx, err := db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin init transaction: %w", err)
-	}
-	defer func() {
-		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-			logger.Warn().Err(err).Msg("tx rollback failed")
+	return postgres.WithTx(ctx, db, func(tx pgx.Tx) error {
+		// Insert owner user
+		var ownerID uuid.UUID
+		err := tx.QueryRow(ctx,
+			`INSERT INTO users (email, username, password_hash, email_verified)
+			 VALUES ($1, $2, $3, true)
+			 RETURNING id`,
+			ownerEmail, username, hash,
+		).Scan(&ownerID)
+		if err != nil {
+			return fmt.Errorf("insert owner user: %w", err)
 		}
-	}()
+		logger.Debug().Str("username", username).Str("email", ownerEmail).Msg("Created owner account")
 
-	// Insert owner user
-	var ownerID uuid.UUID
-	err = tx.QueryRow(ctx,
-		`INSERT INTO users (email, username, password_hash, email_verified)
-		 VALUES ($1, $2, $3, true)
-		 RETURNING id`,
-		ownerEmail, username, hash,
-	).Scan(&ownerID)
-	if err != nil {
-		return fmt.Errorf("insert owner user: %w", err)
-	}
-	logger.Debug().Str("username", username).Str("email", ownerEmail).Msg("Created owner account")
+		// Insert server_config
+		_, err = tx.Exec(ctx,
+			`INSERT INTO server_config (name, description, owner_id)
+			 VALUES ($1, $2, $3)`,
+			cfg.ServerName, cfg.ServerDescription, ownerID,
+		)
+		if err != nil {
+			return fmt.Errorf("insert server_config: %w", err)
+		}
+		logger.Debug().Str("name", cfg.ServerName).Msg("Created server configuration")
 
-	// Insert server_config
-	_, err = tx.Exec(ctx,
-		`INSERT INTO server_config (name, description, owner_id)
-		 VALUES ($1, $2, $3)`,
-		cfg.ServerName, cfg.ServerDescription, ownerID,
-	)
-	if err != nil {
-		return fmt.Errorf("insert server_config: %w", err)
-	}
-	logger.Debug().Str("name", cfg.ServerName).Msg("Created server configuration")
+		// Insert @everyone role
+		var everyoneRoleID uuid.UUID
+		err = tx.QueryRow(ctx,
+			`INSERT INTO roles (name, position, is_everyone, permissions)
+			 VALUES ('@everyone', 0, true, $1)
+			 RETURNING id`,
+			int64(DefaultEveryonePermissions),
+		).Scan(&everyoneRoleID)
+		if err != nil {
+			return fmt.Errorf("insert @everyone role: %w", err)
+		}
+		logger.Debug().Msg("Created @everyone role")
 
-	// Insert @everyone role
-	var everyoneRoleID uuid.UUID
-	err = tx.QueryRow(ctx,
-		`INSERT INTO roles (name, position, is_everyone, permissions)
-		 VALUES ('@everyone', 0, true, $1)
-		 RETURNING id`,
-		int64(DefaultEveryonePermissions),
-	).Scan(&everyoneRoleID)
-	if err != nil {
-		return fmt.Errorf("insert @everyone role: %w", err)
-	}
-	logger.Debug().Msg("Created @everyone role")
+		// Insert owner as member
+		_, err = tx.Exec(ctx,
+			`INSERT INTO members (user_id, status) VALUES ($1, 'active')`,
+			ownerID,
+		)
+		if err != nil {
+			return fmt.Errorf("insert owner member: %w", err)
+		}
 
-	// Insert owner as member
-	_, err = tx.Exec(ctx,
-		`INSERT INTO members (user_id, status) VALUES ($1, 'active')`,
-		ownerID,
-	)
-	if err != nil {
-		return fmt.Errorf("insert owner member: %w", err)
-	}
+		// Assign @everyone role to owner
+		_, err = tx.Exec(ctx,
+			`INSERT INTO member_roles (user_id, role_id) VALUES ($1, $2)`,
+			ownerID, everyoneRoleID,
+		)
+		if err != nil {
+			return fmt.Errorf("insert owner member_roles: %w", err)
+		}
+		logger.Debug().Msg("Registered owner as member with @everyone role")
 
-	// Assign @everyone role to owner
-	_, err = tx.Exec(ctx,
-		`INSERT INTO member_roles (user_id, role_id) VALUES ($1, $2)`,
-		ownerID, everyoneRoleID,
-	)
-	if err != nil {
-		return fmt.Errorf("insert owner member_roles: %w", err)
-	}
-	logger.Debug().Msg("Registered owner as member with @everyone role")
+		// Insert #general channel
+		_, err = tx.Exec(ctx,
+			`INSERT INTO channels (name, type, position) VALUES ('general', 'text', 0)`,
+		)
+		if err != nil {
+			return fmt.Errorf("insert #general channel: %w", err)
+		}
 
-	// Insert #general channel
-	_, err = tx.Exec(ctx,
-		`INSERT INTO channels (name, type, position) VALUES ('general', 'text', 0)`,
-	)
-	if err != nil {
-		return fmt.Errorf("insert #general channel: %w", err)
-	}
+		// Insert #welcome channel
+		var welcomeChannelID uuid.UUID
+		err = tx.QueryRow(ctx,
+			`INSERT INTO channels (name, type, position) VALUES ('welcome', 'text', 1) RETURNING id`,
+		).Scan(&welcomeChannelID)
+		if err != nil {
+			return fmt.Errorf("insert #welcome channel: %w", err)
+		}
+		logger.Debug().Msg("Created #general and #welcome channels")
 
-	// Insert #welcome channel
-	var welcomeChannelID uuid.UUID
-	err = tx.QueryRow(ctx,
-		`INSERT INTO channels (name, type, position) VALUES ('welcome', 'text', 1) RETURNING id`,
-	).Scan(&welcomeChannelID)
-	if err != nil {
-		return fmt.Errorf("insert #welcome channel: %w", err)
-	}
-	logger.Debug().Msg("Created #general and #welcome channels")
+		// Insert onboarding_config
+		_, err = tx.Exec(ctx,
+			`INSERT INTO onboarding_config (
+				welcome_channel_id,
+				require_rules_acceptance,
+				require_email_verification,
+				min_account_age_seconds,
+				require_phone,
+				require_captcha
+			) VALUES ($1, $2, $3, $4, $5, $6)`,
+			welcomeChannelID,
+			cfg.OnboardingRequireRules,
+			cfg.OnboardingRequireEmailVerification,
+			cfg.OnboardingMinAccountAge,
+			cfg.OnboardingRequirePhone,
+			cfg.OnboardingRequireCaptcha,
+		)
+		if err != nil {
+			return fmt.Errorf("insert onboarding_config: %w", err)
+		}
+		logger.Debug().Msg("Created onboarding configuration")
 
-	// Insert onboarding_config
-	_, err = tx.Exec(ctx,
-		`INSERT INTO onboarding_config (
-			welcome_channel_id,
-			require_rules_acceptance,
-			require_email_verification,
-			min_account_age_seconds,
-			require_phone,
-			require_captcha
-		) VALUES ($1, $2, $3, $4, $5, $6)`,
-		welcomeChannelID,
-		cfg.OnboardingRequireRules,
-		cfg.OnboardingRequireEmailVerification,
-		cfg.OnboardingMinAccountAge,
-		cfg.OnboardingRequirePhone,
-		cfg.OnboardingRequireCaptcha,
-	)
-	if err != nil {
-		return fmt.Errorf("insert onboarding_config: %w", err)
-	}
-	logger.Debug().Msg("Created onboarding configuration")
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit init transaction: %w", err)
-	}
-
-	return nil
+		return nil
+	})
 }

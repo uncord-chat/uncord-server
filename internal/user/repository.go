@@ -69,45 +69,37 @@ func NewPGRepository(db *pgxpool.Pool, logger zerolog.Logger) *PGRepository {
 // Create inserts a new user and, when params.VerifyToken is non-empty, an email verification row, all inside a single
 // transaction.
 func (r *PGRepository) Create(ctx context.Context, params CreateParams) (uuid.UUID, error) {
-	tx, err := r.db.Begin(ctx)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("begin create user tx: %w", err)
-	}
-	defer func() {
-		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-			r.log.Warn().Err(err).Msg("tx rollback failed")
-		}
-	}()
-
 	var userID uuid.UUID
-	err = tx.QueryRow(ctx,
-		`INSERT INTO users (email, username, password_hash)
-		 VALUES ($1, $2, $3)
-		 RETURNING id`,
-		params.Email, params.Username, params.PasswordHash,
-	).Scan(&userID)
-	if err != nil {
-		if postgres.IsUniqueViolation(err) {
-			return uuid.Nil, ErrAlreadyExists
-		}
-		return uuid.Nil, fmt.Errorf("insert user: %w", err)
-	}
-
-	if params.VerifyToken != "" {
-		_, err = tx.Exec(ctx,
-			`INSERT INTO email_verifications (user_id, token, expires_at)
-			 VALUES ($1, $2, $3)`,
-			userID, params.VerifyToken, params.VerifyExpiry,
-		)
+	err := postgres.WithTx(ctx, r.db, func(tx pgx.Tx) error {
+		err := tx.QueryRow(ctx,
+			`INSERT INTO users (email, username, password_hash)
+			 VALUES ($1, $2, $3)
+			 RETURNING id`,
+			params.Email, params.Username, params.PasswordHash,
+		).Scan(&userID)
 		if err != nil {
-			return uuid.Nil, fmt.Errorf("insert email verification: %w", err)
+			if postgres.IsUniqueViolation(err) {
+				return ErrAlreadyExists
+			}
+			return fmt.Errorf("insert user: %w", err)
 		}
-	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return uuid.Nil, fmt.Errorf("commit create user tx: %w", err)
-	}
+		if params.VerifyToken != "" {
+			_, err = tx.Exec(ctx,
+				`INSERT INTO email_verifications (user_id, token, expires_at)
+				 VALUES ($1, $2, $3)`,
+				userID, params.VerifyToken, params.VerifyExpiry,
+			)
+			if err != nil {
+				return fmt.Errorf("insert email verification: %w", err)
+			}
+		}
 
+		return nil
+	})
+	if err != nil {
+		return uuid.Nil, err
+	}
 	return userID, nil
 }
 
@@ -153,43 +145,35 @@ func (r *PGRepository) GetCredentialsByID(ctx context.Context, id uuid.UUID) (*C
 
 // VerifyEmail consumes a verification token and marks the user as verified, all within a single transaction.
 func (r *PGRepository) VerifyEmail(ctx context.Context, token string) (uuid.UUID, error) {
-	tx, err := r.db.Begin(ctx)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("begin verify email tx: %w", err)
-	}
-	defer func() {
-		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-			r.log.Warn().Err(err).Msg("tx rollback failed")
-		}
-	}()
-
 	var userID uuid.UUID
-	err = tx.QueryRow(ctx,
-		`UPDATE email_verifications
-		 SET consumed_at = NOW()
-		 WHERE token = $1 AND consumed_at IS NULL AND expires_at > NOW()
-		 RETURNING user_id`,
-		token,
-	).Scan(&userID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return uuid.Nil, ErrInvalidToken
+	err := postgres.WithTx(ctx, r.db, func(tx pgx.Tx) error {
+		err := tx.QueryRow(ctx,
+			`UPDATE email_verifications
+			 SET consumed_at = NOW()
+			 WHERE token = $1 AND consumed_at IS NULL AND expires_at > NOW()
+			 RETURNING user_id`,
+			token,
+		).Scan(&userID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrInvalidToken
+			}
+			return fmt.Errorf("consume verification token: %w", err)
 		}
-		return uuid.Nil, fmt.Errorf("consume verification token: %w", err)
-	}
 
-	_, err = tx.Exec(ctx,
-		`UPDATE users SET email_verified = true WHERE id = $1`,
-		userID,
-	)
+		_, err = tx.Exec(ctx,
+			`UPDATE users SET email_verified = true WHERE id = $1`,
+			userID,
+		)
+		if err != nil {
+			return fmt.Errorf("update email_verified: %w", err)
+		}
+
+		return nil
+	})
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("update email_verified: %w", err)
+		return uuid.Nil, err
 	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return uuid.Nil, fmt.Errorf("commit verify email tx: %w", err)
-	}
-
 	return userID, nil
 }
 
@@ -277,66 +261,40 @@ func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdatePa
 // EnableMFA atomically sets the user's MFA secret and enabled flag, and inserts the initial set of recovery code
 // hashes. All operations run in a single transaction.
 func (r *PGRepository) EnableMFA(ctx context.Context, userID uuid.UUID, encryptedSecret string, codeHashes []string) error {
-	tx, err := r.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin enable MFA tx: %w", err)
-	}
-	defer func() {
-		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-			r.log.Warn().Err(err).Msg("tx rollback failed")
+	return postgres.WithTx(ctx, r.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx,
+			`UPDATE users SET mfa_secret = $1, mfa_enabled = true WHERE id = $2`,
+			encryptedSecret, userID,
+		)
+		if err != nil {
+			return fmt.Errorf("update MFA columns: %w", err)
 		}
-	}()
 
-	_, err = tx.Exec(ctx,
-		`UPDATE users SET mfa_secret = $1, mfa_enabled = true WHERE id = $2`,
-		encryptedSecret, userID,
-	)
-	if err != nil {
-		return fmt.Errorf("update MFA columns: %w", err)
-	}
-
-	if err := copyRecoveryCodes(ctx, tx, userID, codeHashes); err != nil {
-		return err
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit enable MFA tx: %w", err)
-	}
-	return nil
+		return copyRecoveryCodes(ctx, tx, userID, codeHashes)
+	})
 }
 
 // DisableMFA atomically clears the user's MFA secret and enabled flag, and deletes all recovery codes.
 func (r *PGRepository) DisableMFA(ctx context.Context, userID uuid.UUID) error {
-	tx, err := r.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin disable MFA tx: %w", err)
-	}
-	defer func() {
-		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-			r.log.Warn().Err(err).Msg("tx rollback failed")
+	return postgres.WithTx(ctx, r.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx,
+			`UPDATE users SET mfa_secret = NULL, mfa_enabled = false WHERE id = $1`,
+			userID,
+		)
+		if err != nil {
+			return fmt.Errorf("clear MFA columns: %w", err)
 		}
-	}()
 
-	_, err = tx.Exec(ctx,
-		`UPDATE users SET mfa_secret = NULL, mfa_enabled = false WHERE id = $1`,
-		userID,
-	)
-	if err != nil {
-		return fmt.Errorf("clear MFA columns: %w", err)
-	}
+		_, err = tx.Exec(ctx,
+			`DELETE FROM mfa_recovery_codes WHERE user_id = $1`,
+			userID,
+		)
+		if err != nil {
+			return fmt.Errorf("delete recovery codes: %w", err)
+		}
 
-	_, err = tx.Exec(ctx,
-		`DELETE FROM mfa_recovery_codes WHERE user_id = $1`,
-		userID,
-	)
-	if err != nil {
-		return fmt.Errorf("delete recovery codes: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit disable MFA tx: %w", err)
-	}
-	return nil
+		return nil
+	})
 }
 
 // GetUnusedRecoveryCodes returns all recovery codes for the user that have not been consumed.
@@ -375,29 +333,14 @@ func (r *PGRepository) UseRecoveryCode(ctx context.Context, codeID uuid.UUID) er
 
 // ReplaceRecoveryCodes deletes all existing recovery codes for the user and inserts new ones in a single transaction.
 func (r *PGRepository) ReplaceRecoveryCodes(ctx context.Context, userID uuid.UUID, codeHashes []string) error {
-	tx, err := r.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin replace recovery codes tx: %w", err)
-	}
-	defer func() {
-		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-			r.log.Warn().Err(err).Msg("tx rollback failed")
+	return postgres.WithTx(ctx, r.db, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `DELETE FROM mfa_recovery_codes WHERE user_id = $1`, userID)
+		if err != nil {
+			return fmt.Errorf("delete old recovery codes: %w", err)
 		}
-	}()
 
-	_, err = tx.Exec(ctx, `DELETE FROM mfa_recovery_codes WHERE user_id = $1`, userID)
-	if err != nil {
-		return fmt.Errorf("delete old recovery codes: %w", err)
-	}
-
-	if err := copyRecoveryCodes(ctx, tx, userID, codeHashes); err != nil {
-		return err
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit replace recovery codes tx: %w", err)
-	}
-	return nil
+		return copyRecoveryCodes(ctx, tx, userID, codeHashes)
+	})
 }
 
 // copyRecoveryCodes bulk-inserts recovery code hashes using CopyFrom, collapsing all rows into a single round trip.
@@ -422,40 +365,29 @@ func copyRecoveryCodes(ctx context.Context, tx pgx.Tx, userID uuid.UUID, codeHas
 // DeleteWithTombstones inserts deletion tombstones and deletes the user in a single transaction. Tombstone inserts use
 // ON CONFLICT DO NOTHING so that re-deleting a restored account (or overlapping identifiers) is idempotent.
 func (r *PGRepository) DeleteWithTombstones(ctx context.Context, id uuid.UUID, tombstones []Tombstone) error {
-	tx, err := r.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin delete user tx: %w", err)
-	}
-	defer func() {
-		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-			r.log.Warn().Err(err).Msg("tx rollback failed")
+	return postgres.WithTx(ctx, r.db, func(tx pgx.Tx) error {
+		for _, t := range tombstones {
+			_, err := tx.Exec(ctx,
+				`INSERT INTO deletion_tombstones (identifier_type, hmac_hash)
+				 VALUES ($1, $2)
+				 ON CONFLICT (identifier_type, hmac_hash) DO NOTHING`,
+				string(t.IdentifierType), t.HMACHash,
+			)
+			if err != nil {
+				return fmt.Errorf("insert tombstone: %w", err)
+			}
 		}
-	}()
 
-	for _, t := range tombstones {
-		_, err := tx.Exec(ctx,
-			`INSERT INTO deletion_tombstones (identifier_type, hmac_hash)
-			 VALUES ($1, $2)
-			 ON CONFLICT (identifier_type, hmac_hash) DO NOTHING`,
-			string(t.IdentifierType), t.HMACHash,
-		)
+		tag, err := tx.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
 		if err != nil {
-			return fmt.Errorf("insert tombstone: %w", err)
+			return fmt.Errorf("delete user: %w", err)
 		}
-	}
+		if tag.RowsAffected() == 0 {
+			return ErrNotFound
+		}
 
-	tag, err := tx.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
-	if err != nil {
-		return fmt.Errorf("delete user: %w", err)
-	}
-	if tag.RowsAffected() == 0 {
-		return ErrNotFound
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit delete user tx: %w", err)
-	}
-	return nil
+		return nil
+	})
 }
 
 // CheckTombstone returns true if a deletion tombstone exists for the given identifier type and HMAC hash.

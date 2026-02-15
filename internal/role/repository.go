@@ -71,41 +71,35 @@ func (r *PGRepository) GetByID(ctx context.Context, id uuid.UUID) (*Role, error)
 
 // Create inserts a new role inside a transaction that enforces the maximum count and auto-assigns a position.
 func (r *PGRepository) Create(ctx context.Context, params CreateParams, maxRoles int) (*Role, error) {
-	tx, err := r.db.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("begin create role tx: %w", err)
-	}
-	defer func() {
-		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-			r.log.Warn().Err(err).Msg("tx rollback failed")
+	var role *Role
+	err := postgres.WithTx(ctx, r.db, func(tx pgx.Tx) error {
+		var count int
+		if err := tx.QueryRow(ctx, "SELECT COUNT(*) FROM roles").Scan(&count); err != nil {
+			return fmt.Errorf("count roles: %w", err)
 		}
-	}()
-
-	var count int
-	if err := tx.QueryRow(ctx, "SELECT COUNT(*) FROM roles").Scan(&count); err != nil {
-		return nil, fmt.Errorf("count roles: %w", err)
-	}
-	if count >= maxRoles {
-		return nil, ErrMaxRolesReached
-	}
-
-	row := tx.QueryRow(ctx,
-		fmt.Sprintf(
-			`INSERT INTO roles (name, colour, hoist, permissions, position)
-			 VALUES ($1, $2, $3, $4, COALESCE((SELECT MAX(position) FROM roles), -1) + 1)
-			 RETURNING %s`, selectColumns),
-		params.Name, params.Colour, params.Hoist, params.Permissions,
-	)
-	role, err := scanRole(row)
-	if err != nil {
-		if postgres.IsUniqueViolation(err) {
-			return nil, ErrAlreadyExists
+		if count >= maxRoles {
+			return ErrMaxRolesReached
 		}
-		return nil, fmt.Errorf("insert role: %w", err)
-	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("commit create role tx: %w", err)
+		row := tx.QueryRow(ctx,
+			fmt.Sprintf(
+				`INSERT INTO roles (name, colour, hoist, permissions, position)
+				 VALUES ($1, $2, $3, $4, COALESCE((SELECT MAX(position) FROM roles), -1) + 1)
+				 RETURNING %s`, selectColumns),
+			params.Name, params.Colour, params.Hoist, params.Permissions,
+		)
+		var err error
+		role, err = scanRole(row)
+		if err != nil {
+			if postgres.IsUniqueViolation(err) {
+				return ErrAlreadyExists
+			}
+			return fmt.Errorf("insert role: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return role, nil
 }
