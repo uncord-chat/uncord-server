@@ -42,6 +42,7 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/permission"
 	"github.com/uncord-chat/uncord-server/internal/postgres"
 	"github.com/uncord-chat/uncord-server/internal/role"
+	"github.com/uncord-chat/uncord-server/internal/search"
 	servercfg "github.com/uncord-chat/uncord-server/internal/server"
 	"github.com/uncord-chat/uncord-server/internal/typesense"
 	"github.com/uncord-chat/uncord-server/internal/user"
@@ -500,6 +501,14 @@ func (s *server) registerRoutes(app *fiber.App) {
 		auth.RequireAuth(s.cfg.JWTSecret, s.cfg.ServerURL))
 	messageGroup.Patch("/:messageID", messageHandler.EditMessage)
 	messageGroup.Delete("/:messageID", messageHandler.DeleteMessage)
+
+	// Search routes
+	searchSearcher := search.NewTypesenseSearcher(s.cfg.TypesenseURL, s.cfg.TypesenseAPIKey, s.cfg.TypesenseTimeout)
+	searchService := search.NewService(s.channelRepo, s.permResolver, searchSearcher, log.Logger)
+	searchHandler := api.NewSearchHandler(searchService, log.Logger)
+	app.Get("/api/v1/search/messages",
+		auth.RequireAuth(s.cfg.JWTSecret, s.cfg.ServerURL),
+		searchHandler.SearchMessages)
 
 	// Category routes
 	categoryHandler := api.NewCategoryHandler(s.categoryRepo, s.cfg.MaxCategories, log.Logger)

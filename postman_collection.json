@@ -1156,6 +1156,32 @@
 			]
 		},
 		{
+			"name": "Search",
+			"item": [
+				{
+					"name": "Search Messages",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/search/messages?q=hello",
+							"host": ["{{base_url}}"],
+							"path": ["search", "messages"],
+							"query": [
+								{ "key": "q", "value": "hello" },
+								{ "key": "channel_id", "value": "{{channel_id}}", "disabled": true },
+								{ "key": "author_id", "value": "", "disabled": true },
+								{ "key": "before", "value": "", "disabled": true },
+								{ "key": "after", "value": "", "disabled": true },
+								{ "key": "limit", "value": "25", "disabled": true },
+								{ "key": "page", "value": "1", "disabled": true }
+							]
+						}
+					}
+				}
+			]
+		},
+		{
 			"name": "Onboarding",
 			"item": [
 				{
