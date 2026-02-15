@@ -20,6 +20,7 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/auth"
 	"github.com/uncord-chat/uncord-server/internal/config"
 	"github.com/uncord-chat/uncord-server/internal/disposable"
+	"github.com/uncord-chat/uncord-server/internal/httputil"
 	"github.com/uncord-chat/uncord-server/internal/permission"
 	"github.com/uncord-chat/uncord-server/internal/server"
 	"github.com/uncord-chat/uncord-server/internal/user"
@@ -259,6 +260,18 @@ func doReq(t *testing.T, app *fiber.App, req *http.Request) *http.Response {
 		t.Fatalf("app.Test() error = %v", err)
 	}
 	return resp
+}
+
+// fakeAuth returns middleware that simulates RequireAuth. When userID is uuid.Nil the request is rejected with 401,
+// matching the behaviour of the real middleware. Otherwise the user ID is stored in Locals for handlers to consume.
+func fakeAuth(userID uuid.UUID) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if userID == uuid.Nil {
+			return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing authorization header")
+		}
+		c.Locals("userID", userID)
+		return c.Next()
+	}
 }
 
 // --- Register handler tests ---

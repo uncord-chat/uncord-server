@@ -98,12 +98,7 @@ func testCategoryApp(t *testing.T, repo category.Repository, maxCategories int, 
 	handler := NewCategoryHandler(repo, maxCategories, zerolog.Nop())
 	app := fiber.New()
 
-	app.Use(func(c fiber.Ctx) error {
-		if userID != uuid.Nil {
-			c.Locals("userID", userID)
-		}
-		return c.Next()
-	})
+	app.Use(fakeAuth(userID))
 
 	app.Get("/categories", handler.ListCategories)
 	app.Post("/categories", handler.CreateCategory)

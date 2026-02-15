@@ -137,12 +137,7 @@ func testRoleApp(t *testing.T, repo role.Repository, maxRoles int, userID uuid.U
 	handler := NewRoleHandler(repo, nil, maxRoles, zerolog.Nop())
 	app := fiber.New()
 
-	app.Use(func(c fiber.Ctx) error {
-		if userID != uuid.Nil {
-			c.Locals("userID", userID)
-		}
-		return c.Next()
-	})
+	app.Use(fakeAuth(userID))
 
 	app.Get("/roles", handler.ListRoles)
 	app.Post("/roles", handler.CreateRole)

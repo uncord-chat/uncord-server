@@ -198,12 +198,7 @@ func testChannelApp(t *testing.T, repo channel.Repository, resolver *permission.
 	handler := NewChannelHandler(repo, resolver, maxChannels, zerolog.Nop())
 	app := fiber.New()
 
-	app.Use(func(c fiber.Ctx) error {
-		if userID != uuid.Nil {
-			c.Locals("userID", userID)
-		}
-		return c.Next()
-	})
+	app.Use(fakeAuth(userID))
 
 	app.Get("/channels", handler.ListChannels)
 	app.Post("/channels", handler.CreateChannel)

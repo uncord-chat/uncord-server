@@ -70,12 +70,7 @@ func testServerApp(t *testing.T, repo server.Repository, userID uuid.UUID) *fibe
 	handler := NewServerHandler(repo, zerolog.Nop())
 	app := fiber.New()
 
-	app.Use(func(c fiber.Ctx) error {
-		if userID != uuid.Nil {
-			c.Locals("userID", userID)
-		}
-		return c.Next()
-	})
+	app.Use(fakeAuth(userID))
 
 	app.Get("/", handler.Get)
 	app.Patch("/", handler.Update)

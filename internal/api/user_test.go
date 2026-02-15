@@ -34,13 +34,7 @@ func testUserApp(t *testing.T, repo *fakeRepo, userID uuid.UUID) *fiber.App {
 	handler := NewUserHandler(repo, nil, zerolog.Nop())
 	app := fiber.New()
 
-	// Inject userID into Locals to simulate RequireAuth middleware.
-	app.Use(func(c fiber.Ctx) error {
-		if userID != uuid.Nil {
-			c.Locals("userID", userID)
-		}
-		return c.Next()
-	})
+	app.Use(fakeAuth(userID))
 
 	app.Get("/@me", handler.GetMe)
 	app.Patch("/@me", handler.UpdateMe)
