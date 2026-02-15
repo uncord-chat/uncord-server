@@ -98,6 +98,61 @@ func TestUnknownRouteReturns404(t *testing.T) {
 	}
 }
 
+// TestErrorHandler_NonFiberError verifies that errors which are not *fiber.Error produce a 500 JSON response with the
+// InternalError code and a generic message that does not leak internal details.
+func TestErrorHandler_NonFiberError(t *testing.T) {
+	t.Parallel()
+
+	app := fiber.New(fiber.Config{
+		ErrorHandler: func(c fiber.Ctx, err error) error {
+			status := fiber.StatusInternalServerError
+			message := "An internal error occurred"
+			apiCode := apierrors.InternalError
+			if e, ok := errors.AsType[*fiber.Error](err); ok {
+				status = e.Code
+				message = e.Message
+				apiCode = fiberStatusToAPICode(e.Code)
+			}
+			return c.Status(status).JSON(httputil.ErrorResponse{
+				Error: httputil.ErrorBody{
+					Code:    apiCode,
+					Message: message,
+				},
+			})
+		},
+	})
+
+	app.Get("/boom", func(_ fiber.Ctx) error {
+		return errors.New("database connection lost")
+	})
+
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/boom", nil))
+	if err != nil {
+		t.Fatalf("app.Test() error = %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != fiber.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, fiber.StatusInternalServerError)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+
+	var env httputil.ErrorResponse
+	if err := json.Unmarshal(body, &env); err != nil {
+		t.Fatalf("unmarshal error response: %v", err)
+	}
+	if env.Error.Code != apierrors.InternalError {
+		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.InternalError)
+	}
+	if env.Error.Message != "An internal error occurred" {
+		t.Errorf("error message = %q, want generic message", env.Error.Message)
+	}
+}
+
 func TestFiberStatusToAPICode(t *testing.T) {
 	t.Parallel()
 
