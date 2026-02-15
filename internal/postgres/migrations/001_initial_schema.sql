@@ -192,6 +192,10 @@ CREATE TABLE reactions (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- PostgreSQL treats NULLs as distinct in unique indexes, so a plain UNIQUE constraint over nullable columns would allow
+-- duplicate reactions. COALESCE maps NULL emoji_id to the nil UUID and NULL emoji_unicode to the empty string, giving
+-- every row a deterministic non-NULL value for uniqueness comparison. A reaction uses exactly one of the two columns
+-- (emoji_id for custom emoji, emoji_unicode for standard Unicode), so the sentinel values never collide with real data.
 CREATE UNIQUE INDEX idx_reactions_unique
     ON reactions (message_id, user_id, COALESCE(emoji_id, '00000000-0000-0000-0000-000000000000'), COALESCE(emoji_unicode, ''));
 CREATE INDEX idx_reactions_user ON reactions (user_id);
