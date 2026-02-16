@@ -114,6 +114,9 @@ func (r *fakeRepo) Update(_ context.Context, id uuid.UUID, params user.UpdatePar
 
 func (r *fakeRepo) RecordLoginAttempt(context.Context, string, string, bool) error { return nil }
 func (r *fakeRepo) UpdatePasswordHash(context.Context, uuid.UUID, string) error    { return nil }
+func (r *fakeRepo) ReplaceVerificationToken(context.Context, uuid.UUID, string, time.Time, time.Duration) error {
+	return nil
+}
 
 func (r *fakeRepo) GetCredentialsByID(_ context.Context, id uuid.UUID) (*user.Credentials, error) {
 	for _, c := range r.users {
@@ -741,5 +744,142 @@ func TestMFAVerifyHandler_InvalidTicket(t *testing.T) {
 	env := parseError(t, body)
 	if env.Error.Code != string(apierrors.InvalidToken) {
 		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.InvalidToken)
+	}
+}
+
+// --- ResendVerification handler tests ---
+
+// testResendVerificationApp creates a Fiber app with simulated auth middleware and the resend-verification route. The
+// registered user is unverified by default.
+func testResendVerificationApp(t *testing.T) (*fiber.App, uuid.UUID) {
+	t.Helper()
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+
+	bl := disposable.NewBlocklist("", false, 10*time.Second, zerolog.Nop())
+	repo := newFakeRepo()
+	permPub := permission.NewPublisher(rdb)
+	svc, err := auth.NewService(repo, rdb, testAuthConfig(), bl, nil, &fakeServerRepo{cfg: &server.Config{OwnerID: uuid.New()}}, permPub, zerolog.Nop())
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	result, err := svc.Register(t.Context(), auth.RegisterRequest{
+		Email:    "resend@example.com",
+		Username: "resenduser",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	userID, err := uuid.Parse(result.User.ID)
+	if err != nil {
+		t.Fatalf("Parse user ID: %v", err)
+	}
+
+	handler := NewAuthHandler(svc, zerolog.Nop())
+
+	app := fiber.New()
+	app.Post("/resend-verification", fakeAuth(userID), handler.ResendVerification)
+
+	return app, userID
+}
+
+func TestResendVerificationHandler_Success(t *testing.T) {
+	t.Parallel()
+	app, _ := testResendVerificationApp(t)
+
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/resend-verification", ""))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusOK {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusOK)
+	}
+
+	env := parseSuccess(t, body)
+	var msgResp struct {
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(env.Data, &msgResp); err != nil {
+		t.Fatalf("unmarshal message response: %v", err)
+	}
+	if msgResp.Message == "" {
+		t.Error("message is empty")
+	}
+}
+
+func TestResendVerificationHandler_AlreadyVerified(t *testing.T) {
+	t.Parallel()
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+
+	bl := disposable.NewBlocklist("", false, 10*time.Second, zerolog.Nop())
+	repo := newFakeRepo()
+	permPub := permission.NewPublisher(rdb)
+	svc, err := auth.NewService(repo, rdb, testAuthConfig(), bl, nil, &fakeServerRepo{cfg: &server.Config{OwnerID: uuid.New()}}, permPub, zerolog.Nop())
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	result, err := svc.Register(t.Context(), auth.RegisterRequest{
+		Email:    "verified@example.com",
+		Username: "verifieduser",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	userID, err := uuid.Parse(result.User.ID)
+	if err != nil {
+		t.Fatalf("Parse user ID: %v", err)
+	}
+
+	// Mark user as verified.
+	repo.users["verified@example.com"].EmailVerified = true
+
+	handler := NewAuthHandler(svc, zerolog.Nop())
+	app := fiber.New()
+	app.Post("/resend-verification", fakeAuth(userID), handler.ResendVerification)
+
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/resend-verification", ""))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusConflict {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusConflict)
+	}
+	env := parseError(t, body)
+	if env.Error.Code != string(apierrors.EmailAlreadyVerified) {
+		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.EmailAlreadyVerified)
+	}
+}
+
+func TestResendVerificationHandler_NoAuth(t *testing.T) {
+	t.Parallel()
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+
+	bl := disposable.NewBlocklist("", false, 10*time.Second, zerolog.Nop())
+	repo := newFakeRepo()
+	permPub := permission.NewPublisher(rdb)
+	svc, err := auth.NewService(repo, rdb, testAuthConfig(), bl, nil, &fakeServerRepo{cfg: &server.Config{OwnerID: uuid.New()}}, permPub, zerolog.Nop())
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	handler := NewAuthHandler(svc, zerolog.Nop())
+	app := fiber.New()
+	app.Post("/resend-verification", fakeAuth(uuid.Nil), handler.ResendVerification)
+
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/resend-verification", ""))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusUnauthorized)
+	}
+	env := parseError(t, body)
+	if env.Error.Code != string(apierrors.Unauthorised) {
+		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.Unauthorised)
 	}
 }

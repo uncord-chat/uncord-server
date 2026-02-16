@@ -199,6 +199,9 @@ func (f *fakeUserLookup) GetCredentialsByID(context.Context, uuid.UUID) (*user.C
 func (f *fakeUserLookup) VerifyEmail(context.Context, string) (uuid.UUID, error) {
 	panic("not implemented")
 }
+func (f *fakeUserLookup) ReplaceVerificationToken(context.Context, uuid.UUID, string, time.Time, time.Duration) error {
+	panic("not implemented")
+}
 func (f *fakeUserLookup) RecordLoginAttempt(context.Context, string, string, bool) error {
 	panic("not implemented")
 }

@@ -176,6 +176,47 @@ func (r *PGRepository) VerifyEmail(ctx context.Context, token string) (uuid.UUID
 	return userID, nil
 }
 
+// ReplaceVerificationToken invalidates all unconsumed verification tokens for the user and inserts a new one, all
+// within a single transaction. If an unconsumed token was created within the cooldown window, ErrVerificationCooldown is
+// returned and no changes are made.
+func (r *PGRepository) ReplaceVerificationToken(ctx context.Context, userID uuid.UUID, token string, expiresAt time.Time, cooldown time.Duration) error {
+	return postgres.WithTx(ctx, r.db, func(tx pgx.Tx) error {
+		var recentExists bool
+		err := tx.QueryRow(ctx,
+			`SELECT EXISTS(
+				SELECT 1 FROM email_verifications
+				WHERE user_id = $1 AND consumed_at IS NULL AND created_at > NOW() - $2::interval
+			)`,
+			userID, cooldown.String(),
+		).Scan(&recentExists)
+		if err != nil {
+			return fmt.Errorf("check verification cooldown: %w", err)
+		}
+		if recentExists {
+			return ErrVerificationCooldown
+		}
+
+		_, err = tx.Exec(ctx,
+			`UPDATE email_verifications SET consumed_at = NOW()
+			 WHERE user_id = $1 AND consumed_at IS NULL`,
+			userID,
+		)
+		if err != nil {
+			return fmt.Errorf("invalidate existing verification tokens: %w", err)
+		}
+
+		_, err = tx.Exec(ctx,
+			`INSERT INTO email_verifications (user_id, token, expires_at) VALUES ($1, $2, $3)`,
+			userID, token, expiresAt,
+		)
+		if err != nil {
+			return fmt.Errorf("insert verification token: %w", err)
+		}
+
+		return nil
+	})
+}
+
 // RecordLoginAttempt writes an entry to the login_attempts table.
 func (r *PGRepository) RecordLoginAttempt(ctx context.Context, email, ipAddress string, success bool) error {
 	_, err := r.db.Exec(ctx,

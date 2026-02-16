@@ -318,6 +318,48 @@ func (s *Service) VerifyEmail(ctx context.Context, token string) error {
 	return nil
 }
 
+// ResendVerification generates a new email verification token and sends a verification email. Returns
+// ErrEmailAlreadyVerified if the user is already verified, or propagates ErrVerificationCooldown from the repository if
+// the user has requested a token too recently.
+func (s *Service) ResendVerification(ctx context.Context, userID uuid.UUID) error {
+	u, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("get user for resend verification: %w", err)
+	}
+	if u.EmailVerified {
+		return ErrEmailAlreadyVerified
+	}
+
+	verifyToken, err := generateSecureToken(verifyTokenBytes)
+	if err != nil {
+		return fmt.Errorf("generate verification token: %w", err)
+	}
+
+	err = s.users.ReplaceVerificationToken(ctx, userID, verifyToken, time.Now().Add(24*time.Hour), 60*time.Second)
+	if err != nil {
+		if errors.Is(err, user.ErrVerificationCooldown) {
+			return ErrVerificationCooldown
+		}
+		return fmt.Errorf("replace verification token: %w", err)
+	}
+
+	if s.config.IsDevelopment() {
+		s.log.Info().
+			Str("user_id", userID.String()).
+			Str("token", verifyToken).
+			Msg("Email verification token (dev mode)")
+	}
+
+	if s.sender != nil {
+		if err := s.sender.SendVerification(ctx, u.Email, verifyToken, s.config.ServerURL, s.config.ServerName); err != nil {
+			s.log.Error().Err(err).Str("user_id", userID.String()).Msg("Failed to send verification email")
+		}
+	}
+
+	s.log.Debug().Str("user_id", userID.String()).Msg("Verification email resent")
+	return nil
+}
+
 // VerifyMFA consumes an MFA ticket, loads the user's credentials, validates the provided TOTP or recovery code, and
 // issues auth tokens on success.
 func (s *Service) VerifyMFA(ctx context.Context, ticket, code string) (*AuthResult, error) {

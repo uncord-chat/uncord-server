@@ -289,6 +289,23 @@
 					}
 				},
 				{
+					"name": "Resend Verification",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/auth/resend-verification",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"resend-verification"
+							]
+						}
+					}
+				},
+				{
 					"name": "Verify Password",
 					"request": {
 						"method": "POST",

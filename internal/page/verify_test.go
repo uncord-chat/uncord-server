@@ -67,6 +67,10 @@ func (r *fakeRepo) VerifyEmail(_ context.Context, token string) (uuid.UUID, erro
 	return uuid.Nil, user.ErrInvalidToken
 }
 
+func (r *fakeRepo) ReplaceVerificationToken(context.Context, uuid.UUID, string, time.Time, time.Duration) error {
+	return nil
+}
+
 func (r *fakeRepo) GetByID(_ context.Context, id uuid.UUID) (*user.User, error) {
 	for _, c := range r.users {
 		if c.ID == id {

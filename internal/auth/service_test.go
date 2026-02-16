@@ -22,13 +22,14 @@ import (
 
 // fakeRepository implements user.Repository for unit tests.
 type fakeRepository struct {
-	users         map[string]*user.Credentials // keyed by email
-	recoveryCodes map[uuid.UUID][]user.MFARecoveryCode
-	tombstones    map[string]bool // keyed by "type:hash"
-	createErr     error
-	getByEmailErr error
-	verifyErr     error
-	loginAttempts []loginAttempt
+	users           map[string]*user.Credentials // keyed by email
+	recoveryCodes   map[uuid.UUID][]user.MFARecoveryCode
+	tombstones      map[string]bool // keyed by "type:hash"
+	createErr       error
+	getByEmailErr   error
+	verifyErr       error
+	loginAttempts   []loginAttempt
+	replaceTokenErr error
 }
 
 type loginAttempt struct {
@@ -83,6 +84,10 @@ func (r *fakeRepository) VerifyEmail(_ context.Context, token string) (uuid.UUID
 		return uuid.New(), nil
 	}
 	return uuid.Nil, user.ErrInvalidToken
+}
+
+func (r *fakeRepository) ReplaceVerificationToken(_ context.Context, _ uuid.UUID, _ string, _ time.Time, _ time.Duration) error {
+	return r.replaceTokenErr
 }
 
 func (r *fakeRepository) RecordLoginAttempt(_ context.Context, email, ip string, success bool) error {
@@ -1584,6 +1589,137 @@ func TestDeleteAccountUserNotFound(t *testing.T) {
 	err := svc.DeleteAccount(context.Background(), uuid.New(), "strongpassword")
 	if err == nil {
 		t.Fatal("DeleteAccount() should fail for nonexistent user")
+	}
+}
+
+// --- ResendVerification tests ---
+
+func TestServiceResendVerificationSuccess(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	sender := &fakeSender{}
+	svc := newTestServiceWithSender(t, repo, sender)
+	ctx := context.Background()
+
+	result, err := svc.Register(ctx, RegisterRequest{
+		Email:    "alice@example.com",
+		Username: "alice",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	userID, err := uuid.Parse(result.User.ID)
+	if err != nil {
+		t.Fatalf("Parse user ID: %v", err)
+	}
+
+	// Reset sender calls from registration.
+	sender.calls = nil
+
+	err = svc.ResendVerification(ctx, userID)
+	if err != nil {
+		t.Fatalf("ResendVerification() error = %v", err)
+	}
+	if len(sender.calls) != 1 {
+		t.Fatalf("sender called %d times, want 1", len(sender.calls))
+	}
+	if sender.calls[0].To != "alice@example.com" {
+		t.Errorf("SendVerification to = %q, want %q", sender.calls[0].To, "alice@example.com")
+	}
+}
+
+func TestServiceResendVerificationAlreadyVerified(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	svc := newTestService(t, repo)
+	ctx := context.Background()
+
+	result, err := svc.Register(ctx, RegisterRequest{
+		Email:    "alice@example.com",
+		Username: "alice",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	// Mark user as verified.
+	repo.users["alice@example.com"].EmailVerified = true
+
+	userID, err := uuid.Parse(result.User.ID)
+	if err != nil {
+		t.Fatalf("Parse user ID: %v", err)
+	}
+
+	err = svc.ResendVerification(ctx, userID)
+	if !errors.Is(err, ErrEmailAlreadyVerified) {
+		t.Errorf("ResendVerification() error = %v, want ErrEmailAlreadyVerified", err)
+	}
+}
+
+func TestServiceResendVerificationCooldown(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	repo.replaceTokenErr = user.ErrVerificationCooldown
+	svc := newTestService(t, repo)
+	ctx := context.Background()
+
+	result, err := svc.Register(ctx, RegisterRequest{
+		Email:    "alice@example.com",
+		Username: "alice",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	userID, err := uuid.Parse(result.User.ID)
+	if err != nil {
+		t.Fatalf("Parse user ID: %v", err)
+	}
+
+	err = svc.ResendVerification(ctx, userID)
+	if !errors.Is(err, ErrVerificationCooldown) {
+		t.Errorf("ResendVerification() error = %v, want ErrVerificationCooldown", err)
+	}
+}
+
+func TestServiceResendVerificationNilSender(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	svc := newTestServiceWithSender(t, repo, nil)
+	ctx := context.Background()
+
+	result, err := svc.Register(ctx, RegisterRequest{
+		Email:    "alice@example.com",
+		Username: "alice",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	userID, err := uuid.Parse(result.User.ID)
+	if err != nil {
+		t.Fatalf("Parse user ID: %v", err)
+	}
+
+	err = svc.ResendVerification(ctx, userID)
+	if err != nil {
+		t.Fatalf("ResendVerification() should succeed with nil sender, got error = %v", err)
+	}
+}
+
+func TestServiceResendVerificationUserNotFound(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepository()
+	svc := newTestService(t, repo)
+
+	err := svc.ResendVerification(context.Background(), uuid.New())
+	if err == nil {
+		t.Fatal("ResendVerification() should fail for nonexistent user")
 	}
 }
 

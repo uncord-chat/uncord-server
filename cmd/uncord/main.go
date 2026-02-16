@@ -407,6 +407,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 	authGroup.Post("/login", authHandler.Login)
 	authGroup.Post("/refresh", authHandler.Refresh)
 	authGroup.Post("/verify-email", authHandler.VerifyEmail)
+	authGroup.Post("/resend-verification", requireAuth, authHandler.ResendVerification)
 	authGroup.Post("/mfa/verify", authHandler.MFAVerify)
 	authGroup.Post("/verify-password", requireAuth, authHandler.VerifyPassword)
 

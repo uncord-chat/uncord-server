@@ -44,6 +44,9 @@ func (r *fakeUserRepo) GetCredentialsByID(context.Context, uuid.UUID) (*user.Cre
 func (r *fakeUserRepo) VerifyEmail(context.Context, string) (uuid.UUID, error) {
 	return uuid.Nil, nil
 }
+func (r *fakeUserRepo) ReplaceVerificationToken(context.Context, uuid.UUID, string, time.Time, time.Duration) error {
+	return nil
+}
 func (r *fakeUserRepo) RecordLoginAttempt(context.Context, string, string, bool) error { return nil }
 func (r *fakeUserRepo) UpdatePasswordHash(context.Context, uuid.UUID, string) error    { return nil }
 func (r *fakeUserRepo) Update(context.Context, uuid.UUID, user.UpdateParams) (*user.User, error) {

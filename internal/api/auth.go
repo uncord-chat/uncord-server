@@ -158,6 +158,22 @@ func (h *AuthHandler) VerifyPassword(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
+// ResendVerification handles POST /api/v1/auth/resend-verification.
+func (h *AuthHandler) ResendVerification(c fiber.Ctx) error {
+	userID, ok := c.Locals("userID").(uuid.UUID)
+	if !ok {
+		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	}
+
+	if err := h.auth.ResendVerification(c, userID); err != nil {
+		return h.mapAuthError(c, err)
+	}
+
+	return httputil.Success(c, models.MessageResponse{
+		Message: "Verification email sent",
+	})
+}
+
 // mapAuthError converts auth-layer errors to appropriate HTTP responses.
 func (h *AuthHandler) mapAuthError(c fiber.Ctx, err error) error {
 	return mapAuthServiceError(c, err, h.log, "auth")
@@ -204,6 +220,10 @@ func mapAuthServiceError(c fiber.Ctx, err error, log zerolog.Logger, handler str
 		return httputil.Fail(c, fiber.StatusForbidden, apierrors.ServerOwner, err.Error())
 	case errors.Is(err, auth.ErrAccountTombstoned):
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.AccountDeleted, "This email or username is not available")
+	case errors.Is(err, auth.ErrEmailAlreadyVerified):
+		return httputil.Fail(c, fiber.StatusConflict, apierrors.EmailAlreadyVerified, err.Error())
+	case errors.Is(err, auth.ErrVerificationCooldown):
+		return httputil.Fail(c, fiber.StatusTooManyRequests, apierrors.RateLimited, err.Error())
 
 	default:
 		log.Error().Err(err).Str("handler", handler).Msg("unhandled auth service error")

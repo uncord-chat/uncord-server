@@ -140,6 +140,9 @@ func (r *fakeInviteUserRepo) GetCredentialsByID(context.Context, uuid.UUID) (*us
 func (r *fakeInviteUserRepo) VerifyEmail(context.Context, string) (uuid.UUID, error) {
 	return uuid.Nil, nil
 }
+func (r *fakeInviteUserRepo) ReplaceVerificationToken(context.Context, uuid.UUID, string, time.Time, time.Duration) error {
+	return nil
+}
 func (r *fakeInviteUserRepo) RecordLoginAttempt(context.Context, string, string, bool) error {
 	return nil
 }

@@ -13,14 +13,15 @@ import (
 
 // Sentinel errors for the user package.
 var (
-	ErrNotFound          = errors.New("user not found")
-	ErrAlreadyExists     = errors.New("email or username already taken")
-	ErrInvalidToken      = errors.New("invalid or expired verification token")
-	ErrTombstoned        = errors.New("email or username was previously used by a deleted account")
-	ErrDisplayNameLength = errors.New("display name must be between 1 and 32 characters")
-	ErrPronounsLength    = errors.New("pronouns must be between 1 and 40 characters")
-	ErrAboutLength       = errors.New("about must be between 1 and 190 characters")
-	ErrThemeColourRange  = errors.New("theme colour must be between 0 and 16777215")
+	ErrNotFound             = errors.New("user not found")
+	ErrAlreadyExists        = errors.New("email or username already taken")
+	ErrInvalidToken         = errors.New("invalid or expired verification token")
+	ErrTombstoned           = errors.New("email or username was previously used by a deleted account")
+	ErrDisplayNameLength    = errors.New("display name must be between 1 and 32 characters")
+	ErrPronounsLength       = errors.New("pronouns must be between 1 and 40 characters")
+	ErrAboutLength          = errors.New("about must be between 1 and 190 characters")
+	ErrThemeColourRange     = errors.New("theme colour must be between 0 and 16777215")
+	ErrVerificationCooldown = errors.New("please wait before requesting another verification email")
 )
 
 // User holds the core identity fields read from the database.
@@ -185,6 +186,7 @@ type Repository interface {
 	GetByEmail(ctx context.Context, email string) (*Credentials, error)
 	GetCredentialsByID(ctx context.Context, id uuid.UUID) (*Credentials, error)
 	VerifyEmail(ctx context.Context, token string) (uuid.UUID, error)
+	ReplaceVerificationToken(ctx context.Context, userID uuid.UUID, token string, expiresAt time.Time, cooldown time.Duration) error
 	RecordLoginAttempt(ctx context.Context, email, ipAddress string, success bool) error
 	UpdatePasswordHash(ctx context.Context, userID uuid.UUID, hash string) error
 	Update(ctx context.Context, id uuid.UUID, params UpdateParams) (*User, error)
