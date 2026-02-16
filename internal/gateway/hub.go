@@ -192,6 +192,7 @@ func (h *Hub) handleIdentify(client *Client, token string) {
 	}
 
 	sessionID := NewSessionID()
+	readyData.SessionID = sessionID
 
 	client.mu.Lock()
 	client.userID = userID
