@@ -563,7 +563,13 @@ func (s *server) registerRoutes(app *fiber.App) {
 		inviteHandler.AcceptOnboarding)
 
 	// Member routes (mixed: some require active, some do not)
-	memberHandler := api.NewMemberHandler(s.memberRepo, s.roleRepo, s.permReadStore, s.permPublisher, s.gatewayPublisher, log.Logger)
+	memberHandler := api.NewMemberHandler(s.memberRepo, s.roleRepo, s.permReadStore, s.permResolver, s.permPublisher, s.gatewayPublisher, log.Logger)
+
+	// Channel member listing (which server members can see this channel)
+	channelGroup.Get("/:channelID/members",
+		permission.RequirePermission(s.permResolver, permissions.ViewChannels),
+		memberHandler.ListChannelMembers)
+
 	memberGroup := serverGroup.Group("/members")
 	memberGroup.Get("/", requireActive, memberHandler.ListMembers)
 	memberGroup.Get("/@me", memberHandler.GetSelf)

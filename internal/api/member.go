@@ -13,6 +13,8 @@ import (
 	"github.com/uncord-chat/uncord-protocol/events"
 	"github.com/uncord-chat/uncord-protocol/models"
 
+	"github.com/uncord-chat/uncord-protocol/permissions"
+
 	"github.com/uncord-chat/uncord-server/internal/gateway"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 	"github.com/uncord-chat/uncord-server/internal/member"
@@ -22,17 +24,18 @@ import (
 
 // MemberHandler serves member and ban endpoints.
 type MemberHandler struct {
-	members member.Repository
-	roles   role.Repository
-	perms   permission.Store
-	pub     *permission.Publisher
-	gateway *gateway.Publisher
-	log     zerolog.Logger
+	members  member.Repository
+	roles    role.Repository
+	perms    permission.Store
+	resolver *permission.Resolver
+	pub      *permission.Publisher
+	gateway  *gateway.Publisher
+	log      zerolog.Logger
 }
 
 // NewMemberHandler creates a new member handler.
-func NewMemberHandler(members member.Repository, roles role.Repository, perms permission.Store, pub *permission.Publisher, gw *gateway.Publisher, logger zerolog.Logger) *MemberHandler {
-	return &MemberHandler{members: members, roles: roles, perms: perms, pub: pub, gateway: gw, log: logger}
+func NewMemberHandler(members member.Repository, roles role.Repository, perms permission.Store, resolver *permission.Resolver, pub *permission.Publisher, gw *gateway.Publisher, logger zerolog.Logger) *MemberHandler {
+	return &MemberHandler{members: members, roles: roles, perms: perms, resolver: resolver, pub: pub, gateway: gw, log: logger}
 }
 
 // ListMembers handles GET /api/v1/server/members.
@@ -59,6 +62,64 @@ func (h *MemberHandler) ListMembers(c fiber.Ctx) error {
 	for i := range members {
 		result[i] = members[i].ToModel()
 	}
+	return httputil.Success(c, result)
+}
+
+// ListChannelMembers handles GET /api/v1/channels/:channelID/members. It returns only members who have the ViewChannels
+// permission on the specified channel, with cursor-based pagination.
+func (h *MemberHandler) ListChannelMembers(c fiber.Ctx) error {
+	channelID, err := uuid.Parse(c.Params("channelID"))
+	if err != nil {
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid channel ID format")
+	}
+
+	var after *uuid.UUID
+	if raw := c.Query("after"); raw != "" {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid after parameter")
+		}
+		after = &id
+	}
+
+	rawLimit, _ := strconv.Atoi(c.Query("limit"))
+	limit := member.ClampLimit(rawLimit)
+
+	// Fetch members in batches and filter by ViewChannels permission. The batch size is double the requested limit to
+	// minimise round trips when most members have the permission.
+	const batchMultiplier = 2
+	batchSize := limit * batchMultiplier
+
+	var result []models.Member
+	cursor := after
+
+	for len(result) < limit {
+		batch, err := h.members.List(c, cursor, batchSize)
+		if err != nil {
+			h.log.Error().Err(err).Str("handler", "member").Msg("list channel members failed")
+			return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
+		}
+
+		for i := range batch {
+			allowed, err := h.resolver.HasPermission(c, batch[i].UserID, channelID, permissions.ViewChannels)
+			if err != nil {
+				h.log.Error().Err(err).Str("handler", "member").Msg("permission check failed")
+				return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
+			}
+			if allowed {
+				result = append(result, batch[i].ToModel())
+				if len(result) >= limit {
+					break
+				}
+			}
+		}
+
+		if len(batch) < batchSize {
+			break
+		}
+		cursor = &batch[len(batch)-1].UserID
+	}
+
 	return httputil.Success(c, result)
 }
 

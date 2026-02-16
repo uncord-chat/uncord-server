@@ -739,6 +739,38 @@
 							]
 						}
 					}
+				},
+				{
+					"name": "List Channel Members",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/channels/{{channel_id}}/members",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"channels",
+								"{{channel_id}}",
+								"members"
+							],
+							"query": [
+								{
+									"key": "after",
+									"value": "",
+									"description": "Cursor for pagination (user ID of last item)",
+									"disabled": true
+								},
+								{
+									"key": "limit",
+									"value": "50",
+									"description": "Number of members to return (1-100, default 50)",
+									"disabled": true
+								}
+							]
+						}
+					}
 				}
 			]
 		},
