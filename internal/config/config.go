@@ -73,12 +73,16 @@ type Config struct {
 	GatewayMaxConnections      int           // Maximum concurrent WebSocket connections. Default: 10000.
 
 	// Rate Limiting
-	RateLimitAPIRequests       int
-	RateLimitAPIWindowSeconds  int
-	RateLimitAuthCount         int
-	RateLimitAuthWindowSeconds int
-	RateLimitWSCount           int // Maximum WebSocket messages per window. Default: 120.
-	RateLimitWSWindowSeconds   int // WebSocket rate limit window in seconds. Default: 60.
+	RateLimitAPIRequests            int
+	RateLimitAPIWindowSeconds       int
+	RateLimitAuthCount              int
+	RateLimitAuthWindowSeconds      int
+	RateLimitWSCount                int // Maximum WebSocket messages per window. Default: 120.
+	RateLimitWSWindowSeconds        int // WebSocket rate limit window in seconds. Default: 60.
+	RateLimitMsgCount               int // Per-channel message rate limit per user. Default: 5.
+	RateLimitMsgWindowSeconds       int // Per-channel message rate limit window in seconds. Default: 5.
+	RateLimitMsgGlobalCount         int // Global message rate limit per user across all channels. Default: 30.
+	RateLimitMsgGlobalWindowSeconds int // Global message rate limit window in seconds. Default: 60.
 
 	// Upload Limits
 	MaxUploadSizeMB    int
@@ -180,12 +184,16 @@ func Load() (*Config, error) {
 		GatewayReplayBufferSize:    p.int("GATEWAY_REPLAY_BUFFER_SIZE", 1000),
 		GatewayMaxConnections:      p.int("GATEWAY_MAX_CONNECTIONS", 10000),
 
-		RateLimitAPIRequests:       p.int("RATE_LIMIT_API_REQUESTS", 60),
-		RateLimitAPIWindowSeconds:  p.int("RATE_LIMIT_API_WINDOW_SECONDS", 60),
-		RateLimitAuthCount:         p.int("RATE_LIMIT_AUTH_COUNT", 5),
-		RateLimitAuthWindowSeconds: p.int("RATE_LIMIT_AUTH_WINDOW_SECONDS", 300),
-		RateLimitWSCount:           p.int("RATE_LIMIT_WS_COUNT", 120),
-		RateLimitWSWindowSeconds:   p.int("RATE_LIMIT_WS_WINDOW_SECONDS", 60),
+		RateLimitAPIRequests:            p.int("RATE_LIMIT_API_REQUESTS", 60),
+		RateLimitAPIWindowSeconds:       p.int("RATE_LIMIT_API_WINDOW_SECONDS", 60),
+		RateLimitAuthCount:              p.int("RATE_LIMIT_AUTH_COUNT", 5),
+		RateLimitAuthWindowSeconds:      p.int("RATE_LIMIT_AUTH_WINDOW_SECONDS", 300),
+		RateLimitWSCount:                p.int("RATE_LIMIT_WS_COUNT", 120),
+		RateLimitWSWindowSeconds:        p.int("RATE_LIMIT_WS_WINDOW_SECONDS", 60),
+		RateLimitMsgCount:               p.int("RATE_LIMIT_MSG_COUNT", 5),
+		RateLimitMsgWindowSeconds:       p.int("RATE_LIMIT_MSG_WINDOW_SECONDS", 5),
+		RateLimitMsgGlobalCount:         p.int("RATE_LIMIT_MSG_GLOBAL_COUNT", 30),
+		RateLimitMsgGlobalWindowSeconds: p.int("RATE_LIMIT_MSG_GLOBAL_WINDOW_SECONDS", 60),
 
 		MaxUploadSizeMB:    p.int("MAX_UPLOAD_SIZE_MB", 100),
 		MaxAvatarSizeMB:    p.int("MAX_AVATAR_SIZE_MB", 8),
@@ -369,6 +377,18 @@ func (c *Config) validate() error {
 	}
 	if c.RateLimitWSWindowSeconds < 1 {
 		errs = append(errs, fmt.Errorf("RATE_LIMIT_WS_WINDOW_SECONDS must be at least 1"))
+	}
+	if c.RateLimitMsgCount < 1 {
+		errs = append(errs, fmt.Errorf("RATE_LIMIT_MSG_COUNT must be at least 1"))
+	}
+	if c.RateLimitMsgWindowSeconds < 1 {
+		errs = append(errs, fmt.Errorf("RATE_LIMIT_MSG_WINDOW_SECONDS must be at least 1"))
+	}
+	if c.RateLimitMsgGlobalCount < 1 {
+		errs = append(errs, fmt.Errorf("RATE_LIMIT_MSG_GLOBAL_COUNT must be at least 1"))
+	}
+	if c.RateLimitMsgGlobalWindowSeconds < 1 {
+		errs = append(errs, fmt.Errorf("RATE_LIMIT_MSG_GLOBAL_WINDOW_SECONDS must be at least 1"))
 	}
 
 	if c.GatewayHeartbeatIntervalMS < 1000 {

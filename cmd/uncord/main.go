@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/gofiber/fiber/v3"
@@ -467,8 +468,9 @@ func (s *server) registerRoutes(app *fiber.App) {
 		s.attachmentRepo, s.storage, s.rdb, s.cfg.MaxUploadSizeBytes(), log.Logger)
 	channelGroup.Post("/:channelID/attachments",
 		limiter.New(limiter.Config{
-			Max:        s.cfg.RateLimitUploadCount,
-			Expiration: time.Duration(s.cfg.RateLimitUploadWindowSeconds) * time.Second,
+			Max:          s.cfg.RateLimitUploadCount,
+			Expiration:   time.Duration(s.cfg.RateLimitUploadWindowSeconds) * time.Second,
+			KeyGenerator: userKeyGenerator,
 		}),
 		permission.RequirePermission(s.permResolver, permissions.AttachFiles),
 		attachmentHandler.Upload)
@@ -481,6 +483,16 @@ func (s *server) registerRoutes(app *fiber.App) {
 		permission.RequirePermission(s.permResolver, permissions.ViewChannels|permissions.ReadMessageHistory),
 		messageHandler.ListMessages)
 	channelGroup.Post("/:channelID/messages",
+		limiter.New(limiter.Config{
+			Max:          s.cfg.RateLimitMsgCount,
+			Expiration:   time.Duration(s.cfg.RateLimitMsgWindowSeconds) * time.Second,
+			KeyGenerator: userChannelKeyGenerator,
+		}),
+		limiter.New(limiter.Config{
+			Max:          s.cfg.RateLimitMsgGlobalCount,
+			Expiration:   time.Duration(s.cfg.RateLimitMsgGlobalWindowSeconds) * time.Second,
+			KeyGenerator: userKeyGenerator,
+		}),
 		permission.RequirePermission(s.permResolver, permissions.SendMessages),
 		messageHandler.CreateMessage)
 
@@ -684,6 +696,24 @@ func runWithBackoff(ctx context.Context, name string, fn func(context.Context) e
 		}
 		return
 	}
+}
+
+// userKeyGenerator returns the authenticated user's ID as the rate limiter key. This ensures per-user rate limiting
+// regardless of proxy topology or shared IP addresses. Falls back to client IP for unauthenticated requests.
+func userKeyGenerator(c fiber.Ctx) string {
+	if userID, ok := c.Locals("userID").(uuid.UUID); ok {
+		return "user:" + userID.String()
+	}
+	return c.IP()
+}
+
+// userChannelKeyGenerator returns a composite key of user ID and channel ID, giving each user an independent rate limit
+// per channel. Falls back to client IP for unauthenticated requests.
+func userChannelKeyGenerator(c fiber.Ctx) string {
+	if userID, ok := c.Locals("userID").(uuid.UUID); ok {
+		return "user:" + userID.String() + ":ch:" + c.Params("channelID")
+	}
+	return c.IP()
 }
 
 // fiberStatusToAPICode maps an HTTP status code from Fiber's built-in errors (404, 405, etc.) to the closest protocol

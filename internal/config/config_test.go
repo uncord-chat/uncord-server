@@ -36,6 +36,8 @@ func TestLoadDefaults(t *testing.T) {
 		"GATEWAY_HEARTBEAT_INTERVAL_MS", "GATEWAY_SESSION_TTL_SECONDS",
 		"GATEWAY_REPLAY_BUFFER_SIZE", "GATEWAY_MAX_CONNECTIONS",
 		"RATE_LIMIT_WS_COUNT", "RATE_LIMIT_WS_WINDOW_SECONDS",
+		"RATE_LIMIT_MSG_COUNT", "RATE_LIMIT_MSG_WINDOW_SECONDS",
+		"RATE_LIMIT_MSG_GLOBAL_COUNT", "RATE_LIMIT_MSG_GLOBAL_WINDOW_SECONDS",
 	}
 	for _, k := range keys {
 		t.Setenv(k, "")
@@ -161,6 +163,18 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.RateLimitWSWindowSeconds != 60 {
 		t.Errorf("RateLimitWSWindowSeconds = %d, want 60", cfg.RateLimitWSWindowSeconds)
+	}
+	if cfg.RateLimitMsgCount != 5 {
+		t.Errorf("RateLimitMsgCount = %d, want 5", cfg.RateLimitMsgCount)
+	}
+	if cfg.RateLimitMsgWindowSeconds != 5 {
+		t.Errorf("RateLimitMsgWindowSeconds = %d, want 5", cfg.RateLimitMsgWindowSeconds)
+	}
+	if cfg.RateLimitMsgGlobalCount != 30 {
+		t.Errorf("RateLimitMsgGlobalCount = %d, want 30", cfg.RateLimitMsgGlobalCount)
+	}
+	if cfg.RateLimitMsgGlobalWindowSeconds != 60 {
+		t.Errorf("RateLimitMsgGlobalWindowSeconds = %d, want 60", cfg.RateLimitMsgGlobalWindowSeconds)
 	}
 
 	// Upload limit defaults
@@ -703,36 +717,42 @@ func TestLoadValidationDeletionTombstoneRetentionNegative(t *testing.T) {
 	t.Setenv("SERVER_SECRET", testServerSecret)
 
 	cfg := &Config{
-		JWTSecret:                    "test-secret-for-defaults-minimum-32",
-		ServerPort:                   8080,
-		DatabaseMaxConn:              25,
-		DatabaseMinConn:              5,
-		JWTAccessTTL:                 15 * time.Minute,
-		JWTRefreshTTL:                7 * 24 * time.Hour,
-		Argon2Memory:                 65536,
-		Argon2Iterations:             3,
-		Argon2Parallelism:            2,
-		MaxUploadSizeMB:              100,
-		MaxAvatarSizeMB:              8,
-		MaxAvatarDimension:           1080,
-		StorageBackend:               "local",
-		StorageLocalPath:             "/data/uncord/media",
-		MaxAttachmentsPerMessage:     10,
-		AttachmentOrphanTTL:          time.Hour,
-		RateLimitUploadCount:         10,
-		RateLimitUploadWindowSeconds: 60,
-		MaxChannels:                  500,
-		MaxCategories:                50,
-		RateLimitAPIRequests:         60,
-		RateLimitAPIWindowSeconds:    60,
-		RateLimitAuthCount:           5,
-		RateLimitAuthWindowSeconds:   300,
-		ServerSecret:                 testServerSecret,
-		MFATicketTTL:                 5 * time.Minute,
-		LoginAttemptRetention:        2160 * time.Hour,
-		DeletionTombstoneRetention:   -time.Hour,
-		DataCleanupInterval:          12 * time.Hour,
-		MaxMessageLength:             4000,
+		JWTSecret:                       "test-secret-for-defaults-minimum-32",
+		ServerPort:                      8080,
+		DatabaseMaxConn:                 25,
+		DatabaseMinConn:                 5,
+		JWTAccessTTL:                    15 * time.Minute,
+		JWTRefreshTTL:                   7 * 24 * time.Hour,
+		Argon2Memory:                    65536,
+		Argon2Iterations:                3,
+		Argon2Parallelism:               2,
+		MaxUploadSizeMB:                 100,
+		MaxAvatarSizeMB:                 8,
+		MaxAvatarDimension:              1080,
+		StorageBackend:                  "local",
+		StorageLocalPath:                "/data/uncord/media",
+		MaxAttachmentsPerMessage:        10,
+		AttachmentOrphanTTL:             time.Hour,
+		RateLimitUploadCount:            10,
+		RateLimitUploadWindowSeconds:    60,
+		MaxChannels:                     500,
+		MaxCategories:                   50,
+		RateLimitAPIRequests:            60,
+		RateLimitAPIWindowSeconds:       60,
+		RateLimitAuthCount:              5,
+		RateLimitAuthWindowSeconds:      300,
+		RateLimitWSCount:                120,
+		RateLimitWSWindowSeconds:        60,
+		RateLimitMsgCount:               5,
+		RateLimitMsgWindowSeconds:       5,
+		RateLimitMsgGlobalCount:         30,
+		RateLimitMsgGlobalWindowSeconds: 60,
+		ServerSecret:                    testServerSecret,
+		MFATicketTTL:                    5 * time.Minute,
+		LoginAttemptRetention:           2160 * time.Hour,
+		DeletionTombstoneRetention:      -time.Hour,
+		DataCleanupInterval:             12 * time.Hour,
+		MaxMessageLength:                4000,
 	}
 	err := cfg.validate()
 	if err == nil {
