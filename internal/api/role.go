@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -8,8 +9,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
+	"github.com/uncord-chat/uncord-protocol/events"
 	"github.com/uncord-chat/uncord-protocol/models"
 
+	"github.com/uncord-chat/uncord-server/internal/gateway"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 	"github.com/uncord-chat/uncord-server/internal/permission"
 	"github.com/uncord-chat/uncord-server/internal/role"
@@ -19,13 +22,14 @@ import (
 type RoleHandler struct {
 	roles    role.Repository
 	perms    *permission.Publisher
+	gateway  *gateway.Publisher
 	maxRoles int
 	log      zerolog.Logger
 }
 
 // NewRoleHandler creates a new role handler.
-func NewRoleHandler(roles role.Repository, perms *permission.Publisher, maxRoles int, logger zerolog.Logger) *RoleHandler {
-	return &RoleHandler{roles: roles, perms: perms, maxRoles: maxRoles, log: logger}
+func NewRoleHandler(roles role.Repository, perms *permission.Publisher, gw *gateway.Publisher, maxRoles int, logger zerolog.Logger) *RoleHandler {
+	return &RoleHandler{roles: roles, perms: perms, gateway: gw, maxRoles: maxRoles, log: logger}
 }
 
 // ListRoles handles GET /api/v1/server/roles.
@@ -77,13 +81,22 @@ func (h *RoleHandler) CreateRole(c fiber.Ctx) error {
 		return h.mapRoleError(c, err)
 	}
 
+	result := toRoleModel(created)
+	if h.gateway != nil {
+		go func() {
+			if err := h.gateway.Publish(context.Background(), events.RoleCreate, result); err != nil {
+				h.log.Warn().Err(err).Str("role_id", created.ID.String()).Msg("Gateway publish failed")
+			}
+		}()
+	}
+
 	if h.perms != nil {
 		if err := h.perms.InvalidateAll(c); err != nil {
 			h.log.Warn().Err(err).Msg("failed to invalidate permission cache after role creation")
 		}
 	}
 
-	return httputil.SuccessStatus(c, fiber.StatusCreated, toRoleModel(created))
+	return httputil.SuccessStatus(c, fiber.StatusCreated, result)
 }
 
 // UpdateRole handles PATCH /api/v1/server/roles/:roleID.
@@ -151,13 +164,22 @@ func (h *RoleHandler) UpdateRole(c fiber.Ctx) error {
 		return h.mapRoleError(c, err)
 	}
 
+	result := toRoleModel(updated)
+	if h.gateway != nil {
+		go func() {
+			if err := h.gateway.Publish(context.Background(), events.RoleUpdate, result); err != nil {
+				h.log.Warn().Err(err).Str("role_id", id.String()).Msg("Gateway publish failed")
+			}
+		}()
+	}
+
 	if h.perms != nil {
 		if err := h.perms.InvalidateAll(c); err != nil {
 			h.log.Warn().Err(err).Msg("failed to invalidate permission cache after role update")
 		}
 	}
 
-	return httputil.Success(c, toRoleModel(updated))
+	return httputil.Success(c, result)
 }
 
 // DeleteRole handles DELETE /api/v1/server/roles/:roleID.
@@ -190,6 +212,14 @@ func (h *RoleHandler) DeleteRole(c fiber.Ctx) error {
 
 	if err := h.roles.Delete(c, id); err != nil {
 		return h.mapRoleError(c, err)
+	}
+
+	if h.gateway != nil {
+		go func() {
+			if err := h.gateway.Publish(context.Background(), events.RoleDelete, models.RoleDeleteData{ID: id.String()}); err != nil {
+				h.log.Warn().Err(err).Str("role_id", id.String()).Msg("Gateway publish failed")
+			}
+		}()
 	}
 
 	if h.perms != nil {

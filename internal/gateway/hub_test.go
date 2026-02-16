@@ -15,6 +15,7 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/channel"
 	"github.com/uncord-chat/uncord-server/internal/config"
 	"github.com/uncord-chat/uncord-server/internal/member"
+	"github.com/uncord-chat/uncord-server/internal/presence"
 	"github.com/uncord-chat/uncord-server/internal/role"
 	servercfg "github.com/uncord-chat/uncord-server/internal/server"
 	"github.com/uncord-chat/uncord-server/internal/user"
@@ -194,7 +195,7 @@ func TestAssembleReady(t *testing.T) {
 		&fakeMemberRepo{members: []member.MemberWithProfile{
 			{UserID: userID, Username: "testuser", Status: "active", RoleIDs: []uuid.UUID{roleID}},
 		}},
-		zerolog.Nop(),
+		nil, nil, zerolog.Nop(),
 	)
 
 	ctx := context.Background()
@@ -226,7 +227,7 @@ func TestHandlePubSubEventBroadcast(t *testing.T) {
 	cfg := testConfig()
 	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 
-	hub := NewHub(rdb, cfg, sessions, nil, nil, nil, nil, nil, nil, zerolog.Nop())
+	hub := NewHub(rdb, cfg, sessions, nil, nil, nil, nil, nil, nil, nil, nil, zerolog.Nop())
 
 	userID := uuid.New()
 	client := &Client{
@@ -276,7 +277,7 @@ func TestRegisterDisplacesExisting(t *testing.T) {
 	cfg := testConfig()
 	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 
-	hub := NewHub(rdb, cfg, sessions, nil, nil, nil, nil, nil, nil, zerolog.Nop())
+	hub := NewHub(rdb, cfg, sessions, nil, nil, nil, nil, nil, nil, nil, nil, zerolog.Nop())
 
 	userID := uuid.New()
 
@@ -332,7 +333,7 @@ func TestRegisterMaxConnections(t *testing.T) {
 	cfg.GatewayMaxConnections = 1
 	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 
-	hub := NewHub(rdb, cfg, sessions, nil, nil, nil, nil, nil, nil, zerolog.Nop())
+	hub := NewHub(rdb, cfg, sessions, nil, nil, nil, nil, nil, nil, nil, nil, zerolog.Nop())
 
 	// Register one client.
 	uid1 := uuid.New()
@@ -465,6 +466,7 @@ func TestReadyDataJSON(t *testing.T) {
 		Channels:  []models.Channel{{ID: "c1", Name: "general"}},
 		Roles:     []models.Role{{ID: "r1", Name: "everyone"}},
 		Members:   []models.Member{{User: models.MemberUser{ID: "u1", Username: "alice"}}},
+		Presences: []models.PresenceState{{UserID: "u1", Status: "online"}},
 	}
 
 	data, err := json.Marshal(ready)
@@ -481,5 +483,108 @@ func TestReadyDataJSON(t *testing.T) {
 	}
 	if decoded.User.Username != "alice" {
 		t.Errorf("User.Username = %q, want %q", decoded.User.Username, "alice")
+	}
+	if len(decoded.Presences) != 1 {
+		t.Fatalf("len(Presences) = %d, want 1", len(decoded.Presences))
+	}
+	if decoded.Presences[0].Status != "online" {
+		t.Errorf("Presences[0].Status = %q, want %q", decoded.Presences[0].Status, "online")
+	}
+}
+
+func TestAssembleReadyWithPresences(t *testing.T) {
+	t.Parallel()
+	_, rdb := newTestRedis(t)
+
+	userID := uuid.New()
+	cfg := testConfig()
+	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
+	presenceStore := presence.NewStore(rdb)
+
+	// Set user as online before assembling READY.
+	ctx := context.Background()
+	if err := presenceStore.Set(ctx, userID, "online"); err != nil {
+		t.Fatalf("presence.Set() error = %v", err)
+	}
+
+	hub := NewHub(rdb, cfg, sessions, nil,
+		&fakeUserRepo{user: &user.User{ID: userID, Email: "a@b.com", Username: "a"}},
+		&fakeServerRepo{cfg: &servercfg.Config{ID: uuid.New(), Name: "S", OwnerID: userID}},
+		&fakeChannelRepo{},
+		&fakeRoleRepo{},
+		&fakeMemberRepo{members: []member.MemberWithProfile{
+			{UserID: userID, Username: "a", Status: "active"},
+		}},
+		presenceStore, nil, zerolog.Nop(),
+	)
+
+	ready, err := hub.assembleReady(ctx, userID)
+	if err != nil {
+		t.Fatalf("assembleReady() error = %v", err)
+	}
+	if len(ready.Presences) != 1 {
+		t.Fatalf("len(Presences) = %d, want 1", len(ready.Presences))
+	}
+	if ready.Presences[0].UserID != userID.String() {
+		t.Errorf("Presences[0].UserID = %q, want %q", ready.Presences[0].UserID, userID.String())
+	}
+}
+
+func TestHandlePubSubEventEphemeral(t *testing.T) {
+	t.Parallel()
+	_, rdb := newTestRedis(t)
+	cfg := testConfig()
+	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
+
+	hub := NewHub(rdb, cfg, sessions, nil, nil, nil, nil, nil, nil, nil, nil, zerolog.Nop())
+
+	userID := uuid.New()
+	client := &Client{
+		hub:  hub,
+		send: make(chan []byte, 256),
+		log:  zerolog.Nop(),
+	}
+	client.mu.Lock()
+	client.userID = userID
+	client.sessionID = "test-session"
+	client.identified = true
+	client.mu.Unlock()
+
+	hub.mu.Lock()
+	hub.clients[userID] = client
+	hub.mu.Unlock()
+
+	// The envelope omits channel_id to avoid triggering the permission filter (which requires a non-nil resolver).
+	// Channel-scoped permission filtering is exercised separately. This test focuses on the ephemeral dispatch path
+	// (no sequence number, no replay buffer).
+	env := envelope{Type: string(events.TypingStart), Data: map[string]string{
+		"user_id": uuid.New().String(),
+	}}
+	payload, _ := json.Marshal(env)
+
+	hub.handlePubSubEvent(context.Background(), string(payload))
+
+	select {
+	case msg := <-client.send:
+		var f events.Frame
+		if err := json.Unmarshal(msg, &f); err != nil {
+			t.Fatalf("unmarshal frame: %v", err)
+		}
+		if f.Op != events.OpcodeDispatch {
+			t.Errorf("Op = %d, want %d", f.Op, events.OpcodeDispatch)
+		}
+		if f.Type == nil || *f.Type != events.TypingStart {
+			t.Errorf("Type = %v, want %q", f.Type, events.TypingStart)
+		}
+		if f.Seq != nil {
+			t.Errorf("Seq = %v, want nil (ephemeral)", f.Seq)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for ephemeral dispatch")
+	}
+
+	// Verify no sequence was consumed.
+	if seq := client.currentSeq(); seq != 0 {
+		t.Errorf("currentSeq() = %d, want 0 (ephemeral should not increment)", seq)
 	}
 }

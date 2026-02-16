@@ -94,6 +94,30 @@ func TestNewDispatchFrame(t *testing.T) {
 	}
 }
 
+func TestNewEphemeralDispatchFrame(t *testing.T) {
+	t.Parallel()
+
+	payload := json.RawMessage(`{"channel_id":"c1","user_id":"u1"}`)
+	raw, err := NewEphemeralDispatchFrame(events.TypingStart, payload)
+	if err != nil {
+		t.Fatalf("NewEphemeralDispatchFrame() error = %v", err)
+	}
+
+	var f events.Frame
+	if err := json.Unmarshal(raw, &f); err != nil {
+		t.Fatalf("unmarshal frame: %v", err)
+	}
+	if f.Op != events.OpcodeDispatch {
+		t.Errorf("Op = %d, want %d", f.Op, events.OpcodeDispatch)
+	}
+	if f.Seq != nil {
+		t.Errorf("Seq = %v, want nil (ephemeral)", f.Seq)
+	}
+	if f.Type == nil || *f.Type != events.TypingStart {
+		t.Errorf("Type = %v, want %q", f.Type, events.TypingStart)
+	}
+}
+
 func TestNewReconnectFrame(t *testing.T) {
 	t.Parallel()
 

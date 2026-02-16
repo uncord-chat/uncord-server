@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"strconv"
 	"time"
@@ -9,8 +10,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
+	"github.com/uncord-chat/uncord-protocol/events"
 	"github.com/uncord-chat/uncord-protocol/models"
 
+	"github.com/uncord-chat/uncord-server/internal/gateway"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 	"github.com/uncord-chat/uncord-server/internal/invite"
 	"github.com/uncord-chat/uncord-server/internal/member"
@@ -22,12 +25,13 @@ type InviteHandler struct {
 	invites invite.Repository
 	members member.Repository
 	users   user.Repository
+	gateway *gateway.Publisher
 	log     zerolog.Logger
 }
 
 // NewInviteHandler creates a new invite handler.
-func NewInviteHandler(invites invite.Repository, members member.Repository, users user.Repository, logger zerolog.Logger) *InviteHandler {
-	return &InviteHandler{invites: invites, members: members, users: users, log: logger}
+func NewInviteHandler(invites invite.Repository, members member.Repository, users user.Repository, gw *gateway.Publisher, logger zerolog.Logger) *InviteHandler {
+	return &InviteHandler{invites: invites, members: members, users: users, gateway: gw, log: logger}
 }
 
 // CreateInvite handles POST /api/v1/server/invites.
@@ -203,7 +207,16 @@ func (h *InviteHandler) AcceptOnboarding(c fiber.Ctx) error {
 		return h.mapInviteError(c, err)
 	}
 
-	return httputil.Success(c, toMemberModel(m))
+	result := toMemberModel(m)
+	if h.gateway != nil {
+		go func() {
+			if err := h.gateway.Publish(context.Background(), events.MemberAdd, result); err != nil {
+				h.log.Warn().Err(err).Str("user_id", userID.String()).Msg("Gateway publish failed")
+			}
+		}()
+	}
+
+	return httputil.Success(c, result)
 }
 
 // toInviteModel converts the internal invite type to the protocol response type.

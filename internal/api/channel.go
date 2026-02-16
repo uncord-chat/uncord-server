@@ -9,10 +9,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
+	"github.com/uncord-chat/uncord-protocol/events"
 	"github.com/uncord-chat/uncord-protocol/models"
 	"github.com/uncord-chat/uncord-protocol/permissions"
 
 	"github.com/uncord-chat/uncord-server/internal/channel"
+	"github.com/uncord-chat/uncord-server/internal/gateway"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 	"github.com/uncord-chat/uncord-server/internal/invite"
 	"github.com/uncord-chat/uncord-server/internal/member"
@@ -30,6 +32,7 @@ type ChannelHandler struct {
 	members     member.Repository
 	onboarding  onboardingConfigSource
 	resolver    *permission.Resolver
+	gateway     *gateway.Publisher
 	maxChannels int
 	log         zerolog.Logger
 }
@@ -40,6 +43,7 @@ func NewChannelHandler(
 	members member.Repository,
 	onboarding onboardingConfigSource,
 	resolver *permission.Resolver,
+	gw *gateway.Publisher,
 	maxChannels int,
 	logger zerolog.Logger,
 ) *ChannelHandler {
@@ -48,6 +52,7 @@ func NewChannelHandler(
 		members:     members,
 		onboarding:  onboarding,
 		resolver:    resolver,
+		gateway:     gw,
 		maxChannels: maxChannels,
 		log:         logger,
 	}
@@ -189,7 +194,16 @@ func (h *ChannelHandler) CreateChannel(c fiber.Ctx) error {
 		return h.mapChannelError(c, err)
 	}
 
-	return httputil.SuccessStatus(c, fiber.StatusCreated, toChannelModel(ch))
+	result := toChannelModel(ch)
+	if h.gateway != nil {
+		go func() {
+			if err := h.gateway.Publish(context.Background(), events.ChannelCreate, result); err != nil {
+				h.log.Warn().Err(err).Str("channel_id", ch.ID.String()).Msg("Gateway publish failed")
+			}
+		}()
+	}
+
+	return httputil.SuccessStatus(c, fiber.StatusCreated, result)
 }
 
 // GetChannel handles GET /api/v1/channels/:channelID.
@@ -258,7 +272,16 @@ func (h *ChannelHandler) UpdateChannel(c fiber.Ctx) error {
 		return h.mapChannelError(c, err)
 	}
 
-	return httputil.Success(c, toChannelModel(ch))
+	result := toChannelModel(ch)
+	if h.gateway != nil {
+		go func() {
+			if err := h.gateway.Publish(context.Background(), events.ChannelUpdate, result); err != nil {
+				h.log.Warn().Err(err).Str("channel_id", id.String()).Msg("Gateway publish failed")
+			}
+		}()
+	}
+
+	return httputil.Success(c, result)
 }
 
 // DeleteChannel handles DELETE /api/v1/channels/:channelID.
@@ -270,6 +293,14 @@ func (h *ChannelHandler) DeleteChannel(c fiber.Ctx) error {
 
 	if err := h.channels.Delete(c, id); err != nil {
 		return h.mapChannelError(c, err)
+	}
+
+	if h.gateway != nil {
+		go func() {
+			if err := h.gateway.Publish(context.Background(), events.ChannelDelete, models.ChannelDeleteData{ID: id.String()}); err != nil {
+				h.log.Warn().Err(err).Str("channel_id", id.String()).Msg("Gateway publish failed")
+			}
+		}()
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)

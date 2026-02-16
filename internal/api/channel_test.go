@@ -269,7 +269,7 @@ func testChannelApp(t *testing.T, repo channel.Repository, resolver *permission.
 	t.Helper()
 	memberRepo := newFakeChannelMemberRepo(userID)
 	onboarding := &fakeOnboardingConfig{}
-	handler := NewChannelHandler(repo, memberRepo, onboarding, resolver, maxChannels, zerolog.Nop())
+	handler := NewChannelHandler(repo, memberRepo, onboarding, resolver, nil, maxChannels, zerolog.Nop())
 	app := fiber.New()
 
 	app.Use(fakeAuth(userID))
@@ -398,7 +398,7 @@ func TestListChannels_PendingMemberSeesWelcomeChannel(t *testing.T) {
 	memberRepo.statuses[userID] = models.MemberStatusPending
 
 	onboarding := &fakeOnboardingConfig{cfg: &invite.OnboardingConfig{WelcomeChannelID: &welcomeCh.ID}}
-	handler := NewChannelHandler(repo, memberRepo, onboarding, allowAllResolver(), 500, zerolog.Nop())
+	handler := NewChannelHandler(repo, memberRepo, onboarding, allowAllResolver(), nil, 500, zerolog.Nop())
 
 	app := fiber.New()
 	app.Use(fakeAuth(userID))
@@ -437,7 +437,7 @@ func TestListChannels_PendingMemberNoWelcomeChannel(t *testing.T) {
 	memberRepo.statuses[userID] = models.MemberStatusPending
 
 	onboarding := &fakeOnboardingConfig{}
-	handler := NewChannelHandler(repo, memberRepo, onboarding, allowAllResolver(), 500, zerolog.Nop())
+	handler := NewChannelHandler(repo, memberRepo, onboarding, allowAllResolver(), nil, 500, zerolog.Nop())
 
 	app := fiber.New()
 	app.Use(fakeAuth(userID))
@@ -468,7 +468,7 @@ func TestListChannels_NonMemberSeesEmpty(t *testing.T) {
 
 	memberRepo := &fakeChannelMemberRepo{statuses: map[uuid.UUID]string{}}
 	onboarding := &fakeOnboardingConfig{}
-	handler := NewChannelHandler(repo, memberRepo, onboarding, allowAllResolver(), 500, zerolog.Nop())
+	handler := NewChannelHandler(repo, memberRepo, onboarding, allowAllResolver(), nil, 500, zerolog.Nop())
 
 	app := fiber.New()
 	app.Use(fakeAuth(userID))

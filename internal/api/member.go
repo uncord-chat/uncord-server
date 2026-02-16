@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"strconv"
 	"time"
@@ -9,8 +10,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
+	"github.com/uncord-chat/uncord-protocol/events"
 	"github.com/uncord-chat/uncord-protocol/models"
 
+	"github.com/uncord-chat/uncord-server/internal/gateway"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 	"github.com/uncord-chat/uncord-server/internal/member"
 	"github.com/uncord-chat/uncord-server/internal/permission"
@@ -23,12 +26,13 @@ type MemberHandler struct {
 	roles   role.Repository
 	perms   permission.Store
 	pub     *permission.Publisher
+	gateway *gateway.Publisher
 	log     zerolog.Logger
 }
 
 // NewMemberHandler creates a new member handler.
-func NewMemberHandler(members member.Repository, roles role.Repository, perms permission.Store, pub *permission.Publisher, logger zerolog.Logger) *MemberHandler {
-	return &MemberHandler{members: members, roles: roles, perms: perms, pub: pub, log: logger}
+func NewMemberHandler(members member.Repository, roles role.Repository, perms permission.Store, pub *permission.Publisher, gw *gateway.Publisher, logger zerolog.Logger) *MemberHandler {
+	return &MemberHandler{members: members, roles: roles, perms: perms, pub: pub, gateway: gw, log: logger}
 }
 
 // ListMembers handles GET /api/v1/server/members.
@@ -93,7 +97,10 @@ func (h *MemberHandler) UpdateSelf(c fiber.Ctx) error {
 	if err != nil {
 		return h.mapMemberError(c, err)
 	}
-	return httputil.Success(c, toMemberModel(updated))
+
+	result := toMemberModel(updated)
+	h.publishMemberUpdate(result, userID.String())
+	return httputil.Success(c, result)
 }
 
 // Leave handles DELETE /api/v1/server/members/@me.
@@ -111,6 +118,7 @@ func (h *MemberHandler) Leave(c fiber.Ctx) error {
 		return h.mapMemberError(c, err)
 	}
 
+	h.publishMemberRemove(userID.String())
 	h.invalidateUser(c, userID)
 	return c.SendStatus(fiber.StatusNoContent)
 }
@@ -158,7 +166,10 @@ func (h *MemberHandler) UpdateMember(c fiber.Ctx) error {
 	if err != nil {
 		return h.mapMemberError(c, err)
 	}
-	return httputil.Success(c, toMemberModel(updated))
+
+	result := toMemberModel(updated)
+	h.publishMemberUpdate(result, targetID.String())
+	return httputil.Success(c, result)
 }
 
 // KickMember handles DELETE /api/v1/server/members/:userID.
@@ -184,6 +195,7 @@ func (h *MemberHandler) KickMember(c fiber.Ctx) error {
 		return h.mapMemberError(c, err)
 	}
 
+	h.publishMemberRemove(targetID.String())
 	h.invalidateUser(c, targetID)
 	return c.SendStatus(fiber.StatusNoContent)
 }
@@ -225,8 +237,10 @@ func (h *MemberHandler) SetTimeout(c fiber.Ctx) error {
 		return h.mapMemberError(c, err)
 	}
 
+	result := toMemberModel(updated)
+	h.publishMemberUpdate(result, targetID.String())
 	h.invalidateUser(c, targetID)
-	return httputil.Success(c, toMemberModel(updated))
+	return httputil.Success(c, result)
 }
 
 // ClearTimeout handles DELETE /api/v1/server/members/:userID/timeout.
@@ -241,8 +255,10 @@ func (h *MemberHandler) ClearTimeout(c fiber.Ctx) error {
 		return h.mapMemberError(c, err)
 	}
 
+	result := toMemberModel(updated)
+	h.publishMemberUpdate(result, targetID.String())
 	h.invalidateUser(c, targetID)
-	return httputil.Success(c, toMemberModel(updated))
+	return httputil.Success(c, result)
 }
 
 // BanMember handles PUT /api/v1/server/bans/:userID.
@@ -282,6 +298,7 @@ func (h *MemberHandler) BanMember(c fiber.Ctx) error {
 		return h.mapMemberError(c, err)
 	}
 
+	h.publishMemberRemove(targetID.String())
 	h.invalidateUser(c, targetID)
 	return c.SendStatus(fiber.StatusNoContent)
 }
@@ -369,7 +386,10 @@ func (h *MemberHandler) AssignRole(c fiber.Ctx) error {
 	if err != nil {
 		return h.mapMemberError(c, err)
 	}
-	return httputil.Success(c, toMemberModel(updated))
+
+	result := toMemberModel(updated)
+	h.publishMemberUpdate(result, targetID.String())
+	return httputil.Success(c, result)
 }
 
 // RemoveRole handles DELETE /api/v1/server/members/:userID/roles/:roleID.
@@ -413,6 +433,12 @@ func (h *MemberHandler) RemoveRole(c fiber.Ctx) error {
 
 	if err := h.members.RemoveRole(c, targetID, roleID); err != nil {
 		return h.mapMemberError(c, err)
+	}
+
+	if h.gateway != nil {
+		if updated, err := h.members.GetByUserID(c, targetID); err == nil {
+			h.publishMemberUpdate(toMemberModel(updated), targetID.String())
+		}
 	}
 
 	h.invalidateUser(c, targetID)
@@ -459,6 +485,30 @@ func (h *MemberHandler) checkNotOwner(c fiber.Ctx, userID uuid.UUID) bool {
 		return true
 	}
 	return false
+}
+
+// publishMemberUpdate fires a best-effort MEMBER_UPDATE gateway event. Uses context.Background because Fiber recycles
+// the request context after the handler returns.
+func (h *MemberHandler) publishMemberUpdate(m models.Member, userID string) {
+	if h.gateway != nil {
+		go func() {
+			if err := h.gateway.Publish(context.Background(), events.MemberUpdate, m); err != nil {
+				h.log.Warn().Err(err).Str("user_id", userID).Msg("Gateway publish failed")
+			}
+		}()
+	}
+}
+
+// publishMemberRemove fires a best-effort MEMBER_REMOVE gateway event. Uses context.Background because Fiber recycles
+// the request context after the handler returns.
+func (h *MemberHandler) publishMemberRemove(userID string) {
+	if h.gateway != nil {
+		go func() {
+			if err := h.gateway.Publish(context.Background(), events.MemberRemove, models.MemberRemoveData{UserID: userID}); err != nil {
+				h.log.Warn().Err(err).Str("user_id", userID).Msg("Gateway publish failed")
+			}
+		}()
+	}
 }
 
 // invalidateUser publishes a cache invalidation for the given user. Failures are logged but not surfaced to the caller

@@ -20,6 +20,7 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/config"
 	"github.com/uncord-chat/uncord-server/internal/member"
 	"github.com/uncord-chat/uncord-server/internal/permission"
+	"github.com/uncord-chat/uncord-server/internal/presence"
 	"github.com/uncord-chat/uncord-server/internal/role"
 	servercfg "github.com/uncord-chat/uncord-server/internal/server"
 	"github.com/uncord-chat/uncord-server/internal/user"
@@ -28,18 +29,20 @@ import (
 // Hub is the central WebSocket connection registry and event distributor. It manages client connections, subscribes to
 // gateway events via Valkey pub/sub, and dispatches events to connected clients with permission filtering.
 type Hub struct {
-	clients  map[uuid.UUID]*Client
-	mu       sync.RWMutex
-	rdb      *redis.Client
-	cfg      *config.Config
-	sessions *SessionStore
-	resolver *permission.Resolver
-	users    user.Repository
-	server   servercfg.Repository
-	channels channel.Repository
-	roles    role.Repository
-	members  member.Repository
-	log      zerolog.Logger
+	clients   map[uuid.UUID]*Client
+	mu        sync.RWMutex
+	rdb       *redis.Client
+	cfg       *config.Config
+	sessions  *SessionStore
+	resolver  *permission.Resolver
+	users     user.Repository
+	server    servercfg.Repository
+	channels  channel.Repository
+	roles     role.Repository
+	members   member.Repository
+	presence  *presence.Store
+	publisher *Publisher
+	log       zerolog.Logger
 }
 
 // NewHub creates a new gateway hub.
@@ -53,20 +56,24 @@ func NewHub(
 	channels channel.Repository,
 	roles role.Repository,
 	members member.Repository,
+	presenceStore *presence.Store,
+	publisher *Publisher,
 	logger zerolog.Logger,
 ) *Hub {
 	return &Hub{
-		clients:  make(map[uuid.UUID]*Client),
-		rdb:      rdb,
-		cfg:      cfg,
-		sessions: sessions,
-		resolver: resolver,
-		users:    users,
-		server:   server,
-		channels: channels,
-		roles:    roles,
-		members:  members,
-		log:      logger.With().Str("component", "gateway").Logger(),
+		clients:   make(map[uuid.UUID]*Client),
+		rdb:       rdb,
+		cfg:       cfg,
+		sessions:  sessions,
+		resolver:  resolver,
+		users:     users,
+		server:    server,
+		channels:  channels,
+		roles:     roles,
+		members:   members,
+		presence:  presenceStore,
+		publisher: publisher,
+		log:       logger.With().Str("component", "gateway").Logger(),
 	}
 }
 
@@ -140,6 +147,10 @@ func (h *Hub) register(client *Client) error {
 	return nil
 }
 
+// offlineDelay is the time to wait after a client disconnects before publishing an offline presence event. This grace
+// period allows the client to resume without triggering a false offline/online cycle.
+const offlineDelay = 10 * time.Second
+
 // unregister removes a client from the Hub and persists its session for future resume.
 func (h *Hub) unregister(client *Client) {
 	h.mu.Lock()
@@ -161,9 +172,35 @@ func (h *Hub) unregister(client *Client) {
 		if err := h.sessions.Save(ctx, client.SessionID(), userID, client.currentSeq()); err != nil {
 			h.log.Warn().Err(err).Stringer("user_id", userID).Msg("Failed to save session on disconnect")
 		}
+
+		if h.presence != nil {
+			go h.delayedOffline(userID)
+		}
 	}
 
 	h.log.Debug().Stringer("user_id", userID).Msg("Client unregistered")
+}
+
+// delayedOffline waits for the offline grace period then publishes an offline presence event if the user has not
+// reconnected.
+func (h *Hub) delayedOffline(userID uuid.UUID) {
+	time.Sleep(offlineDelay)
+
+	h.mu.RLock()
+	_, reconnected := h.clients[userID]
+	h.mu.RUnlock()
+
+	if reconnected {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := h.presence.Delete(ctx, userID); err != nil {
+		h.log.Warn().Err(err).Stringer("user_id", userID).Msg("Failed to delete presence on delayed offline")
+	}
+	h.publishPresence(ctx, userID, presence.StatusOffline)
 }
 
 // handleIdentify authenticates a client using a JWT token, assembles the READY payload, and registers the client.
@@ -219,6 +256,15 @@ func (h *Hub) handleIdentify(client *Client, token string) {
 		return
 	}
 	client.enqueue(frame)
+
+	if h.presence != nil {
+		if pErr := h.presence.Set(ctx, userID, presence.StatusOnline); pErr != nil {
+			h.log.Warn().Err(pErr).Stringer("user_id", userID).Msg("Failed to set initial presence")
+		} else {
+			h.publishPresence(ctx, userID, presence.StatusOnline)
+		}
+	}
+
 	h.log.Info().Stringer("user_id", userID).Str("session_id", sessionID).Msg("Client identified")
 }
 
@@ -308,8 +354,78 @@ func (h *Hub) handleResume(client *Client, data models.ResumeData) {
 		return
 	}
 	client.enqueue(frame)
+
+	if h.presence != nil {
+		status, gErr := h.presence.Get(ctx, tokenUserID)
+		if gErr != nil {
+			h.log.Warn().Err(gErr).Stringer("user_id", tokenUserID).Msg("Failed to get presence on resume")
+		}
+		if status == presence.StatusOffline {
+			if pErr := h.presence.Set(ctx, tokenUserID, presence.StatusOnline); pErr != nil {
+				h.log.Warn().Err(pErr).Stringer("user_id", tokenUserID).Msg("Failed to restore presence on resume")
+			} else {
+				h.publishPresence(ctx, tokenUserID, presence.StatusOnline)
+			}
+		} else {
+			_ = h.presence.Refresh(ctx, tokenUserID)
+		}
+	}
+
 	h.log.Info().Stringer("user_id", tokenUserID).Str("session_id", data.SessionID).
 		Int("replayed", len(missed)).Msg("Client resumed")
+}
+
+// handlePresenceUpdate processes a client's opcode 3 presence update. It validates the status, stores it in Valkey,
+// and publishes a PRESENCE_UPDATE dispatch. Invisible status is stored truthfully but broadcast as offline.
+func (h *Hub) handlePresenceUpdate(client *Client, status string) {
+	if h.presence == nil {
+		return
+	}
+
+	userID := client.UserID()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := h.presence.Set(ctx, userID, status); err != nil {
+		h.log.Warn().Err(err).Stringer("user_id", userID).Msg("Failed to set presence")
+		return
+	}
+
+	broadcastStatus := status
+	if status == presence.StatusInvisible {
+		broadcastStatus = presence.StatusOffline
+	}
+	h.publishPresence(ctx, userID, broadcastStatus)
+}
+
+// publishPresence publishes a PRESENCE_UPDATE dispatch event to the gateway events channel.
+func (h *Hub) publishPresence(ctx context.Context, userID uuid.UUID, status string) {
+	if h.publisher == nil {
+		return
+	}
+	data := models.PresenceUpdateData{
+		UserID: userID.String(),
+		Status: status,
+	}
+	if err := h.publisher.Publish(ctx, events.PresenceUpdate, data); err != nil {
+		h.log.Warn().Err(err).Stringer("user_id", userID).Msg("Failed to publish presence update")
+	}
+}
+
+// refreshPresence extends the TTL of the user's presence key without changing the stored status.
+func (h *Hub) refreshPresence(ctx context.Context, userID uuid.UUID) {
+	if h.presence == nil {
+		return
+	}
+	if err := h.presence.Refresh(ctx, userID); err != nil {
+		h.log.Debug().Err(err).Stringer("user_id", userID).Msg("Failed to refresh presence TTL")
+	}
+}
+
+// ephemeralEvent returns true for dispatch event types that should be sent without a sequence number and not stored in
+// the replay buffer.
+func ephemeralEvent(eventType events.DispatchEvent) bool {
+	return eventType == events.TypingStart
 }
 
 // channelScoped extracts the channel_id from an event payload for permission filtering.
@@ -381,7 +497,20 @@ func (h *Hub) handlePubSubEvent(ctx context.Context, payload string) {
 		targets = permitted
 	}
 
-	// Build and send a dispatch frame per client (each with its own sequence number) and append to the replay buffer.
+	// Ephemeral events (e.g. TYPING_START) are sent without a sequence number and are not stored in the replay buffer.
+	if ephemeralEvent(eventType) {
+		frame, fErr := NewEphemeralDispatchFrame(eventType, rawData)
+		if fErr != nil {
+			h.log.Warn().Err(fErr).Msg("Failed to build ephemeral dispatch frame")
+			return
+		}
+		for _, c := range targets {
+			c.enqueue(frame)
+		}
+		return
+	}
+
+	// Build and send a sequenced dispatch frame per client and append to the replay buffer.
 	for _, c := range targets {
 		seq := c.nextSeq()
 		frame, fErr := NewDispatchFrame(seq, eventType, rawData)
@@ -428,20 +557,41 @@ func (h *Hub) assembleReady(ctx context.Context, userID uuid.UUID) (*models.Read
 		return nil, fmt.Errorf("list members: %w", err)
 	}
 
+	var presences []models.PresenceState
+	if h.presence != nil {
+		memberIDs := make([]uuid.UUID, len(ms))
+		for i := range ms {
+			memberIDs[i] = ms[i].UserID
+		}
+		presences, err = h.presence.GetMany(ctx, memberIDs)
+		if err != nil {
+			return nil, fmt.Errorf("get presences: %w", err)
+		}
+	}
+
 	return &models.ReadyData{
-		User:     toUserModel(u),
-		Server:   toServerConfigModel(srv),
-		Channels: toChannelModels(chs),
-		Roles:    toRoleModels(rs),
-		Members:  toMemberModels(ms),
+		User:      toUserModel(u),
+		Server:    toServerConfigModel(srv),
+		Channels:  toChannelModels(chs),
+		Roles:     toRoleModels(rs),
+		Members:   toMemberModels(ms),
+		Presences: presences,
 	}, nil
 }
 
-// Shutdown gracefully closes all active connections. It sends a Reconnect frame to each client and closes the
-// underlying WebSocket with a Going Away status.
+// Shutdown gracefully closes all active connections. It sends a Reconnect frame to each client, cleans up presence
+// keys, and closes the underlying WebSocket with a Going Away status.
 func (h *Hub) Shutdown() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+
+	if h.presence != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		for userID := range h.clients {
+			_ = h.presence.Delete(ctx, userID)
+		}
+	}
 
 	reconnect, _ := NewReconnectFrame()
 	for userID, client := range h.clients {

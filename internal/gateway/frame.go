@@ -36,6 +36,16 @@ func NewDispatchFrame(seq int64, eventType events.DispatchEvent, data json.RawMe
 	})
 }
 
+// NewEphemeralDispatchFrame returns a serialised Dispatch frame without a sequence number. Ephemeral events (such as
+// TYPING_START) are not added to the replay buffer and will not be replayed on resume.
+func NewEphemeralDispatchFrame(eventType events.DispatchEvent, data json.RawMessage) ([]byte, error) {
+	return json.Marshal(events.Frame{
+		Op:   events.OpcodeDispatch,
+		Type: &eventType,
+		Data: data,
+	})
+}
+
 // NewReconnectFrame returns a serialised Reconnect frame instructing the client to reconnect.
 func NewReconnectFrame() ([]byte, error) {
 	return json.Marshal(events.Frame{Op: events.OpcodeReconnect})

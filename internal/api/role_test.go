@@ -143,7 +143,7 @@ func seedEveryoneRole(repo *fakeRoleRepo) *role.Role {
 
 func testRoleApp(t *testing.T, repo role.Repository, maxRoles int, userID uuid.UUID) *fiber.App {
 	t.Helper()
-	handler := NewRoleHandler(repo, nil, maxRoles, zerolog.Nop())
+	handler := NewRoleHandler(repo, nil, nil, maxRoles, zerolog.Nop())
 	app := fiber.New()
 
 	app.Use(fakeAuth(userID))

@@ -41,6 +41,7 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/page"
 	"github.com/uncord-chat/uncord-server/internal/permission"
 	"github.com/uncord-chat/uncord-server/internal/postgres"
+	"github.com/uncord-chat/uncord-server/internal/presence"
 	"github.com/uncord-chat/uncord-server/internal/role"
 	"github.com/uncord-chat/uncord-server/internal/search"
 	servercfg "github.com/uncord-chat/uncord-server/internal/server"
@@ -81,6 +82,7 @@ type server struct {
 	typesenseIndexer *typesense.Indexer
 	gatewayPublisher *gateway.Publisher
 	gatewayHub       *gateway.Hub
+	presenceStore    *presence.Store
 }
 
 func main() {
@@ -247,6 +249,7 @@ func run() error {
 	attachmentRepo := attachment.NewPGRepository(db, log.Logger)
 	typesenseIndexer := typesense.NewIndexer(cfg.TypesenseURL, cfg.TypesenseAPIKey, cfg.TypesenseTimeout)
 	gatewayPub := gateway.NewPublisher(rdb, log.Logger)
+	presenceStore := presence.NewStore(rdb)
 	startPurgeGoroutine(attachmentRepo, storage)
 
 	// Start thumbnail worker with reconnection.
@@ -260,7 +263,7 @@ func run() error {
 
 	// Initialise gateway WebSocket hub and start the pub/sub subscriber with reconnection.
 	sessionStore := gateway.NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
-	gatewayHub := gateway.NewHub(rdb, cfg, sessionStore, permResolver, userRepo, serverRepo, channelRepo, roleRepo, memberRepo, log.Logger)
+	gatewayHub := gateway.NewHub(rdb, cfg, sessionStore, permResolver, userRepo, serverRepo, channelRepo, roleRepo, memberRepo, presenceStore, gatewayPub, log.Logger)
 	go runWithBackoff(subCtx, "gateway-hub", gatewayHub.Run)
 
 	// Create Fiber app
@@ -335,6 +338,7 @@ func run() error {
 		typesenseIndexer: typesenseIndexer,
 		gatewayPublisher: gatewayPub,
 		gatewayHub:       gatewayHub,
+		presenceStore:    presenceStore,
 	}
 	srv.registerRoutes(app)
 
@@ -429,7 +433,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 		permission.RequireServerPermission(s.permResolver, permissions.ManageServer), serverHandler.Update)
 
 	// Channel routes (server group: list is open to pending, create requires active)
-	channelHandler := api.NewChannelHandler(s.channelRepo, s.memberRepo, s.inviteRepo, s.permResolver, s.cfg.MaxChannels, log.Logger)
+	channelHandler := api.NewChannelHandler(s.channelRepo, s.memberRepo, s.inviteRepo, s.permResolver, s.gatewayPublisher, s.cfg.MaxChannels, log.Logger)
 	serverGroup.Get("/channels", channelHandler.ListChannels)
 	serverGroup.Post("/channels", requireActive,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageChannels),
@@ -480,6 +484,12 @@ func (s *server) registerRoutes(app *fiber.App) {
 		permission.RequirePermission(s.permResolver, permissions.SendMessages),
 		messageHandler.CreateMessage)
 
+	// Typing indicator route
+	typingHandler := api.NewTypingHandler(s.presenceStore, s.gatewayPublisher, log.Logger)
+	channelGroup.Post("/:channelID/typing",
+		permission.RequirePermission(s.permResolver, permissions.SendMessages),
+		typingHandler.StartTyping)
+
 	// Message routes (standalone for edit and delete, require active membership)
 	messageGroup := app.Group("/api/v1/messages", requireAuth, requireVerified, requireActive)
 	messageGroup.Patch("/:messageID", messageHandler.EditMessage)
@@ -508,7 +518,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 		categoryHandler.DeleteCategory)
 
 	// Role routes (all require active membership)
-	roleHandler := api.NewRoleHandler(s.roleRepo, s.permPublisher, s.cfg.MaxRoles, log.Logger)
+	roleHandler := api.NewRoleHandler(s.roleRepo, s.permPublisher, s.gatewayPublisher, s.cfg.MaxRoles, log.Logger)
 	serverGroup.Get("/roles", requireActive, roleHandler.ListRoles)
 	serverGroup.Post("/roles", requireActive,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageRoles),
@@ -521,7 +531,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 		roleHandler.DeleteRole)
 
 	// Invite management routes (under /api/v1/server, require active membership)
-	inviteHandler := api.NewInviteHandler(s.inviteRepo, s.memberRepo, s.userRepo, log.Logger)
+	inviteHandler := api.NewInviteHandler(s.inviteRepo, s.memberRepo, s.userRepo, s.gatewayPublisher, log.Logger)
 	serverGroup.Post("/invites", requireActive,
 		permission.RequireServerPermission(s.permResolver, permissions.CreateInvites),
 		inviteHandler.CreateInvite)
@@ -541,7 +551,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 		inviteHandler.AcceptOnboarding)
 
 	// Member routes (mixed: some require active, some do not)
-	memberHandler := api.NewMemberHandler(s.memberRepo, s.roleRepo, s.permReadStore, s.permPublisher, log.Logger)
+	memberHandler := api.NewMemberHandler(s.memberRepo, s.roleRepo, s.permReadStore, s.permPublisher, s.gatewayPublisher, log.Logger)
 	memberGroup := serverGroup.Group("/members")
 	memberGroup.Get("/", requireActive, memberHandler.ListMembers)
 	memberGroup.Get("/@me", memberHandler.GetSelf)

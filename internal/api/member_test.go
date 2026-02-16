@@ -252,7 +252,7 @@ func seedBan(repo *fakeMemberRepo, userID uuid.UUID, username string) {
 
 func testMemberApp(t *testing.T, memberRepo *fakeMemberRepo, roleRepo *fakeRoleRepo, permStore *fakePermStore, callerID uuid.UUID) *fiber.App {
 	t.Helper()
-	handler := NewMemberHandler(memberRepo, roleRepo, permStore, nil, zerolog.Nop())
+	handler := NewMemberHandler(memberRepo, roleRepo, permStore, nil, nil, zerolog.Nop())
 	app := fiber.New()
 	app.Use(fakeAuth(callerID))
 

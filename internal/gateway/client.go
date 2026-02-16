@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
 	"sync"
 	"sync/atomic"
@@ -11,6 +12,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/uncord-chat/uncord-protocol/events"
 	"github.com/uncord-chat/uncord-protocol/models"
+
+	"github.com/uncord-chat/uncord-server/internal/presence"
 )
 
 const (
@@ -134,6 +137,8 @@ func (c *Client) readPump() {
 		case events.OpcodeIdentify:
 			identifyTimer.Stop()
 			c.handleIdentify(frame.Data)
+		case events.OpcodePresenceUpdate:
+			c.handlePresenceUpdate(frame.Data)
 		case events.OpcodeResume:
 			identifyTimer.Stop()
 			c.handleResume(frame.Data)
@@ -158,7 +163,8 @@ func (c *Client) writePump() {
 	}
 }
 
-// handleHeartbeat responds with a HeartbeatACK and resets the read deadline.
+// handleHeartbeat responds with a HeartbeatACK and resets the read deadline. For identified clients, the heartbeat
+// also refreshes the presence TTL so the key does not expire while the connection is alive.
 func (c *Client) handleHeartbeat(heartbeatInterval time.Duration) {
 	_ = c.conn.SetReadDeadline(time.Now().Add(heartbeatInterval + heartbeatInterval/2))
 
@@ -168,6 +174,12 @@ func (c *Client) handleHeartbeat(heartbeatInterval time.Duration) {
 		return
 	}
 	c.enqueue(ack)
+
+	if c.IsIdentified() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		c.hub.refreshPresence(ctx, c.UserID())
+	}
 }
 
 // handleIdentify processes an op 2 Identify payload.
@@ -210,6 +222,27 @@ func (c *Client) handleResume(data json.RawMessage) {
 	}
 
 	c.hub.handleResume(c, r)
+}
+
+// handlePresenceUpdate processes an op 3 PresenceUpdate payload.
+func (c *Client) handlePresenceUpdate(data json.RawMessage) {
+	if !c.IsIdentified() {
+		c.closeWithCode(CloseNotAuthenticated, "not identified")
+		return
+	}
+
+	var req models.PresenceUpdateRequest
+	if err := json.Unmarshal(data, &req); err != nil {
+		c.closeWithCode(CloseDecodeError, "invalid presence payload")
+		return
+	}
+
+	if !presence.ValidStatus(req.Status) {
+		c.closeWithCode(CloseDecodeError, "invalid status value")
+		return
+	}
+
+	c.hub.handlePresenceUpdate(c, req.Status)
 }
 
 // enqueue sends a message to the client's write channel. If the channel is full, the message is dropped and the

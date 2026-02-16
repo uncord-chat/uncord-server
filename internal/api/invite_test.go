@@ -286,7 +286,7 @@ func seedPendingMember(repo *fakeInviteMemberRepo, userID uuid.UUID) {
 
 func testInviteApp(t *testing.T, inviteRepo *fakeInviteRepo, memberRepo *fakeInviteMemberRepo, userRepo *fakeInviteUserRepo, callerID uuid.UUID) *fiber.App {
 	t.Helper()
-	handler := NewInviteHandler(inviteRepo, memberRepo, userRepo, zerolog.Nop())
+	handler := NewInviteHandler(inviteRepo, memberRepo, userRepo, nil, zerolog.Nop())
 	app := fiber.New()
 	app.Use(fakeAuth(callerID))
 
