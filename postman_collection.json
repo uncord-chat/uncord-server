@@ -1737,6 +1737,49 @@
 			"name": "Onboarding",
 			"item": [
 				{
+					"name": "Get Onboarding",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/onboarding",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"onboarding"
+							]
+						},
+						"description": "Returns the onboarding configuration and all documents. No active membership required so clients can discover requirements before completing them."
+					}
+				},
+				{
+					"name": "Update Onboarding",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"require_email_verification\": true,\n  \"open_join\": false,\n  \"min_account_age_seconds\": 0,\n  \"welcome_channel_id\": null,\n  \"auto_roles\": []\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/onboarding",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"onboarding"
+							]
+						},
+						"description": "Updates the onboarding configuration. Only the server owner may call this endpoint. Documents are managed on the filesystem, not via this endpoint."
+					}
+				},
+				{
 					"name": "Accept Onboarding",
 					"request": {
 						"method": "POST",
@@ -1748,7 +1791,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"accepted_rules\": true\n}"
+							"raw": "{\n  \"accepted_document_slugs\": []\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/onboarding/accept",
@@ -1759,7 +1802,26 @@
 								"onboarding",
 								"accept"
 							]
-						}
+						},
+						"description": "Validates that all required documents have been accepted, then activates the pending member."
+					}
+				},
+				{
+					"name": "Join Server",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/server/join",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"server",
+								"join"
+							]
+						},
+						"description": "Allows users to join the server without an invite when open_join is enabled in the onboarding configuration."
 					}
 				}
 			]

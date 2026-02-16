@@ -153,15 +153,15 @@ func RunFirstInit(ctx context.Context, db *pgxpool.Pool, cfg *config.Config, log
 		_, err = tx.Exec(ctx,
 			`INSERT INTO onboarding_config (
 				welcome_channel_id,
-				require_rules_acceptance,
 				require_email_verification,
+				open_join,
 				min_account_age_seconds,
 				require_phone,
 				require_captcha
 			) VALUES ($1, $2, $3, $4, $5, $6)`,
 			welcomeChannelID,
-			cfg.OnboardingRequireRules,
 			cfg.OnboardingRequireEmailVerification,
+			cfg.OnboardingOpenJoin,
 			cfg.OnboardingMinAccountAge,
 			cfg.OnboardingRequirePhone,
 			cfg.OnboardingRequireCaptcha,

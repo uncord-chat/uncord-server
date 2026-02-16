@@ -20,7 +20,7 @@ func TestSendVerificationComposition(t *testing.T) {
 	}()
 
 	host, port := splitHostPort(t, ln.Addr().String())
-	c := NewClient(host, port, "", "", "noreply@example.com")
+	c := NewClient(host, port, "", "", "noreply@example.com", nil)
 
 	if err := c.SendVerification(context.Background(), "alice@example.com", "abc123", "https://chat.example.com", "Test Server"); err != nil {
 		t.Fatalf("SendVerification() error = %v", err)
@@ -48,12 +48,12 @@ func TestSendVerificationComposition(t *testing.T) {
 	}
 }
 
-func TestVerificationBody(t *testing.T) {
+func TestRenderVerification(t *testing.T) {
 	t.Parallel()
 
-	body, err := verificationBody("My Server", "https://example.com", "tok123")
+	body, err := renderVerification(nil, "My Server", "https://example.com", "tok123")
 	if err != nil {
-		t.Fatalf("verificationBody() error = %v", err)
+		t.Fatalf("renderVerification() error = %v", err)
 	}
 
 	checks := []struct {
@@ -67,7 +67,7 @@ func TestVerificationBody(t *testing.T) {
 	}
 	for _, c := range checks {
 		if !strings.Contains(body, c.want) {
-			t.Errorf("verificationBody missing %s: want substring %q", c.label, c.want)
+			t.Errorf("renderVerification missing %s: want substring %q", c.label, c.want)
 		}
 	}
 }

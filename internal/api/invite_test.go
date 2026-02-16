@@ -14,6 +14,7 @@ import (
 
 	"github.com/uncord-chat/uncord-server/internal/invite"
 	"github.com/uncord-chat/uncord-server/internal/member"
+	"github.com/uncord-chat/uncord-server/internal/onboarding"
 	"github.com/uncord-chat/uncord-server/internal/user"
 )
 
@@ -21,14 +22,11 @@ import (
 
 // fakeInviteRepo implements invite.Repository for handler tests.
 type fakeInviteRepo struct {
-	invites    []invite.Invite
-	onboarding *invite.OnboardingConfig
+	invites []invite.Invite
 }
 
 func newFakeInviteRepo() *fakeInviteRepo {
-	return &fakeInviteRepo{
-		onboarding: &invite.OnboardingConfig{},
-	}
+	return &fakeInviteRepo{}
 }
 
 func (r *fakeInviteRepo) Create(_ context.Context, creatorID uuid.UUID, params invite.CreateParams) (*invite.Invite, error) {
@@ -107,8 +105,21 @@ func (r *fakeInviteRepo) Use(_ context.Context, code string) (*invite.Invite, er
 	return nil, invite.ErrNotFound
 }
 
-func (r *fakeInviteRepo) GetOnboardingConfig(_ context.Context) (*invite.OnboardingConfig, error) {
-	return r.onboarding, nil
+// fakeInviteOnboardingRepo implements onboarding.Repository for invite handler tests.
+type fakeInviteOnboardingRepo struct {
+	cfg *onboarding.Config
+}
+
+func newFakeInviteOnboardingRepo() *fakeInviteOnboardingRepo {
+	return &fakeInviteOnboardingRepo{cfg: &onboarding.Config{}}
+}
+
+func (r *fakeInviteOnboardingRepo) Get(context.Context) (*onboarding.Config, error) {
+	return r.cfg, nil
+}
+
+func (r *fakeInviteOnboardingRepo) Update(context.Context, onboarding.UpdateParams) (*onboarding.Config, error) {
+	return r.cfg, nil
 }
 
 // fakeInviteUserRepo implements user.Repository for invite handler tests. Only GetByID is used.
@@ -276,20 +287,11 @@ func seedInvite(repo *fakeInviteRepo, code string, channelID uuid.UUID) *invite.
 	return &repo.invites[len(repo.invites)-1]
 }
 
-func seedPendingMember(repo *fakeInviteMemberRepo, userID uuid.UUID) {
-	repo.members = append(repo.members, member.MemberWithProfile{
-		UserID:   userID,
-		Username: "pending_user",
-		Status:   "pending",
-		JoinedAt: time.Now(),
-	})
-}
-
 // --- test app factory ---
 
-func testInviteApp(t *testing.T, inviteRepo *fakeInviteRepo, memberRepo *fakeInviteMemberRepo, userRepo *fakeInviteUserRepo, callerID uuid.UUID) *fiber.App {
+func testInviteApp(t *testing.T, inviteRepo *fakeInviteRepo, onboardingRepo *fakeInviteOnboardingRepo, memberRepo *fakeInviteMemberRepo, userRepo *fakeInviteUserRepo, callerID uuid.UUID) *fiber.App {
 	t.Helper()
-	handler := NewInviteHandler(inviteRepo, memberRepo, userRepo, nil, zerolog.Nop())
+	handler := NewInviteHandler(inviteRepo, onboardingRepo, memberRepo, userRepo, zerolog.Nop())
 	app := fiber.New()
 	app.Use(fakeAuth(callerID))
 
@@ -301,9 +303,6 @@ func testInviteApp(t *testing.T, inviteRepo *fakeInviteRepo, memberRepo *fakeInv
 	app.Delete("/invites/:code", handler.DeleteInvite)
 	app.Post("/invites/:code/join", handler.JoinViaInvite)
 
-	// Onboarding route.
-	app.Post("/onboarding/accept", handler.AcceptOnboarding)
-
 	return app
 }
 
@@ -313,7 +312,7 @@ func TestCreateInvite_Success(t *testing.T) {
 	t.Parallel()
 	channelID := uuid.New()
 	repo := newFakeInviteRepo()
-	app := testInviteApp(t, repo, newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
+	app := testInviteApp(t, repo, newFakeInviteOnboardingRepo(), newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/server/invites",
 		`{"channel_id":"`+channelID.String()+`"}`))
@@ -341,7 +340,7 @@ func TestCreateInvite_Success(t *testing.T) {
 
 func TestCreateInvite_InvalidBody(t *testing.T) {
 	t.Parallel()
-	app := testInviteApp(t, newFakeInviteRepo(), newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
+	app := testInviteApp(t, newFakeInviteRepo(), newFakeInviteOnboardingRepo(), newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/server/invites", "not json"))
 	body := readBody(t, resp)
@@ -357,7 +356,7 @@ func TestCreateInvite_InvalidBody(t *testing.T) {
 
 func TestCreateInvite_InvalidChannelID(t *testing.T) {
 	t.Parallel()
-	app := testInviteApp(t, newFakeInviteRepo(), newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
+	app := testInviteApp(t, newFakeInviteRepo(), newFakeInviteOnboardingRepo(), newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/server/invites",
 		`{"channel_id":"not-a-uuid"}`))
@@ -374,7 +373,7 @@ func TestCreateInvite_InvalidChannelID(t *testing.T) {
 
 func TestCreateInvite_ChannelNotFound(t *testing.T) {
 	t.Parallel()
-	app := testInviteApp(t, newFakeInviteRepo(), newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
+	app := testInviteApp(t, newFakeInviteRepo(), newFakeInviteOnboardingRepo(), newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
 
 	// uuid.Nil triggers ErrChannelNotFound in the fake.
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/server/invites",
@@ -393,7 +392,7 @@ func TestCreateInvite_ChannelNotFound(t *testing.T) {
 func TestCreateInvite_NegativeMaxUses(t *testing.T) {
 	t.Parallel()
 	channelID := uuid.New()
-	app := testInviteApp(t, newFakeInviteRepo(), newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
+	app := testInviteApp(t, newFakeInviteRepo(), newFakeInviteOnboardingRepo(), newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/server/invites",
 		`{"channel_id":"`+channelID.String()+`","max_uses":-1}`))
@@ -411,7 +410,7 @@ func TestCreateInvite_NegativeMaxUses(t *testing.T) {
 func TestCreateInvite_NegativeMaxAge(t *testing.T) {
 	t.Parallel()
 	channelID := uuid.New()
-	app := testInviteApp(t, newFakeInviteRepo(), newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
+	app := testInviteApp(t, newFakeInviteRepo(), newFakeInviteOnboardingRepo(), newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/server/invites",
 		`{"channel_id":"`+channelID.String()+`","max_age_seconds":-1}`))
@@ -430,7 +429,7 @@ func TestCreateInvite_NegativeMaxAge(t *testing.T) {
 
 func TestListInvites_Empty(t *testing.T) {
 	t.Parallel()
-	app := testInviteApp(t, newFakeInviteRepo(), newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
+	app := testInviteApp(t, newFakeInviteRepo(), newFakeInviteOnboardingRepo(), newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodGet, "/server/invites", ""))
 	body := readBody(t, resp)
@@ -454,7 +453,7 @@ func TestListInvites_Success(t *testing.T) {
 	repo := newFakeInviteRepo()
 	seedInvite(repo, "abc123", uuid.New())
 	seedInvite(repo, "def456", uuid.New())
-	app := testInviteApp(t, repo, newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
+	app := testInviteApp(t, repo, newFakeInviteOnboardingRepo(), newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodGet, "/server/invites", ""))
 	body := readBody(t, resp)
@@ -480,7 +479,7 @@ func TestListInvites_Pagination(t *testing.T) {
 	repo := newFakeInviteRepo()
 	first := seedInvite(repo, "abc123", uuid.New())
 	seedInvite(repo, "def456", uuid.New())
-	app := testInviteApp(t, repo, newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
+	app := testInviteApp(t, repo, newFakeInviteOnboardingRepo(), newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodGet, "/server/invites?after="+first.ID.String()+"&limit=1", ""))
 	body := readBody(t, resp)
@@ -510,7 +509,7 @@ func TestDeleteInvite_Success(t *testing.T) {
 	t.Parallel()
 	repo := newFakeInviteRepo()
 	seedInvite(repo, "abc123", uuid.New())
-	app := testInviteApp(t, repo, newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
+	app := testInviteApp(t, repo, newFakeInviteOnboardingRepo(), newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodDelete, "/invites/abc123", ""))
 	_ = readBody(t, resp)
@@ -525,7 +524,7 @@ func TestDeleteInvite_Success(t *testing.T) {
 
 func TestDeleteInvite_NotFound(t *testing.T) {
 	t.Parallel()
-	app := testInviteApp(t, newFakeInviteRepo(), newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
+	app := testInviteApp(t, newFakeInviteRepo(), newFakeInviteOnboardingRepo(), newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodDelete, "/invites/nonexistent", ""))
 	body := readBody(t, resp)
@@ -551,7 +550,7 @@ func TestJoinViaInvite_Success(t *testing.T) {
 		ID:        callerID,
 		CreatedAt: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
 	}
-	app := testInviteApp(t, repo, newFakeInviteMemberRepo(), userRepo, callerID)
+	app := testInviteApp(t, repo, newFakeInviteOnboardingRepo(), newFakeInviteMemberRepo(), userRepo, callerID)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/invites/abc123/join", ""))
 	body := readBody(t, resp)
@@ -574,7 +573,7 @@ func TestJoinViaInvite_Success(t *testing.T) {
 
 func TestJoinViaInvite_NotFound(t *testing.T) {
 	t.Parallel()
-	app := testInviteApp(t, newFakeInviteRepo(), newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
+	app := testInviteApp(t, newFakeInviteRepo(), newFakeInviteOnboardingRepo(), newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/invites/nonexistent/join", ""))
 	body := readBody(t, resp)
@@ -594,7 +593,7 @@ func TestJoinViaInvite_Expired(t *testing.T) {
 	inv := seedInvite(repo, "expired", uuid.New())
 	past := time.Now().Add(-1 * time.Hour)
 	inv.ExpiresAt = &past
-	app := testInviteApp(t, repo, newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
+	app := testInviteApp(t, repo, newFakeInviteOnboardingRepo(), newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/invites/expired/join", ""))
 	body := readBody(t, resp)
@@ -615,7 +614,7 @@ func TestJoinViaInvite_MaxUsesReached(t *testing.T) {
 	maxUses := 1
 	inv.MaxUses = &maxUses
 	inv.UseCount = 1
-	app := testInviteApp(t, repo, newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
+	app := testInviteApp(t, repo, newFakeInviteOnboardingRepo(), newFakeInviteMemberRepo(), newFakeInviteUserRepo(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/invites/maxed/join", ""))
 	body := readBody(t, resp)
@@ -641,7 +640,7 @@ func TestJoinViaInvite_AlreadyMember(t *testing.T) {
 		Status:   "active",
 		JoinedAt: time.Now(),
 	})
-	app := testInviteApp(t, repo, memberRepo, newFakeInviteUserRepo(), callerID)
+	app := testInviteApp(t, repo, newFakeInviteOnboardingRepo(), memberRepo, newFakeInviteUserRepo(), callerID)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/invites/abc123/join", ""))
 	body := readBody(t, resp)
@@ -662,7 +661,7 @@ func TestJoinViaInvite_Banned(t *testing.T) {
 	seedInvite(repo, "abc123", uuid.New())
 	memberRepo := newFakeInviteMemberRepo()
 	memberRepo.bans = append(memberRepo.bans, callerID)
-	app := testInviteApp(t, repo, memberRepo, newFakeInviteUserRepo(), callerID)
+	app := testInviteApp(t, repo, newFakeInviteOnboardingRepo(), memberRepo, newFakeInviteUserRepo(), callerID)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/invites/abc123/join", ""))
 	body := readBody(t, resp)
@@ -680,110 +679,16 @@ func TestJoinViaInvite_AccountTooYoung(t *testing.T) {
 	t.Parallel()
 	callerID := uuid.New()
 	repo := newFakeInviteRepo()
-	repo.onboarding = &invite.OnboardingConfig{MinAccountAgeSeconds: 86400} // 1 day
 	seedInvite(repo, "abc123", uuid.New())
+	onboardingRepo := &fakeInviteOnboardingRepo{cfg: &onboarding.Config{MinAccountAgeSeconds: 86400}} // 1 day
 	userRepo := newFakeInviteUserRepo()
 	userRepo.users[callerID] = &user.User{
 		ID:        callerID,
 		CreatedAt: time.Now(), // Account just created.
 	}
-	app := testInviteApp(t, repo, newFakeInviteMemberRepo(), userRepo, callerID)
+	app := testInviteApp(t, repo, onboardingRepo, newFakeInviteMemberRepo(), userRepo, callerID)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/invites/abc123/join", ""))
-	body := readBody(t, resp)
-
-	if resp.StatusCode != fiber.StatusBadRequest {
-		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusBadRequest)
-	}
-	env := parseError(t, body)
-	if env.Error.Code != string(apierrors.ValidationError) {
-		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.ValidationError)
-	}
-}
-
-// --- AcceptOnboarding tests ---
-
-func TestAcceptOnboarding_Success(t *testing.T) {
-	t.Parallel()
-	callerID := uuid.New()
-	repo := newFakeInviteRepo()
-	memberRepo := newFakeInviteMemberRepo()
-	seedPendingMember(memberRepo, callerID)
-	app := testInviteApp(t, repo, memberRepo, newFakeInviteUserRepo(), callerID)
-
-	resp := doReq(t, app, jsonReq(http.MethodPost, "/onboarding/accept", `{"accepted_rules":true}`))
-	body := readBody(t, resp)
-
-	if resp.StatusCode != fiber.StatusOK {
-		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusOK)
-	}
-
-	env := parseSuccess(t, body)
-	var m struct {
-		Status string `json:"status"`
-	}
-	if err := json.Unmarshal(env.Data, &m); err != nil {
-		t.Fatalf("unmarshal member: %v", err)
-	}
-	if m.Status != "active" {
-		t.Errorf("status = %q, want %q", m.Status, "active")
-	}
-}
-
-func TestAcceptOnboarding_NotPending(t *testing.T) {
-	t.Parallel()
-	callerID := uuid.New()
-	repo := newFakeInviteRepo()
-	app := testInviteApp(t, repo, newFakeInviteMemberRepo(), newFakeInviteUserRepo(), callerID)
-
-	resp := doReq(t, app, jsonReq(http.MethodPost, "/onboarding/accept", `{"accepted_rules":true}`))
-	body := readBody(t, resp)
-
-	if resp.StatusCode != fiber.StatusBadRequest {
-		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusBadRequest)
-	}
-	env := parseError(t, body)
-	if env.Error.Code != string(apierrors.ValidationError) {
-		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.ValidationError)
-	}
-}
-
-func TestAcceptOnboarding_RulesNotAccepted(t *testing.T) {
-	t.Parallel()
-	callerID := uuid.New()
-	repo := newFakeInviteRepo()
-	repo.onboarding = &invite.OnboardingConfig{RequireRulesAcceptance: true}
-	memberRepo := newFakeInviteMemberRepo()
-	seedPendingMember(memberRepo, callerID)
-	app := testInviteApp(t, repo, memberRepo, newFakeInviteUserRepo(), callerID)
-
-	resp := doReq(t, app, jsonReq(http.MethodPost, "/onboarding/accept", `{"accepted_rules":false}`))
-	body := readBody(t, resp)
-
-	if resp.StatusCode != fiber.StatusBadRequest {
-		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusBadRequest)
-	}
-	env := parseError(t, body)
-	if env.Error.Code != string(apierrors.ValidationError) {
-		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.ValidationError)
-	}
-}
-
-func TestAcceptOnboarding_EmailNotVerified(t *testing.T) {
-	t.Parallel()
-	callerID := uuid.New()
-	repo := newFakeInviteRepo()
-	repo.onboarding = &invite.OnboardingConfig{RequireEmailVerification: true}
-	memberRepo := newFakeInviteMemberRepo()
-	seedPendingMember(memberRepo, callerID)
-	userRepo := newFakeInviteUserRepo()
-	userRepo.users[callerID] = &user.User{
-		ID:            callerID,
-		EmailVerified: false,
-	}
-	app := testInviteApp(t, repo, memberRepo, userRepo, callerID)
-
-	resp := doReq(t, app, jsonReq(http.MethodPost, "/onboarding/accept", `{"accepted_rules":true}`))
 	body := readBody(t, resp)
 
 	if resp.StatusCode != fiber.StatusBadRequest {

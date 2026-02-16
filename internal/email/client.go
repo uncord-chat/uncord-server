@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"html/template"
 	"net"
 	"net/mail"
 	"net/smtp"
@@ -14,26 +15,29 @@ import (
 // Client sends emails over SMTP. Each call to Send or Ping creates and closes its own connection, so the Client is safe
 // for concurrent use without additional locking.
 type Client struct {
-	host     string
-	port     int
-	username string
-	password string
-	from     mail.Address
+	host             string
+	port             int
+	username         string
+	password         string
+	from             mail.Address
+	verificationTmpl *template.Template
 }
 
 // NewClient creates a new SMTP client. The from address is parsed as an RFC 5322 address; callers should validate it
-// before calling NewClient (config validation handles this at startup).
-func NewClient(host string, port int, username, password, from string) *Client {
+// before calling NewClient (config validation handles this at startup). The verificationTmpl parameter is optional; when
+// nil the compiled-in default template is used.
+func NewClient(host string, port int, username, password, from string, verificationTmpl *template.Template) *Client {
 	addr, _ := mail.ParseAddress(from)
 	if addr == nil {
 		addr = &mail.Address{Address: from}
 	}
 	return &Client{
-		host:     host,
-		port:     port,
-		username: username,
-		password: password,
-		from:     *addr,
+		host:             host,
+		port:             port,
+		username:         username,
+		password:         password,
+		from:             *addr,
+		verificationTmpl: verificationTmpl,
 	}
 }
 
@@ -65,7 +69,7 @@ func (c *Client) Send(ctx context.Context, to, subject, body string) error {
 // confirm their address.
 func (c *Client) SendVerification(ctx context.Context, to, token, serverURL, serverName string) error {
 	subject := fmt.Sprintf("Verify your email for %s", serverName)
-	body, err := verificationBody(serverName, serverURL, token)
+	body, err := renderVerification(c.verificationTmpl, serverName, serverURL, token)
 	if err != nil {
 		return err
 	}

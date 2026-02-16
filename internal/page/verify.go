@@ -2,7 +2,6 @@ package page
 
 import (
 	"bytes"
-	_ "embed"
 	"errors"
 	"html/template"
 
@@ -12,10 +11,32 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/auth"
 )
 
-//go:embed templates/verify.html
-var verifyHTML string
+//nolint:misspell // CSS properties use American English spelling (color, center).
+const defaultVerifyHTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+background:#f4f5f7;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:1rem}
+.card{background:#fff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.08);max-width:440px;width:100%;
+padding:2.5rem 2rem;text-align:center;border-top:4px solid {{.AccentColour}}}
+h1{font-size:1.25rem;color:#1a1a2e;margin-bottom:.75rem}
+p{font-size:.95rem;color:#555;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="card">
+<h1>{{.Heading}}</h1>
+<p>{{.Message}}</p>
+</div>
+</body>
+</html>`
 
-var verifyTmpl = template.Must(template.New("verify").Parse(verifyHTML))
+var defaultVerifyTmpl = template.Must(template.New("verify").Parse(defaultVerifyHTML))
 
 type verifyData struct {
 	Title        string
@@ -28,12 +49,17 @@ type verifyData struct {
 type VerifyHandler struct {
 	auth       *auth.Service
 	serverName string
+	tmpl       *template.Template
 	log        zerolog.Logger
 }
 
-// NewVerifyHandler creates a new VerifyHandler.
-func NewVerifyHandler(authService *auth.Service, serverName string, logger zerolog.Logger) *VerifyHandler {
-	return &VerifyHandler{auth: authService, serverName: serverName, log: logger}
+// NewVerifyHandler creates a new VerifyHandler. The tmpl parameter is optional; when nil the compiled-in default
+// template is used.
+func NewVerifyHandler(authService *auth.Service, serverName string, tmpl *template.Template, logger zerolog.Logger) *VerifyHandler {
+	if tmpl == nil {
+		tmpl = defaultVerifyTmpl
+	}
+	return &VerifyHandler{auth: authService, serverName: serverName, tmpl: tmpl, log: logger}
 }
 
 // VerifyEmail handles GET /verify-email?token=... by consuming the verification token and rendering an HTML result page.
@@ -78,7 +104,7 @@ func (h *VerifyHandler) VerifyEmail(c fiber.Ctx) error {
 // partial writes if template execution fails.
 func (h *VerifyHandler) renderPage(c fiber.Ctx, status int, data verifyData) error {
 	var buf bytes.Buffer
-	if err := verifyTmpl.Execute(&buf, data); err != nil {
+	if err := h.tmpl.Execute(&buf, data); err != nil {
 		h.log.Error().Err(err).Msg("Failed to render verification page template")
 		return c.Status(fiber.StatusInternalServerError).SendString("internal server error")
 	}

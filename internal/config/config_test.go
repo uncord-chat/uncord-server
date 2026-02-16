@@ -23,7 +23,7 @@ func TestLoadDefaults(t *testing.T) {
 		"VALKEY_DIAL_TIMEOUT",
 		"TYPESENSE_URL", "TYPESENSE_API_KEY", "TYPESENSE_TIMEOUT",
 		"INIT_OWNER_EMAIL", "INIT_OWNER_PASSWORD",
-		"ONBOARDING_REQUIRE_RULES", "ONBOARDING_REQUIRE_EMAIL_VERIFICATION",
+		"ONBOARDING_OPEN_JOIN", "ONBOARDING_REQUIRE_EMAIL_VERIFICATION",
 		"ONBOARDING_MIN_ACCOUNT_AGE", "ONBOARDING_REQUIRE_PHONE", "ONBOARDING_REQUIRE_CAPTCHA",
 		"MAX_UPLOAD_SIZE_MB", "MAX_AVATAR_SIZE_MB", "MAX_AVATAR_DIMENSION",
 		"STORAGE_BACKEND", "STORAGE_LOCAL_PATH",
@@ -121,8 +121,8 @@ func TestLoadDefaults(t *testing.T) {
 	}
 
 	// Onboarding defaults
-	if !cfg.OnboardingRequireRules {
-		t.Error("OnboardingRequireRules = false, want true")
+	if cfg.OnboardingOpenJoin {
+		t.Error("OnboardingOpenJoin = true, want false")
 	}
 	if !cfg.OnboardingRequireEmailVerification {
 		t.Error("OnboardingRequireEmailVerification = false, want true")
@@ -282,7 +282,7 @@ func TestLoadOverrides(t *testing.T) {
 	t.Setenv("SERVER_ENV", "development")
 	t.Setenv("DATABASE_MAX_CONNS", "50")
 	t.Setenv("ARGON2_MEMORY", "131072")
-	t.Setenv("ONBOARDING_REQUIRE_RULES", "false")
+	t.Setenv("ONBOARDING_OPEN_JOIN", "true")
 	t.Setenv("INIT_OWNER_EMAIL", "test@example.com")
 	t.Setenv("JWT_SECRET", "test-secret-key-that-is-32-chars!")
 	t.Setenv("SERVER_SECRET", testServerSecret)
@@ -317,8 +317,8 @@ func TestLoadOverrides(t *testing.T) {
 	if cfg.Argon2Memory != 131072 {
 		t.Errorf("Argon2Memory = %d, want 131072", cfg.Argon2Memory)
 	}
-	if cfg.OnboardingRequireRules {
-		t.Error("OnboardingRequireRules = true, want false")
+	if !cfg.OnboardingOpenJoin {
+		t.Error("OnboardingOpenJoin = false, want true")
 	}
 	if cfg.InitOwnerEmail != "test@example.com" {
 		t.Errorf("InitOwnerEmail = %q, want %q", cfg.InitOwnerEmail, "test@example.com")
@@ -374,14 +374,14 @@ func TestLoadInvalidInt(t *testing.T) {
 }
 
 func TestLoadInvalidBool(t *testing.T) {
-	t.Setenv("ONBOARDING_REQUIRE_RULES", "maybe")
+	t.Setenv("ONBOARDING_OPEN_JOIN", "maybe")
 
 	_, err := Load()
 	if err == nil {
 		t.Fatal("Load() returned nil error, want parse error")
 	}
-	if !strings.Contains(err.Error(), "ONBOARDING_REQUIRE_RULES") {
-		t.Errorf("error %q does not mention ONBOARDING_REQUIRE_RULES", err.Error())
+	if !strings.Contains(err.Error(), "ONBOARDING_OPEN_JOIN") {
+		t.Errorf("error %q does not mention ONBOARDING_OPEN_JOIN", err.Error())
 	}
 }
 
@@ -400,7 +400,7 @@ func TestLoadInvalidDuration(t *testing.T) {
 func TestLoadMultipleErrors(t *testing.T) {
 	t.Setenv("SERVER_PORT", "abc")
 	t.Setenv("DATABASE_MAX_CONNS", "xyz")
-	t.Setenv("ONBOARDING_REQUIRE_RULES", "nope")
+	t.Setenv("ONBOARDING_OPEN_JOIN", "nope")
 
 	_, err := Load()
 	if err == nil {
@@ -414,8 +414,8 @@ func TestLoadMultipleErrors(t *testing.T) {
 	if !strings.Contains(errStr, "DATABASE_MAX_CONNS") {
 		t.Errorf("error missing DATABASE_MAX_CONNS, got: %s", errStr)
 	}
-	if !strings.Contains(errStr, "ONBOARDING_REQUIRE_RULES") {
-		t.Errorf("error missing ONBOARDING_REQUIRE_RULES, got: %s", errStr)
+	if !strings.Contains(errStr, "ONBOARDING_OPEN_JOIN") {
+		t.Errorf("error missing ONBOARDING_OPEN_JOIN, got: %s", errStr)
 	}
 }
 

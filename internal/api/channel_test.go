@@ -16,8 +16,8 @@ import (
 	"github.com/uncord-chat/uncord-protocol/permissions"
 
 	"github.com/uncord-chat/uncord-server/internal/channel"
-	"github.com/uncord-chat/uncord-server/internal/invite"
 	"github.com/uncord-chat/uncord-server/internal/member"
+	"github.com/uncord-chat/uncord-server/internal/onboarding"
 	"github.com/uncord-chat/uncord-server/internal/permission"
 )
 
@@ -236,16 +236,20 @@ func (r *fakeChannelMemberRepo) Activate(context.Context, uuid.UUID, []uuid.UUID
 	return nil, nil
 }
 
-// fakeOnboardingConfig implements onboardingConfigSource for channel handler tests.
-type fakeOnboardingConfig struct {
-	cfg *invite.OnboardingConfig
+// fakeOnboardingRepo implements onboarding.Repository for channel handler tests.
+type fakeOnboardingRepo struct {
+	cfg *onboarding.Config
 }
 
-func (f *fakeOnboardingConfig) GetOnboardingConfig(context.Context) (*invite.OnboardingConfig, error) {
+func (f *fakeOnboardingRepo) Get(context.Context) (*onboarding.Config, error) {
 	if f.cfg != nil {
 		return f.cfg, nil
 	}
-	return &invite.OnboardingConfig{}, nil
+	return &onboarding.Config{}, nil
+}
+
+func (f *fakeOnboardingRepo) Update(context.Context, onboarding.UpdateParams) (*onboarding.Config, error) {
+	return f.cfg, nil
 }
 
 func seedChannel(repo *fakeChannelRepo) *channel.Channel {
@@ -268,8 +272,8 @@ func seedChannel(repo *fakeChannelRepo) *channel.Channel {
 func testChannelApp(t *testing.T, repo channel.Repository, resolver *permission.Resolver, maxChannels int, userID uuid.UUID) *fiber.App {
 	t.Helper()
 	memberRepo := newFakeChannelMemberRepo(userID)
-	onboarding := &fakeOnboardingConfig{}
-	handler := NewChannelHandler(repo, memberRepo, onboarding, resolver, nil, maxChannels, zerolog.Nop())
+	onboardingRepo := &fakeOnboardingRepo{}
+	handler := NewChannelHandler(repo, memberRepo, onboardingRepo, resolver, nil, maxChannels, zerolog.Nop())
 	app := fiber.New()
 
 	app.Use(fakeAuth(userID))
@@ -397,8 +401,8 @@ func TestListChannels_PendingMemberSeesWelcomeChannel(t *testing.T) {
 	memberRepo := newFakeChannelMemberRepo(userID)
 	memberRepo.statuses[userID] = models.MemberStatusPending
 
-	onboarding := &fakeOnboardingConfig{cfg: &invite.OnboardingConfig{WelcomeChannelID: &welcomeCh.ID}}
-	handler := NewChannelHandler(repo, memberRepo, onboarding, allowAllResolver(), nil, 500, zerolog.Nop())
+	onboardingRepo := &fakeOnboardingRepo{cfg: &onboarding.Config{WelcomeChannelID: &welcomeCh.ID}}
+	handler := NewChannelHandler(repo, memberRepo, onboardingRepo, allowAllResolver(), nil, 500, zerolog.Nop())
 
 	app := fiber.New()
 	app.Use(fakeAuth(userID))
@@ -436,8 +440,8 @@ func TestListChannels_PendingMemberNoWelcomeChannel(t *testing.T) {
 	memberRepo := newFakeChannelMemberRepo(userID)
 	memberRepo.statuses[userID] = models.MemberStatusPending
 
-	onboarding := &fakeOnboardingConfig{}
-	handler := NewChannelHandler(repo, memberRepo, onboarding, allowAllResolver(), nil, 500, zerolog.Nop())
+	onboardingRepo := &fakeOnboardingRepo{}
+	handler := NewChannelHandler(repo, memberRepo, onboardingRepo, allowAllResolver(), nil, 500, zerolog.Nop())
 
 	app := fiber.New()
 	app.Use(fakeAuth(userID))
@@ -467,8 +471,8 @@ func TestListChannels_NonMemberSeesEmpty(t *testing.T) {
 	seedChannel(repo)
 
 	memberRepo := &fakeChannelMemberRepo{statuses: map[uuid.UUID]string{}}
-	onboarding := &fakeOnboardingConfig{}
-	handler := NewChannelHandler(repo, memberRepo, onboarding, allowAllResolver(), nil, 500, zerolog.Nop())
+	onboardingRepo := &fakeOnboardingRepo{}
+	handler := NewChannelHandler(repo, memberRepo, onboardingRepo, allowAllResolver(), nil, 500, zerolog.Nop())
 
 	app := fiber.New()
 	app.Use(fakeAuth(userID))

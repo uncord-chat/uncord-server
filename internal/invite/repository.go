@@ -188,27 +188,6 @@ func (r *PGRepository) diagnoseUseFailure(ctx context.Context, code string) erro
 	return ErrNotFound
 }
 
-// GetOnboardingConfig reads the single onboarding_config row. Returns a zero-value config if no row exists.
-func (r *PGRepository) GetOnboardingConfig(ctx context.Context) (*OnboardingConfig, error) {
-	var cfg OnboardingConfig
-	err := r.db.QueryRow(ctx,
-		`SELECT welcome_channel_id, require_rules_acceptance, require_email_verification,
-		        min_account_age_seconds, require_phone, require_captcha, auto_roles
-		 FROM onboarding_config
-		 LIMIT 1`,
-	).Scan(
-		&cfg.WelcomeChannelID, &cfg.RequireRulesAcceptance, &cfg.RequireEmailVerification,
-		&cfg.MinAccountAgeSeconds, &cfg.RequirePhone, &cfg.RequireCaptcha, &cfg.AutoRoles,
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return &OnboardingConfig{}, nil
-		}
-		return nil, fmt.Errorf("query onboarding config: %w", err)
-	}
-	return &cfg, nil
-}
-
 // scanInvite scans a single row into an *Invite.
 func scanInvite(row pgx.Row) (*Invite, error) {
 	var inv Invite

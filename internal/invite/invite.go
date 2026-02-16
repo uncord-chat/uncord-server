@@ -38,17 +38,6 @@ type Invite struct {
 	CreatedAt     time.Time
 }
 
-// OnboardingConfig holds the onboarding requirements read from the onboarding_config table.
-type OnboardingConfig struct {
-	WelcomeChannelID         *uuid.UUID
-	RequireRulesAcceptance   bool
-	RequireEmailVerification bool
-	MinAccountAgeSeconds     int
-	RequirePhone             bool
-	RequireCaptcha           bool
-	AutoRoles                []uuid.UUID
-}
-
 // CreateParams groups the inputs for creating a new invite.
 type CreateParams struct {
 	ChannelID     uuid.UUID
@@ -91,5 +80,4 @@ type Repository interface {
 	List(ctx context.Context, after *uuid.UUID, limit int) ([]Invite, error)
 	Delete(ctx context.Context, code string) error
 	Use(ctx context.Context, code string) (*Invite, error)
-	GetOnboardingConfig(ctx context.Context) (*OnboardingConfig, error)
 }

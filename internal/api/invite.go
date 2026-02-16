@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"errors"
 	"strconv"
 	"time"
@@ -10,28 +9,27 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
-	"github.com/uncord-chat/uncord-protocol/events"
 	"github.com/uncord-chat/uncord-protocol/models"
 
-	"github.com/uncord-chat/uncord-server/internal/gateway"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 	"github.com/uncord-chat/uncord-server/internal/invite"
 	"github.com/uncord-chat/uncord-server/internal/member"
+	"github.com/uncord-chat/uncord-server/internal/onboarding"
 	"github.com/uncord-chat/uncord-server/internal/user"
 )
 
-// InviteHandler serves invite and onboarding endpoints.
+// InviteHandler serves invite endpoints.
 type InviteHandler struct {
-	invites invite.Repository
-	members member.Repository
-	users   user.Repository
-	gateway *gateway.Publisher
-	log     zerolog.Logger
+	invites    invite.Repository
+	onboarding onboarding.Repository
+	members    member.Repository
+	users      user.Repository
+	log        zerolog.Logger
 }
 
 // NewInviteHandler creates a new invite handler.
-func NewInviteHandler(invites invite.Repository, members member.Repository, users user.Repository, gw *gateway.Publisher, logger zerolog.Logger) *InviteHandler {
-	return &InviteHandler{invites: invites, members: members, users: users, gateway: gw, log: logger}
+func NewInviteHandler(invites invite.Repository, onboardingRepo onboarding.Repository, members member.Repository, users user.Repository, logger zerolog.Logger) *InviteHandler {
+	return &InviteHandler{invites: invites, onboarding: onboardingRepo, members: members, users: users, log: logger}
 }
 
 // CreateInvite handles POST /api/v1/server/invites.
@@ -130,7 +128,7 @@ func (h *InviteHandler) JoinViaInvite(c fiber.Ctx) error {
 	}
 
 	// Check minimum account age requirement.
-	cfg, err := h.invites.GetOnboardingConfig(c)
+	cfg, err := h.onboarding.Get(c)
 	if err != nil {
 		h.log.Error().Err(err).Str("handler", "invite").Msg("get onboarding config failed")
 		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
@@ -155,68 +153,6 @@ func (h *InviteHandler) JoinViaInvite(c fiber.Ctx) error {
 	}
 
 	return httputil.Success(c, m.ToModel())
-}
-
-// AcceptOnboarding handles POST /api/v1/onboarding/accept.
-func (h *InviteHandler) AcceptOnboarding(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
-	}
-
-	var body models.AcceptOnboardingRequest
-	if err := c.Bind().Body(&body); err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "Invalid request body")
-	}
-
-	cfg, err := h.invites.GetOnboardingConfig(c)
-	if err != nil {
-		h.log.Error().Err(err).Str("handler", "invite").Msg("get onboarding config failed")
-		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
-	}
-
-	if cfg.RequireRulesAcceptance && !body.AcceptedRules {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError,
-			"You must accept the server rules to continue")
-	}
-
-	if cfg.RequireEmailVerification {
-		u, err := h.users.GetByID(c, userID)
-		if err != nil {
-			h.log.Error().Err(err).Str("handler", "invite").Msg("get user for email check failed")
-			return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
-		}
-		if !u.EmailVerified {
-			return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError,
-				"You must verify your email address before joining")
-		}
-	}
-
-	if cfg.RequirePhone {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError,
-			"Phone verification is not yet supported")
-	}
-
-	if cfg.RequireCaptcha {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError,
-			"Captcha verification is not yet supported")
-	}
-
-	m, err := h.members.Activate(c, userID, cfg.AutoRoles)
-	if err != nil {
-		return h.mapInviteError(c, err)
-	}
-
-	result := m.ToModel()
-	if h.gateway != nil {
-		go func() {
-			if err := h.gateway.Publish(context.Background(), events.MemberAdd, result); err != nil {
-				h.log.Warn().Err(err).Str("user_id", userID.String()).Msg("Gateway publish failed")
-			}
-		}()
-	}
-
-	return httputil.Success(c, result)
 }
 
 // toInviteModel converts the internal invite type to the protocol response type.
@@ -255,8 +191,6 @@ func (h *InviteHandler) mapInviteError(c fiber.Ctx, err error) error {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, err.Error())
 	case errors.Is(err, member.ErrAlreadyMember):
 		return httputil.Fail(c, fiber.StatusConflict, apierrors.AlreadyMember, "You are already a member of this server")
-	case errors.Is(err, member.ErrNotPending):
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Not in pending status")
 	default:
 		h.log.Error().Err(err).Str("handler", "invite").Msg("unhandled invite service error")
 		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")

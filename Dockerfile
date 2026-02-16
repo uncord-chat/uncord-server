@@ -7,8 +7,21 @@ WORKDIR /src
 
 # Cache module downloads separately from source changes.
 COPY go.mod go.sum ./
-RUN go mod edit -dropreplace=github.com/uncord-chat/uncord-protocol && \
-    go mod download
+
+# Docker builds must use the published protocol package, not a local filesystem replacement. Fail early with a clear
+# message so the developer knows to fix go.mod before building.
+RUN if grep -q '^replace.*uncord-protocol' go.mod; then \
+      echo '' >&2; \
+      echo 'ERROR: go.mod contains a replace directive for uncord-protocol.' >&2; \
+      echo '' >&2; \
+      echo 'Docker builds must use the published protocol package. Remove or comment' >&2; \
+      echo 'out the replace directive in go.mod and ensure the require directive' >&2; \
+      echo 'references a published version (e.g. v0.2.10), then retry the build.' >&2; \
+      echo '' >&2; \
+      exit 1; \
+    fi
+
+RUN go mod download
 
 COPY . .
 
@@ -25,6 +38,9 @@ RUN apk add --no-cache ca-certificates wget
 RUN addgroup -S uncord && adduser -S uncord -G uncord
 
 COPY --from=build /bin/uncord /usr/local/bin/uncord
+COPY data/ /data/uncord/
+
+RUN chown -R uncord:uncord /data/uncord
 
 USER uncord
 

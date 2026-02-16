@@ -9,6 +9,7 @@ LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.dat
 
 build:
 	go build -ldflags="$(LDFLAGS)" -o bin/uncord ./cmd/uncord
+	cp -r data bin/data
 
 run: build
 	./bin/uncord

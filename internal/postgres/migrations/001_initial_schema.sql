@@ -450,17 +450,16 @@ CREATE INDEX idx_automod_rules_creator ON automod_rules (creator_id);
 -- Onboarding
 
 CREATE TABLE onboarding_config (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    rules_markdown          TEXT NOT NULL DEFAULT '',
-    welcome_channel_id      UUID REFERENCES channels(id) ON DELETE SET NULL,
-    require_rules_acceptance BOOLEAN NOT NULL DEFAULT true,
+    id                         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    welcome_channel_id         UUID REFERENCES channels(id) ON DELETE SET NULL,
     require_email_verification BOOLEAN NOT NULL DEFAULT true,
-    min_account_age_seconds INTEGER NOT NULL DEFAULT 0,
-    require_phone            BOOLEAN NOT NULL DEFAULT false,
-    require_captcha          BOOLEAN NOT NULL DEFAULT false,
-    auto_roles               UUID[] NOT NULL DEFAULT '{}',
-    created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    open_join                  BOOLEAN NOT NULL DEFAULT false,
+    min_account_age_seconds    INTEGER NOT NULL DEFAULT 0,
+    require_phone              BOOLEAN NOT NULL DEFAULT false,
+    require_captcha            BOOLEAN NOT NULL DEFAULT false,
+    auto_roles                 UUID[] NOT NULL DEFAULT '{}',
+    created_at                 TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at                 TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON onboarding_config

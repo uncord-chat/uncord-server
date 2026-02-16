@@ -15,21 +15,16 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/channel"
 	"github.com/uncord-chat/uncord-server/internal/gateway"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
-	"github.com/uncord-chat/uncord-server/internal/invite"
 	"github.com/uncord-chat/uncord-server/internal/member"
+	"github.com/uncord-chat/uncord-server/internal/onboarding"
 	"github.com/uncord-chat/uncord-server/internal/permission"
 )
-
-// onboardingConfigSource provides read access to the server's onboarding configuration.
-type onboardingConfigSource interface {
-	GetOnboardingConfig(ctx context.Context) (*invite.OnboardingConfig, error)
-}
 
 // ChannelHandler serves channel endpoints.
 type ChannelHandler struct {
 	channels    channel.Repository
 	members     member.Repository
-	onboarding  onboardingConfigSource
+	onboarding  onboarding.Repository
 	resolver    *permission.Resolver
 	gateway     *gateway.Publisher
 	maxChannels int
@@ -40,7 +35,7 @@ type ChannelHandler struct {
 func NewChannelHandler(
 	channels channel.Repository,
 	members member.Repository,
-	onboarding onboardingConfigSource,
+	onboardingRepo onboarding.Repository,
 	resolver *permission.Resolver,
 	gw *gateway.Publisher,
 	maxChannels int,
@@ -49,7 +44,7 @@ func NewChannelHandler(
 	return &ChannelHandler{
 		channels:    channels,
 		members:     members,
-		onboarding:  onboarding,
+		onboarding:  onboardingRepo,
 		resolver:    resolver,
 		gateway:     gw,
 		maxChannels: maxChannels,
@@ -111,7 +106,7 @@ func (h *ChannelHandler) listPermittedChannels(c fiber.Ctx, userID uuid.UUID) er
 
 // listWelcomeChannel returns only the configured welcome channel for pending members.
 func (h *ChannelHandler) listWelcomeChannel(c fiber.Ctx) error {
-	cfg, err := h.onboarding.GetOnboardingConfig(c)
+	cfg, err := h.onboarding.Get(c)
 	if err != nil {
 		h.log.Error().Err(err).Str("handler", "channel").Msg("get onboarding config failed")
 		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")

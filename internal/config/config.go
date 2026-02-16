@@ -59,8 +59,11 @@ type Config struct {
 	InitOwnerEmail    string
 	InitOwnerPassword string
 
+	// Data directory
+	DataDir string
+
 	// Onboarding
-	OnboardingRequireRules             bool
+	OnboardingOpenJoin                 bool
 	OnboardingRequireEmailVerification bool
 	OnboardingMinAccountAge            int
 	OnboardingRequirePhone             bool
@@ -173,7 +176,9 @@ func Load() (*Config, error) {
 		InitOwnerEmail:    envStr("INIT_OWNER_EMAIL", ""),
 		InitOwnerPassword: envStr("INIT_OWNER_PASSWORD", ""),
 
-		OnboardingRequireRules:             p.bool("ONBOARDING_REQUIRE_RULES", true),
+		DataDir: envStr("DATA_DIR", ""),
+
+		OnboardingOpenJoin:                 p.bool("ONBOARDING_OPEN_JOIN", false),
 		OnboardingRequireEmailVerification: p.bool("ONBOARDING_REQUIRE_EMAIL_VERIFICATION", true),
 		OnboardingMinAccountAge:            p.int("ONBOARDING_MIN_ACCOUNT_AGE", 0),
 		OnboardingRequirePhone:             p.bool("ONBOARDING_REQUIRE_PHONE", false),
