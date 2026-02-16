@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/uncord-chat/uncord-protocol/models"
 )
 
 // Sentinel errors for the server package.
@@ -27,6 +28,20 @@ type Config struct {
 	OwnerID     uuid.UUID
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+}
+
+// ToModel converts the internal server config to the protocol response type.
+func (cfg *Config) ToModel() models.ServerConfig {
+	return models.ServerConfig{
+		ID:          cfg.ID.String(),
+		Name:        cfg.Name,
+		Description: cfg.Description,
+		IconKey:     cfg.IconKey,
+		BannerKey:   cfg.BannerKey,
+		OwnerID:     cfg.OwnerID.String(),
+		CreatedAt:   cfg.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:   cfg.UpdatedAt.Format(time.RFC3339),
+	}
 }
 
 // UpdateParams groups the optional fields for updating the server configuration.

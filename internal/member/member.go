@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/uncord-chat/uncord-protocol/models"
 )
 
 // Sentinel errors for the member package.
@@ -51,6 +52,31 @@ type MemberWithProfile struct {
 	TimeoutUntil *time.Time
 	JoinedAt     time.Time
 	RoleIDs      []uuid.UUID
+}
+
+// ToModel converts the internal member type to the protocol response type.
+func (m *MemberWithProfile) ToModel() models.Member {
+	roleIDs := make([]string, len(m.RoleIDs))
+	for i, id := range m.RoleIDs {
+		roleIDs[i] = id.String()
+	}
+	result := models.Member{
+		User: models.MemberUser{
+			ID:          m.UserID.String(),
+			Username:    m.Username,
+			DisplayName: m.DisplayName,
+			AvatarKey:   m.AvatarKey,
+		},
+		Nickname: m.Nickname,
+		JoinedAt: m.JoinedAt.Format(time.RFC3339),
+		Roles:    roleIDs,
+		Status:   m.Status,
+	}
+	if m.TimeoutUntil != nil {
+		s := m.TimeoutUntil.Format(time.RFC3339)
+		result.TimeoutUntil = &s
+	}
+	return result
 }
 
 // BanRecord holds a ban row joined with the banned user's public profile.

@@ -185,6 +185,7 @@ func run() error {
 
 	// Start background services with a shared cancellable context.
 	subCtx, subCancel := context.WithCancel(ctx)
+	defer subCancel()
 
 	go blocklist.Run(subCtx, cfg.DisposableEmailBlocklistRefreshInterval)
 
@@ -208,7 +209,6 @@ func run() error {
 	}
 
 	// Start permission cache invalidation subscriber with reconnection.
-	defer subCancel()
 	permSub := permission.NewSubscriber(permCache, rdb, log.Logger)
 	go runWithBackoff(subCtx, "permission-cache-subscriber", permSub.Run)
 
@@ -259,7 +259,7 @@ func run() error {
 	go runWithBackoff(subCtx, "thumbnail-worker", thumbWorker.Run)
 	authService, err := auth.NewService(userRepo, rdb, cfg, blocklist, emailSender, serverRepo, permPublisher, log.Logger)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to create auth service")
+		return fmt.Errorf("create auth service: %w", err)
 	}
 
 	// Initialise gateway WebSocket hub and start the pub/sub subscriber with reconnection.

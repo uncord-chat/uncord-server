@@ -363,14 +363,14 @@ func TestRegisterMaxConnections(t *testing.T) {
 func TestModelConversions(t *testing.T) {
 	t.Parallel()
 
-	t.Run("toUserModel", func(t *testing.T) {
+	t.Run("User.ToModel", func(t *testing.T) {
 		t.Parallel()
 		u := &user.User{
 			ID:       uuid.New(),
 			Email:    "user@example.com",
 			Username: "alice",
 		}
-		m := toUserModel(u)
+		m := u.ToModel()
 		if m.ID != u.ID.String() {
 			t.Errorf("ID = %q, want %q", m.ID, u.ID.String())
 		}
@@ -379,7 +379,7 @@ func TestModelConversions(t *testing.T) {
 		}
 	})
 
-	t.Run("toChannelModel", func(t *testing.T) {
+	t.Run("Channel.ToModel", func(t *testing.T) {
 		t.Parallel()
 		catID := uuid.New()
 		ch := &channel.Channel{
@@ -388,7 +388,7 @@ func TestModelConversions(t *testing.T) {
 			Name:       "general",
 			Type:       "text",
 		}
-		m := toChannelModel(ch)
+		m := ch.ToModel()
 		if m.Name != "general" {
 			t.Errorf("Name = %q, want %q", m.Name, "general")
 		}
@@ -397,16 +397,16 @@ func TestModelConversions(t *testing.T) {
 		}
 	})
 
-	t.Run("toChannelModel nil category", func(t *testing.T) {
+	t.Run("Channel.ToModel nil category", func(t *testing.T) {
 		t.Parallel()
 		ch := &channel.Channel{ID: uuid.New(), Name: "no-cat"}
-		m := toChannelModel(ch)
+		m := ch.ToModel()
 		if m.CategoryID != nil {
 			t.Errorf("CategoryID = %v, want nil", m.CategoryID)
 		}
 	})
 
-	t.Run("toRoleModel", func(t *testing.T) {
+	t.Run("Role.ToModel", func(t *testing.T) {
 		t.Parallel()
 		r := &role.Role{
 			ID:          uuid.New(),
@@ -416,7 +416,7 @@ func TestModelConversions(t *testing.T) {
 			Hoist:       true,
 			Permissions: int64(permissions.AllPermissions),
 		}
-		m := toRoleModel(r)
+		m := r.ToModel()
 		if m.Name != "admin" {
 			t.Errorf("Name = %q, want %q", m.Name, "admin")
 		}
@@ -425,7 +425,7 @@ func TestModelConversions(t *testing.T) {
 		}
 	})
 
-	t.Run("toMemberModel with timeout", func(t *testing.T) {
+	t.Run("MemberWithProfile.ToModel with timeout", func(t *testing.T) {
 		t.Parallel()
 		timeout := time.Now().Add(time.Hour)
 		mp := &member.MemberWithProfile{
@@ -435,20 +435,20 @@ func TestModelConversions(t *testing.T) {
 			TimeoutUntil: &timeout,
 			RoleIDs:      []uuid.UUID{uuid.New()},
 		}
-		m := toMemberModel(mp)
+		m := mp.ToModel()
 		if m.TimeoutUntil == nil {
 			t.Fatal("TimeoutUntil = nil, want non-nil")
 		}
 	})
 }
 
-func TestToMemberModels(t *testing.T) {
+func TestMemberSliceToModels(t *testing.T) {
 	t.Parallel()
 	ms := []member.MemberWithProfile{
 		{UserID: uuid.New(), Username: "a", Status: "active"},
 		{UserID: uuid.New(), Username: "b", Status: "active"},
 	}
-	result := toMemberModels(ms)
+	result := memberSliceToModels(ms)
 	if len(result) != 2 {
 		t.Fatalf("len = %d, want 2", len(result))
 	}

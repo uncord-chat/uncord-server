@@ -2,7 +2,6 @@ package api
 
 import (
 	"errors"
-	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/rs/zerolog"
@@ -31,7 +30,7 @@ func (h *ServerHandler) Get(c fiber.Ctx) error {
 		return h.mapServerError(c, err)
 	}
 
-	return httputil.Success(c, toServerConfigModel(cfg))
+	return httputil.Success(c, cfg.ToModel())
 }
 
 // GetPublicInfo handles GET /api/v1/server/info (unauthenticated).
@@ -72,21 +71,7 @@ func (h *ServerHandler) Update(c fiber.Ctx) error {
 		return h.mapServerError(c, err)
 	}
 
-	return httputil.Success(c, toServerConfigModel(cfg))
-}
-
-// toServerConfigModel converts the internal server config to the protocol response type.
-func toServerConfigModel(cfg *server.Config) models.ServerConfig {
-	return models.ServerConfig{
-		ID:          cfg.ID.String(),
-		Name:        cfg.Name,
-		Description: cfg.Description,
-		IconKey:     cfg.IconKey,
-		BannerKey:   cfg.BannerKey,
-		OwnerID:     cfg.OwnerID.String(),
-		CreatedAt:   cfg.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:   cfg.UpdatedAt.Format(time.RFC3339),
-	}
+	return httputil.Success(c, cfg.ToModel())
 }
 
 // mapServerError converts server-layer errors to appropriate HTTP responses.

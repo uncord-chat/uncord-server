@@ -57,7 +57,7 @@ func (h *MemberHandler) ListMembers(c fiber.Ctx) error {
 
 	result := make([]models.Member, len(members))
 	for i := range members {
-		result[i] = toMemberModel(&members[i])
+		result[i] = members[i].ToModel()
 	}
 	return httputil.Success(c, result)
 }
@@ -74,7 +74,7 @@ func (h *MemberHandler) GetSelf(c fiber.Ctx) error {
 	if err != nil {
 		return h.mapMemberError(c, err)
 	}
-	return httputil.Success(c, toMemberModel(m))
+	return httputil.Success(c, m.ToModel())
 }
 
 // UpdateSelf handles PATCH /api/v1/server/members/@me.
@@ -98,7 +98,7 @@ func (h *MemberHandler) UpdateSelf(c fiber.Ctx) error {
 		return h.mapMemberError(c, err)
 	}
 
-	result := toMemberModel(updated)
+	result := updated.ToModel()
 	h.publishMemberUpdate(result, userID.String())
 	return httputil.Success(c, result)
 }
@@ -134,7 +134,7 @@ func (h *MemberHandler) GetMember(c fiber.Ctx) error {
 	if err != nil {
 		return h.mapMemberError(c, err)
 	}
-	return httputil.Success(c, toMemberModel(m))
+	return httputil.Success(c, m.ToModel())
 }
 
 // UpdateMember handles PATCH /api/v1/server/members/:userID.
@@ -167,7 +167,7 @@ func (h *MemberHandler) UpdateMember(c fiber.Ctx) error {
 		return h.mapMemberError(c, err)
 	}
 
-	result := toMemberModel(updated)
+	result := updated.ToModel()
 	h.publishMemberUpdate(result, targetID.String())
 	return httputil.Success(c, result)
 }
@@ -237,7 +237,7 @@ func (h *MemberHandler) SetTimeout(c fiber.Ctx) error {
 		return h.mapMemberError(c, err)
 	}
 
-	result := toMemberModel(updated)
+	result := updated.ToModel()
 	h.publishMemberUpdate(result, targetID.String())
 	h.invalidateUser(c, targetID)
 	return httputil.Success(c, result)
@@ -255,7 +255,7 @@ func (h *MemberHandler) ClearTimeout(c fiber.Ctx) error {
 		return h.mapMemberError(c, err)
 	}
 
-	result := toMemberModel(updated)
+	result := updated.ToModel()
 	h.publishMemberUpdate(result, targetID.String())
 	h.invalidateUser(c, targetID)
 	return httputil.Success(c, result)
@@ -387,7 +387,7 @@ func (h *MemberHandler) AssignRole(c fiber.Ctx) error {
 		return h.mapMemberError(c, err)
 	}
 
-	result := toMemberModel(updated)
+	result := updated.ToModel()
 	h.publishMemberUpdate(result, targetID.String())
 	return httputil.Success(c, result)
 }
@@ -437,7 +437,7 @@ func (h *MemberHandler) RemoveRole(c fiber.Ctx) error {
 
 	if h.gateway != nil {
 		if updated, err := h.members.GetByUserID(c, targetID); err == nil {
-			h.publishMemberUpdate(toMemberModel(updated), targetID.String())
+			h.publishMemberUpdate(updated.ToModel(), targetID.String())
 		}
 	}
 
@@ -519,32 +519,6 @@ func (h *MemberHandler) invalidateUser(c fiber.Ctx, userID uuid.UUID) {
 			h.log.Warn().Err(err).Msg("failed to invalidate permission cache for user")
 		}
 	}
-}
-
-// toMemberModel converts the internal member type to the protocol response type.
-func toMemberModel(m *member.MemberWithProfile) models.Member {
-	roleIDs := make([]string, len(m.RoleIDs))
-	for i, id := range m.RoleIDs {
-		roleIDs[i] = id.String()
-	}
-
-	result := models.Member{
-		User: models.MemberUser{
-			ID:          m.UserID.String(),
-			Username:    m.Username,
-			DisplayName: m.DisplayName,
-			AvatarKey:   m.AvatarKey,
-		},
-		Nickname: m.Nickname,
-		JoinedAt: m.JoinedAt.Format(time.RFC3339),
-		Roles:    roleIDs,
-		Status:   m.Status,
-	}
-	if m.TimeoutUntil != nil {
-		s := m.TimeoutUntil.Format(time.RFC3339)
-		result.TimeoutUntil = &s
-	}
-	return result
 }
 
 // toBanModel converts the internal ban record to the protocol response type.

@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -104,7 +103,7 @@ func (h *ChannelHandler) listPermittedChannels(c fiber.Ctx, userID uuid.UUID) er
 	result := make([]models.Channel, 0, len(all))
 	for i := range all {
 		if permitted[i] {
-			result = append(result, toChannelModel(&all[i]))
+			result = append(result, all[i].ToModel())
 		}
 	}
 	return httputil.Success(c, result)
@@ -130,7 +129,7 @@ func (h *ChannelHandler) listWelcomeChannel(c fiber.Ctx) error {
 		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
 	}
 
-	return httputil.Success(c, []models.Channel{toChannelModel(ch)})
+	return httputil.Success(c, []models.Channel{ch.ToModel()})
 }
 
 // CreateChannel handles POST /api/v1/server/channels.
@@ -194,7 +193,7 @@ func (h *ChannelHandler) CreateChannel(c fiber.Ctx) error {
 		return h.mapChannelError(c, err)
 	}
 
-	result := toChannelModel(ch)
+	result := ch.ToModel()
 	if h.gateway != nil {
 		go func() {
 			if err := h.gateway.Publish(context.Background(), events.ChannelCreate, result); err != nil {
@@ -218,7 +217,7 @@ func (h *ChannelHandler) GetChannel(c fiber.Ctx) error {
 		return h.mapChannelError(c, err)
 	}
 
-	return httputil.Success(c, toChannelModel(ch))
+	return httputil.Success(c, ch.ToModel())
 }
 
 // UpdateChannel handles PATCH /api/v1/channels/:channelID.
@@ -272,7 +271,7 @@ func (h *ChannelHandler) UpdateChannel(c fiber.Ctx) error {
 		return h.mapChannelError(c, err)
 	}
 
-	result := toChannelModel(ch)
+	result := ch.ToModel()
 	if h.gateway != nil {
 		go func() {
 			if err := h.gateway.Publish(context.Background(), events.ChannelUpdate, result); err != nil {
@@ -304,27 +303,6 @@ func (h *ChannelHandler) DeleteChannel(c fiber.Ctx) error {
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)
-}
-
-// toChannelModel converts the internal channel to the protocol response type.
-func toChannelModel(ch *channel.Channel) models.Channel {
-	var categoryID *string
-	if ch.CategoryID != nil {
-		s := ch.CategoryID.String()
-		categoryID = &s
-	}
-	return models.Channel{
-		ID:              ch.ID.String(),
-		CategoryID:      categoryID,
-		Name:            ch.Name,
-		Type:            ch.Type,
-		Topic:           ch.Topic,
-		Position:        ch.Position,
-		SlowmodeSeconds: ch.SlowmodeSeconds,
-		NSFW:            ch.NSFW,
-		CreatedAt:       ch.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:       ch.UpdatedAt.Format(time.RFC3339),
-	}
 }
 
 // mapChannelError converts channel-layer errors to appropriate HTTP responses.

@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/uncord-chat/uncord-protocol/models"
 	"github.com/uncord-chat/uncord-protocol/permissions"
 )
 
@@ -34,6 +35,21 @@ type Role struct {
 	IsEveryone  bool
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+}
+
+// ToModel converts the internal role struct to the protocol response type.
+func (r *Role) ToModel() models.Role {
+	return models.Role{
+		ID:          r.ID.String(),
+		Name:        r.Name,
+		Colour:      r.Colour,
+		Position:    r.Position,
+		Hoist:       r.Hoist,
+		Permissions: r.Permissions,
+		IsEveryone:  r.IsEveryone,
+		CreatedAt:   r.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:   r.UpdatedAt.Format(time.RFC3339),
+	}
 }
 
 // CreateParams groups the inputs for creating a new role.

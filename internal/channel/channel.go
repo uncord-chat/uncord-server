@@ -46,6 +46,27 @@ type Channel struct {
 	UpdatedAt       time.Time
 }
 
+// ToModel converts the internal channel struct to the protocol response type.
+func (ch *Channel) ToModel() models.Channel {
+	var categoryID *string
+	if ch.CategoryID != nil {
+		s := ch.CategoryID.String()
+		categoryID = &s
+	}
+	return models.Channel{
+		ID:              ch.ID.String(),
+		CategoryID:      categoryID,
+		Name:            ch.Name,
+		Type:            ch.Type,
+		Topic:           ch.Topic,
+		Position:        ch.Position,
+		SlowmodeSeconds: ch.SlowmodeSeconds,
+		NSFW:            ch.NSFW,
+		CreatedAt:       ch.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:       ch.UpdatedAt.Format(time.RFC3339),
+	}
+}
+
 // CreateParams groups the inputs for creating a new channel.
 type CreateParams struct {
 	Name            string

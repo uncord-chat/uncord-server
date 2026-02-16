@@ -20,7 +20,7 @@ require (
 	github.com/pressly/goose/v3 v3.26.0
 	github.com/redis/go-redis/v9 v9.17.3
 	github.com/rs/zerolog v1.34.0
-	github.com/uncord-chat/uncord-protocol v0.2.9
+	github.com/uncord-chat/uncord-protocol v0.2.10
 )
 
 require (

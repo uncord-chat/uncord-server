@@ -38,7 +38,7 @@ func (h *UserHandler) GetMe(c fiber.Ctx) error {
 		return h.mapUserError(c, err)
 	}
 
-	return httputil.Success(c, toUserModel(u))
+	return httputil.Success(c, u.ToModel())
 }
 
 // UpdateMe handles PATCH /api/v1/users/@me.
@@ -88,7 +88,7 @@ func (h *UserHandler) UpdateMe(c fiber.Ctx) error {
 		return h.mapUserError(c, err)
 	}
 
-	return httputil.Success(c, toUserModel(u))
+	return httputil.Success(c, u.ToModel())
 }
 
 // DeleteMe handles DELETE /api/v1/users/@me.
@@ -111,24 +111,6 @@ func (h *UserHandler) DeleteMe(c fiber.Ctx) error {
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)
-}
-
-// toUserModel converts the internal user struct to the protocol response type.
-func toUserModel(u *user.User) models.User {
-	return models.User{
-		ID:                   u.ID.String(),
-		Email:                u.Email,
-		Username:             u.Username,
-		DisplayName:          u.DisplayName,
-		AvatarKey:            u.AvatarKey,
-		Pronouns:             u.Pronouns,
-		BannerKey:            u.BannerKey,
-		About:                u.About,
-		ThemeColourPrimary:   u.ThemeColourPrimary,
-		ThemeColourSecondary: u.ThemeColourSecondary,
-		MFAEnabled:           u.MFAEnabled,
-		EmailVerified:        u.EmailVerified,
-	}
 }
 
 // mapUserError converts user-layer errors to appropriate HTTP responses.

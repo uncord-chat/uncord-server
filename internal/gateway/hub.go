@@ -570,11 +570,11 @@ func (h *Hub) assembleReady(ctx context.Context, userID uuid.UUID) (*models.Read
 	}
 
 	return &models.ReadyData{
-		User:      toUserModel(u),
-		Server:    toServerConfigModel(srv),
-		Channels:  toChannelModels(chs),
-		Roles:     toRoleModels(rs),
-		Members:   toMemberModels(ms),
+		User:      u.ToModel(),
+		Server:    srv.ToModel(),
+		Channels:  channelSliceToModels(chs),
+		Roles:     roleSliceToModels(rs),
+		Members:   memberSliceToModels(ms),
 		Presences: presences,
 	}, nil
 }
@@ -617,117 +617,28 @@ func (h *Hub) ClientCount() int {
 	return len(h.clients)
 }
 
-// Model conversion functions. These mirror the unexported converters in the api package (e.g., api/user.go:toUserModel)
-// and exist here because those are package-private.
+// Slice conversion helpers that delegate to each domain type's ToModel() method.
 
-func toUserModel(u *user.User) models.User {
-	return models.User{
-		ID:                   u.ID.String(),
-		Email:                u.Email,
-		Username:             u.Username,
-		DisplayName:          u.DisplayName,
-		AvatarKey:            u.AvatarKey,
-		Pronouns:             u.Pronouns,
-		BannerKey:            u.BannerKey,
-		About:                u.About,
-		ThemeColourPrimary:   u.ThemeColourPrimary,
-		ThemeColourSecondary: u.ThemeColourSecondary,
-		MFAEnabled:           u.MFAEnabled,
-		EmailVerified:        u.EmailVerified,
-	}
-}
-
-func toServerConfigModel(cfg *servercfg.Config) models.ServerConfig {
-	return models.ServerConfig{
-		ID:          cfg.ID.String(),
-		Name:        cfg.Name,
-		Description: cfg.Description,
-		IconKey:     cfg.IconKey,
-		BannerKey:   cfg.BannerKey,
-		OwnerID:     cfg.OwnerID.String(),
-		CreatedAt:   cfg.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:   cfg.UpdatedAt.Format(time.RFC3339),
-	}
-}
-
-func toChannelModels(chs []channel.Channel) []models.Channel {
+func channelSliceToModels(chs []channel.Channel) []models.Channel {
 	result := make([]models.Channel, len(chs))
 	for i := range chs {
-		result[i] = toChannelModel(&chs[i])
+		result[i] = chs[i].ToModel()
 	}
 	return result
 }
 
-func toChannelModel(ch *channel.Channel) models.Channel {
-	var categoryID *string
-	if ch.CategoryID != nil {
-		s := ch.CategoryID.String()
-		categoryID = &s
-	}
-	return models.Channel{
-		ID:              ch.ID.String(),
-		CategoryID:      categoryID,
-		Name:            ch.Name,
-		Type:            ch.Type,
-		Topic:           ch.Topic,
-		Position:        ch.Position,
-		SlowmodeSeconds: ch.SlowmodeSeconds,
-		NSFW:            ch.NSFW,
-		CreatedAt:       ch.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:       ch.UpdatedAt.Format(time.RFC3339),
-	}
-}
-
-func toRoleModels(rs []role.Role) []models.Role {
+func roleSliceToModels(rs []role.Role) []models.Role {
 	result := make([]models.Role, len(rs))
 	for i := range rs {
-		result[i] = toRoleModel(&rs[i])
+		result[i] = rs[i].ToModel()
 	}
 	return result
 }
 
-func toRoleModel(r *role.Role) models.Role {
-	return models.Role{
-		ID:          r.ID.String(),
-		Name:        r.Name,
-		Colour:      r.Colour,
-		Position:    r.Position,
-		Hoist:       r.Hoist,
-		Permissions: r.Permissions,
-		IsEveryone:  r.IsEveryone,
-		CreatedAt:   r.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:   r.UpdatedAt.Format(time.RFC3339),
-	}
-}
-
-func toMemberModels(ms []member.MemberWithProfile) []models.Member {
+func memberSliceToModels(ms []member.MemberWithProfile) []models.Member {
 	result := make([]models.Member, len(ms))
 	for i := range ms {
-		result[i] = toMemberModel(&ms[i])
-	}
-	return result
-}
-
-func toMemberModel(m *member.MemberWithProfile) models.Member {
-	roleIDs := make([]string, len(m.RoleIDs))
-	for i, id := range m.RoleIDs {
-		roleIDs[i] = id.String()
-	}
-	result := models.Member{
-		User: models.MemberUser{
-			ID:          m.UserID.String(),
-			Username:    m.Username,
-			DisplayName: m.DisplayName,
-			AvatarKey:   m.AvatarKey,
-		},
-		Nickname: m.Nickname,
-		JoinedAt: m.JoinedAt.Format(time.RFC3339),
-		Roles:    roleIDs,
-		Status:   m.Status,
-	}
-	if m.TimeoutUntil != nil {
-		s := m.TimeoutUntil.Format(time.RFC3339)
-		result.TimeoutUntil = &s
+		result[i] = ms[i].ToModel()
 	}
 	return result
 }

@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -42,7 +41,7 @@ func (h *RoleHandler) ListRoles(c fiber.Ctx) error {
 
 	result := make([]models.Role, len(roles))
 	for i := range roles {
-		result[i] = toRoleModel(&roles[i])
+		result[i] = roles[i].ToModel()
 	}
 	return httputil.Success(c, result)
 }
@@ -81,7 +80,7 @@ func (h *RoleHandler) CreateRole(c fiber.Ctx) error {
 		return h.mapRoleError(c, err)
 	}
 
-	result := toRoleModel(created)
+	result := created.ToModel()
 	if h.gateway != nil {
 		go func() {
 			if err := h.gateway.Publish(context.Background(), events.RoleCreate, result); err != nil {
@@ -164,7 +163,7 @@ func (h *RoleHandler) UpdateRole(c fiber.Ctx) error {
 		return h.mapRoleError(c, err)
 	}
 
-	result := toRoleModel(updated)
+	result := updated.ToModel()
 	if h.gateway != nil {
 		go func() {
 			if err := h.gateway.Publish(context.Background(), events.RoleUpdate, result); err != nil {
@@ -229,21 +228,6 @@ func (h *RoleHandler) DeleteRole(c fiber.Ctx) error {
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)
-}
-
-// toRoleModel converts the internal role to the protocol response type.
-func toRoleModel(r *role.Role) models.Role {
-	return models.Role{
-		ID:          r.ID.String(),
-		Name:        r.Name,
-		Colour:      r.Colour,
-		Position:    r.Position,
-		Hoist:       r.Hoist,
-		Permissions: r.Permissions,
-		IsEveryone:  r.IsEveryone,
-		CreatedAt:   r.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:   r.UpdatedAt.Format(time.RFC3339),
-	}
 }
 
 // mapRoleError converts role-layer errors to appropriate HTTP responses.

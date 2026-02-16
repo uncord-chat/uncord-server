@@ -154,7 +154,7 @@ func (h *InviteHandler) JoinViaInvite(c fiber.Ctx) error {
 		return h.mapInviteError(c, err)
 	}
 
-	return httputil.Success(c, toMemberModel(m))
+	return httputil.Success(c, m.ToModel())
 }
 
 // AcceptOnboarding handles POST /api/v1/onboarding/accept.
@@ -207,7 +207,7 @@ func (h *InviteHandler) AcceptOnboarding(c fiber.Ctx) error {
 		return h.mapInviteError(c, err)
 	}
 
-	result := toMemberModel(m)
+	result := m.ToModel()
 	if h.gateway != nil {
 		go func() {
 			if err := h.gateway.Publish(context.Background(), events.MemberAdd, result); err != nil {

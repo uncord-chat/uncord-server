@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/uncord-chat/uncord-protocol/models"
 )
 
 // Sentinel errors for the user package.
@@ -37,6 +38,25 @@ type User struct {
 	MFAEnabled           bool
 	EmailVerified        bool
 	CreatedAt            time.Time
+}
+
+// ToModel converts the internal user struct to the protocol response type. This is the single source of truth for the
+// conversion; HTTP handlers and the gateway both call this method rather than maintaining their own copies.
+func (u *User) ToModel() models.User {
+	return models.User{
+		ID:                   u.ID.String(),
+		Email:                u.Email,
+		Username:             u.Username,
+		DisplayName:          u.DisplayName,
+		AvatarKey:            u.AvatarKey,
+		Pronouns:             u.Pronouns,
+		BannerKey:            u.BannerKey,
+		About:                u.About,
+		ThemeColourPrimary:   u.ThemeColourPrimary,
+		ThemeColourSecondary: u.ThemeColourSecondary,
+		MFAEnabled:           u.MFAEnabled,
+		EmailVerified:        u.EmailVerified,
+	}
 }
 
 // Credentials extends User with the password hash and optional MFA secret. Only repository methods that serve the
