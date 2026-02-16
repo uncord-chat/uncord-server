@@ -19,6 +19,7 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/channel"
 	"github.com/uncord-chat/uncord-server/internal/config"
 	"github.com/uncord-chat/uncord-server/internal/member"
+	"github.com/uncord-chat/uncord-server/internal/onboarding"
 	"github.com/uncord-chat/uncord-server/internal/permission"
 	"github.com/uncord-chat/uncord-server/internal/presence"
 	"github.com/uncord-chat/uncord-server/internal/role"
@@ -29,20 +30,22 @@ import (
 // Hub is the central WebSocket connection registry and event distributor. It manages client connections, subscribes to
 // gateway events via Valkey pub/sub, and dispatches events to connected clients with permission filtering.
 type Hub struct {
-	clients   map[uuid.UUID]*Client
-	mu        sync.RWMutex
-	rdb       *redis.Client
-	cfg       *config.Config
-	sessions  *SessionStore
-	resolver  *permission.Resolver
-	users     user.Repository
-	server    servercfg.Repository
-	channels  channel.Repository
-	roles     role.Repository
-	members   member.Repository
-	presence  *presence.Store
-	publisher *Publisher
-	log       zerolog.Logger
+	clients        map[uuid.UUID]*Client
+	mu             sync.RWMutex
+	rdb            *redis.Client
+	cfg            *config.Config
+	sessions       *SessionStore
+	resolver       *permission.Resolver
+	users          user.Repository
+	server         servercfg.Repository
+	channels       channel.Repository
+	roles          role.Repository
+	members        member.Repository
+	presence       *presence.Store
+	publisher      *Publisher
+	onboardingRepo onboarding.Repository
+	documentStore  *onboarding.DocumentStore
+	log            zerolog.Logger
 }
 
 // NewHub creates a new gateway hub.
@@ -58,22 +61,26 @@ func NewHub(
 	members member.Repository,
 	presenceStore *presence.Store,
 	publisher *Publisher,
+	onboardingRepo onboarding.Repository,
+	documentStore *onboarding.DocumentStore,
 	logger zerolog.Logger,
 ) *Hub {
 	return &Hub{
-		clients:   make(map[uuid.UUID]*Client),
-		rdb:       rdb,
-		cfg:       cfg,
-		sessions:  sessions,
-		resolver:  resolver,
-		users:     users,
-		server:    server,
-		channels:  channels,
-		roles:     roles,
-		members:   members,
-		presence:  presenceStore,
-		publisher: publisher,
-		log:       logger.With().Str("component", "gateway").Logger(),
+		clients:        make(map[uuid.UUID]*Client),
+		rdb:            rdb,
+		cfg:            cfg,
+		sessions:       sessions,
+		resolver:       resolver,
+		users:          users,
+		server:         server,
+		channels:       channels,
+		roles:          roles,
+		members:        members,
+		presence:       presenceStore,
+		publisher:      publisher,
+		onboardingRepo: onboardingRepo,
+		documentStore:  documentStore,
+		log:            logger.With().Str("component", "gateway").Logger(),
 	}
 }
 
@@ -569,13 +576,29 @@ func (h *Hub) assembleReady(ctx context.Context, userID uuid.UUID) (*models.Read
 		}
 	}
 
+	var onboardingCfg *models.OnboardingConfig
+	if h.onboardingRepo != nil {
+		cfg, oErr := h.onboardingRepo.Get(ctx)
+		if oErr != nil {
+			h.log.Warn().Err(oErr).Msg("Failed to load onboarding config for READY payload")
+		} else {
+			var docs []models.OnboardingDocument
+			if h.documentStore != nil {
+				docs = h.documentStore.ToModels()
+			}
+			m := cfg.ToModel(docs)
+			onboardingCfg = &m
+		}
+	}
+
 	return &models.ReadyData{
-		User:      u.ToModel(),
-		Server:    srv.ToModel(),
-		Channels:  channelSliceToModels(chs),
-		Roles:     roleSliceToModels(rs),
-		Members:   memberSliceToModels(ms),
-		Presences: presences,
+		User:       u.ToModel(),
+		Server:     srv.ToModel(),
+		Channels:   channelSliceToModels(chs),
+		Roles:      roleSliceToModels(rs),
+		Members:    memberSliceToModels(ms),
+		Presences:  presences,
+		Onboarding: onboardingCfg,
 	}, nil
 }
 

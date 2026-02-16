@@ -1754,6 +1754,24 @@
 					}
 				},
 				{
+					"name": "Get Onboarding Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/onboarding/status",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"onboarding",
+								"status"
+							]
+						},
+						"description": "Returns the next step the authenticated user must complete in the onboarding flow. Possible steps: verify_email, join_server, accept_documents, complete."
+					}
+				},
+				{
 					"name": "Update Onboarding",
 					"request": {
 						"method": "PATCH",

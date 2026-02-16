@@ -245,6 +245,47 @@ func (h *OnboardingHandler) JoinServer(c fiber.Ctx) error {
 	return httputil.Success(c, m.ToModel())
 }
 
+// GetOnboardingStatus handles GET /api/v1/onboarding/status. Returns the next step the authenticated user must complete
+// in the onboarding flow as a single computed string. Only requires authentication so it works at any onboarding stage.
+func (h *OnboardingHandler) GetOnboardingStatus(c fiber.Ctx) error {
+	userID, ok := c.Locals("userID").(uuid.UUID)
+	if !ok {
+		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	}
+
+	status, err := h.members.GetStatus(c, userID)
+	if err != nil {
+		if !errors.Is(err, member.ErrNotFound) {
+			h.log.Error().Err(err).Str("handler", "onboarding").Msg("get member status failed")
+			return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
+		}
+		return httputil.Success(c, models.OnboardingStatusResponse{Step: models.OnboardingStepJoinServer})
+	}
+
+	if status != models.MemberStatusPending {
+		return httputil.Success(c, models.OnboardingStatusResponse{Step: models.OnboardingStepComplete})
+	}
+
+	cfg, err := h.onboarding.Get(c)
+	if err != nil {
+		h.log.Error().Err(err).Str("handler", "onboarding").Msg("get onboarding config for status failed")
+		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
+	}
+
+	if cfg.RequireEmailVerification {
+		u, err := h.users.GetByID(c, userID)
+		if err != nil {
+			h.log.Error().Err(err).Str("handler", "onboarding").Msg("get user for status email check failed")
+			return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
+		}
+		if !u.EmailVerified {
+			return httputil.Success(c, models.OnboardingStatusResponse{Step: models.OnboardingStepVerifyEmail})
+		}
+	}
+
+	return httputil.Success(c, models.OnboardingStatusResponse{Step: models.OnboardingStepAcceptDocuments})
+}
+
 // mapOnboardingError converts onboarding and member layer errors to appropriate HTTP responses.
 func (h *OnboardingHandler) mapOnboardingError(c fiber.Ctx, err error) error {
 	switch {

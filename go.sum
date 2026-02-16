@@ -96,8 +96,8 @@ github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
 github.com/tinylib/msgp v1.6.3 h1:bCSxiTz386UTgyT1i0MSCvdbWjVW+8sG3PjkGsZQt4s=
 github.com/tinylib/msgp v1.6.3/go.mod h1:RSp0LW9oSxFut3KzESt5Voq4GVWyS+PSulT77roAqEA=
-github.com/uncord-chat/uncord-protocol v0.2.11 h1:MB+e8e+0FLuUknZvKeVxqmTOlZKY7xd770lVBuaPM1o=
-github.com/uncord-chat/uncord-protocol v0.2.11/go.mod h1:RIagXPkNcfQEuJfXGOL1Ri0GkXvxjuV3ZE5AunIF6OQ=
+github.com/uncord-chat/uncord-protocol v0.2.12 h1:sk13zSQ0/sBPEAHZjfFAlGqpQwfXlcghstM8RBcs07Y=
+github.com/uncord-chat/uncord-protocol v0.2.12/go.mod h1:RIagXPkNcfQEuJfXGOL1Ri0GkXvxjuV3ZE5AunIF6OQ=
 github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6KllzawFIhcdPw=
 github.com/valyala/bytebufferpool v1.0.0/go.mod h1:6bBcMArwyJ5K/AmCkWv1jt77kVWyCJ6HpOuEn7z0Csc=
 github.com/valyala/fasthttp v1.69.0 h1:fNLLESD2SooWeh2cidsuFtOcrEi4uB4m1mPrkJMZyVI=

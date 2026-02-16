@@ -15,6 +15,7 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/channel"
 	"github.com/uncord-chat/uncord-server/internal/config"
 	"github.com/uncord-chat/uncord-server/internal/member"
+	"github.com/uncord-chat/uncord-server/internal/onboarding"
 	"github.com/uncord-chat/uncord-server/internal/presence"
 	"github.com/uncord-chat/uncord-server/internal/role"
 	servercfg "github.com/uncord-chat/uncord-server/internal/server"
@@ -198,7 +199,7 @@ func TestAssembleReady(t *testing.T) {
 		&fakeMemberRepo{members: []member.MemberWithProfile{
 			{UserID: userID, Username: "testuser", Status: "active", RoleIDs: []uuid.UUID{roleID}},
 		}},
-		nil, nil, zerolog.Nop(),
+		nil, nil, nil, nil, zerolog.Nop(),
 	)
 
 	ctx := context.Background()
@@ -222,6 +223,9 @@ func TestAssembleReady(t *testing.T) {
 	if len(ready.Members) != 1 {
 		t.Errorf("len(Members) = %d, want 1", len(ready.Members))
 	}
+	if ready.Onboarding != nil {
+		t.Errorf("Onboarding = %v, want nil when deps are nil", ready.Onboarding)
+	}
 }
 
 func TestHandlePubSubEventBroadcast(t *testing.T) {
@@ -230,7 +234,7 @@ func TestHandlePubSubEventBroadcast(t *testing.T) {
 	cfg := testConfig()
 	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 
-	hub := NewHub(rdb, cfg, sessions, nil, nil, nil, nil, nil, nil, nil, nil, zerolog.Nop())
+	hub := NewHub(rdb, cfg, sessions, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, zerolog.Nop())
 
 	userID := uuid.New()
 	client := &Client{
@@ -280,7 +284,7 @@ func TestRegisterDisplacesExisting(t *testing.T) {
 	cfg := testConfig()
 	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 
-	hub := NewHub(rdb, cfg, sessions, nil, nil, nil, nil, nil, nil, nil, nil, zerolog.Nop())
+	hub := NewHub(rdb, cfg, sessions, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, zerolog.Nop())
 
 	userID := uuid.New()
 
@@ -336,7 +340,7 @@ func TestRegisterMaxConnections(t *testing.T) {
 	cfg.GatewayMaxConnections = 1
 	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 
-	hub := NewHub(rdb, cfg, sessions, nil, nil, nil, nil, nil, nil, nil, nil, zerolog.Nop())
+	hub := NewHub(rdb, cfg, sessions, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, zerolog.Nop())
 
 	// Register one client.
 	uid1 := uuid.New()
@@ -462,14 +466,23 @@ func TestMemberSliceToModels(t *testing.T) {
 
 func TestReadyDataJSON(t *testing.T) {
 	t.Parallel()
+
+	onboardingCfg := &models.OnboardingConfig{
+		RequireEmailVerification: true,
+		OpenJoin:                 false,
+		AutoRoles:                []string{},
+		Documents:                []models.OnboardingDocument{},
+	}
+
 	ready := models.ReadyData{
-		SessionID: "test-session",
-		User:      models.User{ID: "u1", Username: "alice"},
-		Server:    models.ServerConfig{ID: "s1", Name: "Test"},
-		Channels:  []models.Channel{{ID: "c1", Name: "general"}},
-		Roles:     []models.Role{{ID: "r1", Name: "everyone"}},
-		Members:   []models.Member{{User: models.MemberUser{ID: "u1", Username: "alice"}}},
-		Presences: []models.PresenceState{{UserID: "u1", Status: "online"}},
+		SessionID:  "test-session",
+		User:       models.User{ID: "u1", Username: "alice"},
+		Server:     models.ServerConfig{ID: "s1", Name: "Test"},
+		Channels:   []models.Channel{{ID: "c1", Name: "general"}},
+		Roles:      []models.Role{{ID: "r1", Name: "everyone"}},
+		Members:    []models.Member{{User: models.MemberUser{ID: "u1", Username: "alice"}}},
+		Presences:  []models.PresenceState{{UserID: "u1", Status: "online"}},
+		Onboarding: onboardingCfg,
 	}
 
 	data, err := json.Marshal(ready)
@@ -492,6 +505,12 @@ func TestReadyDataJSON(t *testing.T) {
 	}
 	if decoded.Presences[0].Status != "online" {
 		t.Errorf("Presences[0].Status = %q, want %q", decoded.Presences[0].Status, "online")
+	}
+	if decoded.Onboarding == nil {
+		t.Fatal("Onboarding = nil, want non-nil")
+	}
+	if !decoded.Onboarding.RequireEmailVerification {
+		t.Error("Onboarding.RequireEmailVerification = false, want true")
 	}
 }
 
@@ -518,7 +537,7 @@ func TestAssembleReadyWithPresences(t *testing.T) {
 		&fakeMemberRepo{members: []member.MemberWithProfile{
 			{UserID: userID, Username: "a", Status: "active"},
 		}},
-		presenceStore, nil, zerolog.Nop(),
+		presenceStore, nil, nil, nil, zerolog.Nop(),
 	)
 
 	ready, err := hub.assembleReady(ctx, userID)
@@ -539,7 +558,7 @@ func TestHandlePubSubEventEphemeral(t *testing.T) {
 	cfg := testConfig()
 	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 
-	hub := NewHub(rdb, cfg, sessions, nil, nil, nil, nil, nil, nil, nil, nil, zerolog.Nop())
+	hub := NewHub(rdb, cfg, sessions, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, zerolog.Nop())
 
 	userID := uuid.New()
 	client := &Client{
@@ -589,5 +608,95 @@ func TestHandlePubSubEventEphemeral(t *testing.T) {
 	// Verify no sequence was consumed.
 	if seq := client.currentSeq(); seq != 0 {
 		t.Errorf("currentSeq() = %d, want 0 (ephemeral should not increment)", seq)
+	}
+}
+
+// fakeOnboardingRepo implements onboarding.Repository for testing.
+type fakeOnboardingRepo struct {
+	cfg *onboarding.Config
+	err error
+}
+
+func (r *fakeOnboardingRepo) Get(context.Context) (*onboarding.Config, error) {
+	if r.err != nil {
+		return nil, r.err
+	}
+	return r.cfg, nil
+}
+
+func (r *fakeOnboardingRepo) Update(context.Context, onboarding.UpdateParams) (*onboarding.Config, error) {
+	return r.cfg, nil
+}
+
+func TestAssembleReadyWithOnboarding(t *testing.T) {
+	t.Parallel()
+	_, rdb := newTestRedis(t)
+
+	userID := uuid.New()
+	cfg := testConfig()
+	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
+
+	onboardingCfg := &onboarding.Config{
+		ID:                       uuid.New(),
+		RequireEmailVerification: true,
+		OpenJoin:                 true,
+	}
+
+	hub := NewHub(rdb, cfg, sessions, nil,
+		&fakeUserRepo{user: &user.User{ID: userID, Email: "a@b.com", Username: "a"}},
+		&fakeServerRepo{cfg: &servercfg.Config{ID: uuid.New(), Name: "S", OwnerID: userID}},
+		&fakeChannelRepo{},
+		&fakeRoleRepo{},
+		&fakeMemberRepo{members: []member.MemberWithProfile{
+			{UserID: userID, Username: "a", Status: "active"},
+		}},
+		nil, nil,
+		&fakeOnboardingRepo{cfg: onboardingCfg},
+		onboarding.EmptyDocumentStore(),
+		zerolog.Nop(),
+	)
+
+	ctx := context.Background()
+	ready, err := hub.assembleReady(ctx, userID)
+	if err != nil {
+		t.Fatalf("assembleReady() error = %v", err)
+	}
+	if ready.Onboarding == nil {
+		t.Fatal("Onboarding = nil, want non-nil")
+	}
+	if !ready.Onboarding.RequireEmailVerification {
+		t.Error("Onboarding.RequireEmailVerification = false, want true")
+	}
+	if !ready.Onboarding.OpenJoin {
+		t.Error("Onboarding.OpenJoin = false, want true")
+	}
+}
+
+func TestAssembleReadyNilOnboardingDeps(t *testing.T) {
+	t.Parallel()
+	_, rdb := newTestRedis(t)
+
+	userID := uuid.New()
+	cfg := testConfig()
+	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
+
+	hub := NewHub(rdb, cfg, sessions, nil,
+		&fakeUserRepo{user: &user.User{ID: userID, Email: "a@b.com", Username: "a"}},
+		&fakeServerRepo{cfg: &servercfg.Config{ID: uuid.New(), Name: "S", OwnerID: userID}},
+		&fakeChannelRepo{},
+		&fakeRoleRepo{},
+		&fakeMemberRepo{members: []member.MemberWithProfile{
+			{UserID: userID, Username: "a", Status: "active"},
+		}},
+		nil, nil, nil, nil, zerolog.Nop(),
+	)
+
+	ctx := context.Background()
+	ready, err := hub.assembleReady(ctx, userID)
+	if err != nil {
+		t.Fatalf("assembleReady() error = %v", err)
+	}
+	if ready.Onboarding != nil {
+		t.Errorf("Onboarding = %v, want nil when deps are nil", ready.Onboarding)
 	}
 }
