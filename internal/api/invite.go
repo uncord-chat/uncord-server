@@ -121,9 +121,31 @@ func (h *InviteHandler) JoinViaInvite(c fiber.Ctx) error {
 		return httputil.Fail(c, fiber.StatusForbidden, apierrors.Banned, "You are banned from this server")
 	}
 
+	// Validate the invite before checking email verification so that clients can distinguish "invite not found" from
+	// "email not verified". An invalid code returns UNKNOWN_INVITE; only a confirmed-valid invite can produce
+	// EMAIL_NOT_VERIFIED.
 	code := c.Params("code")
-	_, err = h.invites.Use(c, code)
+	inv, err := h.invites.GetByCode(c, code)
 	if err != nil {
+		return h.mapInviteError(c, err)
+	}
+	if err := inv.Validate(); err != nil {
+		return h.mapInviteError(c, err)
+	}
+
+	// Fetch the user once for both the email verification and account age checks.
+	u, err := h.users.GetByID(c, userID)
+	if err != nil {
+		h.log.Error().Err(err).Str("handler", "invite").Msg("get user failed")
+		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
+	}
+	if !u.EmailVerified {
+		return httputil.Fail(c, fiber.StatusForbidden, apierrors.EmailNotVerified, "Email verification is required")
+	}
+
+	// Atomically consume the invite. The invite may have become invalid between the validation above and this call
+	// (e.g. another user consumed the last use), which is handled correctly by Use.
+	if _, err := h.invites.Use(c, code); err != nil {
 		return h.mapInviteError(c, err)
 	}
 
@@ -135,11 +157,6 @@ func (h *InviteHandler) JoinViaInvite(c fiber.Ctx) error {
 	}
 
 	if cfg.MinAccountAgeSeconds > 0 {
-		u, err := h.users.GetByID(c, userID)
-		if err != nil {
-			h.log.Error().Err(err).Str("handler", "invite").Msg("get user failed")
-			return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
-		}
 		accountAge := time.Since(u.CreatedAt)
 		if accountAge < time.Duration(cfg.MinAccountAgeSeconds)*time.Second {
 			return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError,

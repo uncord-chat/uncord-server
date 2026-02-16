@@ -61,6 +61,18 @@ func ValidateMaxAge(v *int) error {
 	return nil
 }
 
+// Validate checks whether the invite is still usable. It returns nil if the invite can accept another use, or an
+// appropriate sentinel error (ErrExpired, ErrMaxUsesReached) explaining why it cannot.
+func (inv *Invite) Validate() error {
+	if inv.ExpiresAt != nil && !inv.ExpiresAt.After(time.Now()) {
+		return ErrExpired
+	}
+	if inv.MaxUses != nil && inv.UseCount >= *inv.MaxUses {
+		return ErrMaxUsesReached
+	}
+	return nil
+}
+
 // ClampLimit constrains a requested page size to [1, MaxLimit], defaulting to DefaultLimit when the input is zero or
 // negative.
 func ClampLimit(limit int) int {

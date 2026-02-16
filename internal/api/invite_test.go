@@ -547,8 +547,9 @@ func TestJoinViaInvite_Success(t *testing.T) {
 	seedInvite(repo, "abc123", uuid.New())
 	userRepo := newFakeInviteUserRepo()
 	userRepo.users[callerID] = &user.User{
-		ID:        callerID,
-		CreatedAt: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+		ID:            callerID,
+		EmailVerified: true,
+		CreatedAt:     time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
 	}
 	app := testInviteApp(t, repo, newFakeInviteOnboardingRepo(), newFakeInviteMemberRepo(), userRepo, callerID)
 
@@ -584,6 +585,54 @@ func TestJoinViaInvite_NotFound(t *testing.T) {
 	env := parseError(t, body)
 	if env.Error.Code != string(apierrors.UnknownInvite) {
 		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.UnknownInvite)
+	}
+}
+
+func TestJoinViaInvite_InvalidCode_BeforeEmailCheck(t *testing.T) {
+	t.Parallel()
+	callerID := uuid.New()
+	userRepo := newFakeInviteUserRepo()
+	userRepo.users[callerID] = &user.User{
+		ID:            callerID,
+		EmailVerified: false,
+		CreatedAt:     time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+	}
+	app := testInviteApp(t, newFakeInviteRepo(), newFakeInviteOnboardingRepo(), newFakeInviteMemberRepo(), userRepo, callerID)
+
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/invites/invalid/join", ""))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusNotFound {
+		t.Errorf("status = %d, want %d; invite validation should run before email check", resp.StatusCode, fiber.StatusNotFound)
+	}
+	env := parseError(t, body)
+	if env.Error.Code != string(apierrors.UnknownInvite) {
+		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.UnknownInvite)
+	}
+}
+
+func TestJoinViaInvite_EmailNotVerified(t *testing.T) {
+	t.Parallel()
+	callerID := uuid.New()
+	repo := newFakeInviteRepo()
+	seedInvite(repo, "abc123", uuid.New())
+	userRepo := newFakeInviteUserRepo()
+	userRepo.users[callerID] = &user.User{
+		ID:            callerID,
+		EmailVerified: false,
+		CreatedAt:     time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+	}
+	app := testInviteApp(t, repo, newFakeInviteOnboardingRepo(), newFakeInviteMemberRepo(), userRepo, callerID)
+
+	resp := doReq(t, app, jsonReq(http.MethodPost, "/invites/abc123/join", ""))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusForbidden {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusForbidden)
+	}
+	env := parseError(t, body)
+	if env.Error.Code != string(apierrors.EmailNotVerified) {
+		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.EmailNotVerified)
 	}
 }
 
@@ -640,7 +689,13 @@ func TestJoinViaInvite_AlreadyMember(t *testing.T) {
 		Status:   "active",
 		JoinedAt: time.Now(),
 	})
-	app := testInviteApp(t, repo, newFakeInviteOnboardingRepo(), memberRepo, newFakeInviteUserRepo(), callerID)
+	userRepo := newFakeInviteUserRepo()
+	userRepo.users[callerID] = &user.User{
+		ID:            callerID,
+		EmailVerified: true,
+		CreatedAt:     time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+	}
+	app := testInviteApp(t, repo, newFakeInviteOnboardingRepo(), memberRepo, userRepo, callerID)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/invites/abc123/join", ""))
 	body := readBody(t, resp)
@@ -683,8 +738,9 @@ func TestJoinViaInvite_AccountTooYoung(t *testing.T) {
 	onboardingRepo := &fakeInviteOnboardingRepo{cfg: &onboarding.Config{MinAccountAgeSeconds: 86400}} // 1 day
 	userRepo := newFakeInviteUserRepo()
 	userRepo.users[callerID] = &user.User{
-		ID:        callerID,
-		CreatedAt: time.Now(), // Account just created.
+		ID:            callerID,
+		EmailVerified: true,
+		CreatedAt:     time.Now(), // Account just created.
 	}
 	app := testInviteApp(t, repo, onboardingRepo, newFakeInviteMemberRepo(), userRepo, callerID)
 
