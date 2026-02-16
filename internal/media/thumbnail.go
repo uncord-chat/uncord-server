@@ -5,11 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"image"
 	_ "image/gif" // Register GIF decoder for image.Decode
 	"image/jpeg"
 	_ "image/png" // Register PNG decoder for image.Decode
+	"strings"
 
 	"github.com/disintegration/imaging"
 	"github.com/google/uuid"

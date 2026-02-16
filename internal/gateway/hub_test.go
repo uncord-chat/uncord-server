@@ -144,6 +144,10 @@ func (r *fakeMemberRepo) CreatePending(context.Context, uuid.UUID) (*member.Memb
 func (r *fakeMemberRepo) Activate(context.Context, uuid.UUID, []uuid.UUID) (*member.MemberWithProfile, error) {
 	return nil, nil
 }
+func (r *fakeMemberRepo) GetStatus(context.Context, uuid.UUID) (string, error) { return "", nil }
+func (r *fakeMemberRepo) GetByUserIDAnyStatus(context.Context, uuid.UUID) (*member.MemberWithProfile, error) {
+	return nil, nil
+}
 
 func testConfig() *config.Config {
 	return &config.Config{

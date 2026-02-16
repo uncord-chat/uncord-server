@@ -240,6 +240,24 @@ func (r *fakeInviteMemberRepo) ListBans(context.Context) ([]member.BanRecord, er
 func (r *fakeInviteMemberRepo) AssignRole(context.Context, uuid.UUID, uuid.UUID) error { return nil }
 func (r *fakeInviteMemberRepo) RemoveRole(context.Context, uuid.UUID, uuid.UUID) error { return nil }
 
+func (r *fakeInviteMemberRepo) GetStatus(_ context.Context, userID uuid.UUID) (string, error) {
+	for i := range r.members {
+		if r.members[i].UserID == userID {
+			return r.members[i].Status, nil
+		}
+	}
+	return "", member.ErrNotFound
+}
+
+func (r *fakeInviteMemberRepo) GetByUserIDAnyStatus(_ context.Context, userID uuid.UUID) (*member.MemberWithProfile, error) {
+	for i := range r.members {
+		if r.members[i].UserID == userID {
+			return &r.members[i], nil
+		}
+	}
+	return nil, member.ErrNotFound
+}
+
 // --- seed helpers ---
 
 func seedInvite(repo *fakeInviteRepo, code string, channelID uuid.UUID) *invite.Invite {

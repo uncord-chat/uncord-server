@@ -1,7 +1,7 @@
 {
 	"info": {
 		"name": "Uncord Server",
-		"description": "API collection for the Uncord self-hosted chat server.\n\nAfter registering or logging in, the access token is automatically saved to the collection variable `token` and used for all authenticated requests.",
+		"description": "API collection for the Uncord self-hosted chat server.\n\nAfter registering or logging in, the access token is automatically saved to the collection variable `token` and used for all authenticated requests.\n\nProtected endpoints enforce two additional gates beyond JWT authentication:\n\n1. Email verification: users who have not verified their email receive 403 with error code `EMAIL_NOT_VERIFIED`.\n2. Active membership: users who have not completed server onboarding receive 403 with error code `MEMBERSHIP_REQUIRED`. A limited set of endpoints (own profile, join via invite, accept onboarding, check own member status, leave server, list channels) remain accessible to pending members.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"auth": {

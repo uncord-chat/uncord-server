@@ -58,14 +58,15 @@ func (h *MemberHandler) ListMembers(c fiber.Ctx) error {
 	return httputil.Success(c, result)
 }
 
-// GetSelf handles GET /api/v1/server/members/@me.
+// GetSelf handles GET /api/v1/server/members/@me. Unlike other member endpoints, this includes pending members so they
+// can check their own onboarding status.
 func (h *MemberHandler) GetSelf(c fiber.Ctx) error {
 	userID, ok := c.Locals("userID").(uuid.UUID)
 	if !ok {
 		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
 	}
 
-	m, err := h.members.GetByUserID(c, userID)
+	m, err := h.members.GetByUserIDAnyStatus(c, userID)
 	if err != nil {
 		return h.mapMemberError(c, err)
 	}

@@ -209,6 +209,24 @@ func (r *fakeMemberRepo) Activate(_ context.Context, userID uuid.UUID, _ []uuid.
 	return nil, member.ErrNotPending
 }
 
+func (r *fakeMemberRepo) GetStatus(_ context.Context, userID uuid.UUID) (string, error) {
+	for i := range r.members {
+		if r.members[i].UserID == userID {
+			return r.members[i].Status, nil
+		}
+	}
+	return "", member.ErrNotFound
+}
+
+func (r *fakeMemberRepo) GetByUserIDAnyStatus(_ context.Context, userID uuid.UUID) (*member.MemberWithProfile, error) {
+	for i := range r.members {
+		if r.members[i].UserID == userID {
+			return &r.members[i], nil
+		}
+	}
+	return nil, member.ErrNotFound
+}
+
 // --- seed helpers ---
 
 func seedMember(repo *fakeMemberRepo, userID uuid.UUID, username string) *member.MemberWithProfile {

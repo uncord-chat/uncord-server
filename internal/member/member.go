@@ -96,6 +96,8 @@ type Repository interface {
 	// Listing
 	List(ctx context.Context, after *uuid.UUID, limit int) ([]MemberWithProfile, error)
 	GetByUserID(ctx context.Context, userID uuid.UUID) (*MemberWithProfile, error)
+	GetByUserIDAnyStatus(ctx context.Context, userID uuid.UUID) (*MemberWithProfile, error)
+	GetStatus(ctx context.Context, userID uuid.UUID) (string, error)
 
 	// Mutation
 	UpdateNickname(ctx context.Context, userID uuid.UUID, nickname *string) (*MemberWithProfile, error)

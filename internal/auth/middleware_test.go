@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -11,6 +12,8 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
+
+	"github.com/uncord-chat/uncord-server/internal/user"
 )
 
 func TestRequireAuthNoHeader(t *testing.T) {
@@ -168,4 +171,149 @@ func readErrorCode(t *testing.T, resp *http.Response) string {
 		t.Fatalf("unmarshal body %q: %v", string(bodyBytes), err)
 	}
 	return body.Error.Code
+}
+
+// fakeUserLookup implements user.Repository for RequireVerifiedEmail tests. Only GetByID is exercised; all other
+// methods panic to surface unintended calls.
+type fakeUserLookup struct {
+	users map[uuid.UUID]*user.User
+}
+
+func (f *fakeUserLookup) GetByID(_ context.Context, id uuid.UUID) (*user.User, error) {
+	u, ok := f.users[id]
+	if !ok {
+		return nil, user.ErrNotFound
+	}
+	return u, nil
+}
+
+func (f *fakeUserLookup) Create(context.Context, user.CreateParams) (uuid.UUID, error) {
+	panic("not implemented")
+}
+func (f *fakeUserLookup) GetByEmail(context.Context, string) (*user.Credentials, error) {
+	panic("not implemented")
+}
+func (f *fakeUserLookup) GetCredentialsByID(context.Context, uuid.UUID) (*user.Credentials, error) {
+	panic("not implemented")
+}
+func (f *fakeUserLookup) VerifyEmail(context.Context, string) (uuid.UUID, error) {
+	panic("not implemented")
+}
+func (f *fakeUserLookup) RecordLoginAttempt(context.Context, string, string, bool) error {
+	panic("not implemented")
+}
+func (f *fakeUserLookup) UpdatePasswordHash(context.Context, uuid.UUID, string) error {
+	panic("not implemented")
+}
+func (f *fakeUserLookup) Update(context.Context, uuid.UUID, user.UpdateParams) (*user.User, error) {
+	panic("not implemented")
+}
+func (f *fakeUserLookup) EnableMFA(context.Context, uuid.UUID, string, []string) error {
+	panic("not implemented")
+}
+func (f *fakeUserLookup) DisableMFA(context.Context, uuid.UUID) error {
+	panic("not implemented")
+}
+func (f *fakeUserLookup) GetUnusedRecoveryCodes(context.Context, uuid.UUID) ([]user.MFARecoveryCode, error) {
+	panic("not implemented")
+}
+func (f *fakeUserLookup) UseRecoveryCode(context.Context, uuid.UUID) error {
+	panic("not implemented")
+}
+func (f *fakeUserLookup) ReplaceRecoveryCodes(context.Context, uuid.UUID, []string) error {
+	panic("not implemented")
+}
+func (f *fakeUserLookup) DeleteWithTombstones(context.Context, uuid.UUID, []user.Tombstone) error {
+	panic("not implemented")
+}
+func (f *fakeUserLookup) CheckTombstone(context.Context, user.TombstoneType, string) (bool, error) {
+	panic("not implemented")
+}
+
+func TestRequireVerifiedEmail(t *testing.T) {
+	t.Parallel()
+
+	verifiedID := uuid.New()
+	unverifiedID := uuid.New()
+	unknownID := uuid.New()
+
+	lookup := &fakeUserLookup{
+		users: map[uuid.UUID]*user.User{
+			verifiedID:   {EmailVerified: true},
+			unverifiedID: {EmailVerified: false},
+		},
+	}
+	mw := RequireVerifiedEmail(lookup)
+
+	tests := []struct {
+		name       string
+		userID     uuid.UUID
+		setLocals  bool
+		wantStatus int
+		wantCode   string
+	}{
+		{
+			name:       "verified user passes through",
+			userID:     verifiedID,
+			setLocals:  true,
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "unverified user is blocked",
+			userID:     unverifiedID,
+			setLocals:  true,
+			wantStatus: http.StatusForbidden,
+			wantCode:   string(apierrors.EmailNotVerified),
+		},
+		{
+			name:       "unknown user is blocked",
+			userID:     unknownID,
+			setLocals:  true,
+			wantStatus: http.StatusUnauthorized,
+			wantCode:   string(apierrors.Unauthorised),
+		},
+		{
+			name:       "missing locals is blocked",
+			setLocals:  false,
+			wantStatus: http.StatusUnauthorized,
+			wantCode:   string(apierrors.Unauthorised),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			app := fiber.New()
+
+			// Inject the userID local before the middleware under test.
+			app.Use(func(c fiber.Ctx) error {
+				if tt.setLocals {
+					c.Locals("userID", tt.userID)
+				}
+				return c.Next()
+			})
+			app.Get("/test", mw, func(c fiber.Ctx) error {
+				return c.SendStatus(http.StatusOK)
+			})
+
+			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			resp, err := app.Test(req)
+			if err != nil {
+				t.Fatalf("app.Test: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+
+			if resp.StatusCode != tt.wantStatus {
+				t.Errorf("status = %d, want %d", resp.StatusCode, tt.wantStatus)
+			}
+
+			if tt.wantCode != "" {
+				code := readErrorCode(t, resp)
+				if code != tt.wantCode {
+					t.Errorf("error code = %q, want %q", code, tt.wantCode)
+				}
+			}
+		})
+	}
 }

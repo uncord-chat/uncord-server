@@ -16,6 +16,8 @@ import (
 	"github.com/uncord-chat/uncord-protocol/permissions"
 
 	"github.com/uncord-chat/uncord-server/internal/channel"
+	"github.com/uncord-chat/uncord-server/internal/invite"
+	"github.com/uncord-chat/uncord-server/internal/member"
 	"github.com/uncord-chat/uncord-server/internal/permission"
 )
 
@@ -178,6 +180,74 @@ func (s *denyViewPermStore) Overrides(_ context.Context, _ permission.TargetType
 	return nil, nil
 }
 
+// fakeChannelMemberRepo implements member.Repository for channel handler tests. GetStatus returns the configured
+// status for known users, or ErrNotFound.
+type fakeChannelMemberRepo struct {
+	statuses map[uuid.UUID]string
+}
+
+func newFakeChannelMemberRepo(userID uuid.UUID) *fakeChannelMemberRepo {
+	return &fakeChannelMemberRepo{
+		statuses: map[uuid.UUID]string{userID: models.MemberStatusActive},
+	}
+}
+
+func (r *fakeChannelMemberRepo) GetStatus(_ context.Context, userID uuid.UUID) (string, error) {
+	s, ok := r.statuses[userID]
+	if !ok {
+		return "", member.ErrNotFound
+	}
+	return s, nil
+}
+
+func (r *fakeChannelMemberRepo) GetByUserIDAnyStatus(context.Context, uuid.UUID) (*member.MemberWithProfile, error) {
+	return nil, nil
+}
+func (r *fakeChannelMemberRepo) List(context.Context, *uuid.UUID, int) ([]member.MemberWithProfile, error) {
+	return nil, nil
+}
+func (r *fakeChannelMemberRepo) GetByUserID(context.Context, uuid.UUID) (*member.MemberWithProfile, error) {
+	return nil, nil
+}
+func (r *fakeChannelMemberRepo) UpdateNickname(context.Context, uuid.UUID, *string) (*member.MemberWithProfile, error) {
+	return nil, nil
+}
+func (r *fakeChannelMemberRepo) Delete(context.Context, uuid.UUID) error { return nil }
+func (r *fakeChannelMemberRepo) SetTimeout(context.Context, uuid.UUID, time.Time) (*member.MemberWithProfile, error) {
+	return nil, nil
+}
+func (r *fakeChannelMemberRepo) ClearTimeout(context.Context, uuid.UUID) (*member.MemberWithProfile, error) {
+	return nil, nil
+}
+func (r *fakeChannelMemberRepo) Ban(context.Context, uuid.UUID, uuid.UUID, *string, *time.Time) error {
+	return nil
+}
+func (r *fakeChannelMemberRepo) Unban(context.Context, uuid.UUID) error { return nil }
+func (r *fakeChannelMemberRepo) ListBans(context.Context) ([]member.BanRecord, error) {
+	return nil, nil
+}
+func (r *fakeChannelMemberRepo) IsBanned(context.Context, uuid.UUID) (bool, error)      { return false, nil }
+func (r *fakeChannelMemberRepo) AssignRole(context.Context, uuid.UUID, uuid.UUID) error { return nil }
+func (r *fakeChannelMemberRepo) RemoveRole(context.Context, uuid.UUID, uuid.UUID) error { return nil }
+func (r *fakeChannelMemberRepo) CreatePending(context.Context, uuid.UUID) (*member.MemberWithProfile, error) {
+	return nil, nil
+}
+func (r *fakeChannelMemberRepo) Activate(context.Context, uuid.UUID, []uuid.UUID) (*member.MemberWithProfile, error) {
+	return nil, nil
+}
+
+// fakeOnboardingConfig implements onboardingConfigSource for channel handler tests.
+type fakeOnboardingConfig struct {
+	cfg *invite.OnboardingConfig
+}
+
+func (f *fakeOnboardingConfig) GetOnboardingConfig(context.Context) (*invite.OnboardingConfig, error) {
+	if f.cfg != nil {
+		return f.cfg, nil
+	}
+	return &invite.OnboardingConfig{}, nil
+}
+
 func seedChannel(repo *fakeChannelRepo) *channel.Channel {
 	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	ch := channel.Channel{
@@ -197,7 +267,9 @@ func seedChannel(repo *fakeChannelRepo) *channel.Channel {
 
 func testChannelApp(t *testing.T, repo channel.Repository, resolver *permission.Resolver, maxChannels int, userID uuid.UUID) *fiber.App {
 	t.Helper()
-	handler := NewChannelHandler(repo, resolver, maxChannels, zerolog.Nop())
+	memberRepo := newFakeChannelMemberRepo(userID)
+	onboarding := &fakeOnboardingConfig{}
+	handler := NewChannelHandler(repo, memberRepo, onboarding, resolver, maxChannels, zerolog.Nop())
 	app := fiber.New()
 
 	app.Use(fakeAuth(userID))
@@ -312,6 +384,110 @@ func TestListChannels_PermissionFiltering(t *testing.T) {
 	}
 	if len(chs) != 0 {
 		t.Errorf("got %d channels, want 0 (all should be filtered by permission)", len(chs))
+	}
+}
+
+func TestListChannels_PendingMemberSeesWelcomeChannel(t *testing.T) {
+	t.Parallel()
+	userID := uuid.New()
+	repo := newFakeChannelRepo()
+	welcomeCh := seedChannel(repo)
+	seedChannel(repo) // second channel the pending member should not see
+
+	memberRepo := newFakeChannelMemberRepo(userID)
+	memberRepo.statuses[userID] = models.MemberStatusPending
+
+	onboarding := &fakeOnboardingConfig{cfg: &invite.OnboardingConfig{WelcomeChannelID: &welcomeCh.ID}}
+	handler := NewChannelHandler(repo, memberRepo, onboarding, allowAllResolver(), 500, zerolog.Nop())
+
+	app := fiber.New()
+	app.Use(fakeAuth(userID))
+	app.Get("/channels", handler.ListChannels)
+
+	resp := doReq(t, app, jsonReq(http.MethodGet, "/channels", ""))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusOK {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusOK)
+	}
+
+	env := parseSuccess(t, body)
+	var chs []struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(env.Data, &chs); err != nil {
+		t.Fatalf("unmarshal channels: %v", err)
+	}
+	if len(chs) != 1 {
+		t.Fatalf("got %d channels, want 1", len(chs))
+	}
+	if chs[0].ID != welcomeCh.ID.String() {
+		t.Errorf("channel id = %q, want %q", chs[0].ID, welcomeCh.ID.String())
+	}
+}
+
+func TestListChannels_PendingMemberNoWelcomeChannel(t *testing.T) {
+	t.Parallel()
+	userID := uuid.New()
+	repo := newFakeChannelRepo()
+	seedChannel(repo)
+
+	memberRepo := newFakeChannelMemberRepo(userID)
+	memberRepo.statuses[userID] = models.MemberStatusPending
+
+	onboarding := &fakeOnboardingConfig{}
+	handler := NewChannelHandler(repo, memberRepo, onboarding, allowAllResolver(), 500, zerolog.Nop())
+
+	app := fiber.New()
+	app.Use(fakeAuth(userID))
+	app.Get("/channels", handler.ListChannels)
+
+	resp := doReq(t, app, jsonReq(http.MethodGet, "/channels", ""))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusOK {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusOK)
+	}
+
+	env := parseSuccess(t, body)
+	var chs []json.RawMessage
+	if err := json.Unmarshal(env.Data, &chs); err != nil {
+		t.Fatalf("unmarshal channels: %v", err)
+	}
+	if len(chs) != 0 {
+		t.Errorf("got %d channels, want 0", len(chs))
+	}
+}
+
+func TestListChannels_NonMemberSeesEmpty(t *testing.T) {
+	t.Parallel()
+	userID := uuid.New()
+	repo := newFakeChannelRepo()
+	seedChannel(repo)
+
+	memberRepo := &fakeChannelMemberRepo{statuses: map[uuid.UUID]string{}}
+	onboarding := &fakeOnboardingConfig{}
+	handler := NewChannelHandler(repo, memberRepo, onboarding, allowAllResolver(), 500, zerolog.Nop())
+
+	app := fiber.New()
+	app.Use(fakeAuth(userID))
+	app.Get("/channels", handler.ListChannels)
+
+	resp := doReq(t, app, jsonReq(http.MethodGet, "/channels", ""))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusOK {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusOK)
+	}
+
+	env := parseSuccess(t, body)
+	var chs []json.RawMessage
+	if err := json.Unmarshal(env.Data, &chs); err != nil {
+		t.Fatalf("unmarshal channels: %v", err)
+	}
+	if len(chs) != 0 {
+		t.Errorf("got %d channels, want 0", len(chs))
 	}
 }
 

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -13,30 +14,71 @@ import (
 
 	"github.com/uncord-chat/uncord-server/internal/channel"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
+	"github.com/uncord-chat/uncord-server/internal/invite"
+	"github.com/uncord-chat/uncord-server/internal/member"
 	"github.com/uncord-chat/uncord-server/internal/permission"
 )
+
+// onboardingConfigSource provides read access to the server's onboarding configuration.
+type onboardingConfigSource interface {
+	GetOnboardingConfig(ctx context.Context) (*invite.OnboardingConfig, error)
+}
 
 // ChannelHandler serves channel endpoints.
 type ChannelHandler struct {
 	channels    channel.Repository
+	members     member.Repository
+	onboarding  onboardingConfigSource
 	resolver    *permission.Resolver
 	maxChannels int
 	log         zerolog.Logger
 }
 
 // NewChannelHandler creates a new channel handler.
-func NewChannelHandler(channels channel.Repository, resolver *permission.Resolver, maxChannels int, logger zerolog.Logger) *ChannelHandler {
-	return &ChannelHandler{channels: channels, resolver: resolver, maxChannels: maxChannels, log: logger}
+func NewChannelHandler(
+	channels channel.Repository,
+	members member.Repository,
+	onboarding onboardingConfigSource,
+	resolver *permission.Resolver,
+	maxChannels int,
+	logger zerolog.Logger,
+) *ChannelHandler {
+	return &ChannelHandler{
+		channels:    channels,
+		members:     members,
+		onboarding:  onboarding,
+		resolver:    resolver,
+		maxChannels: maxChannels,
+		log:         logger,
+	}
 }
 
-// ListChannels handles GET /api/v1/server/channels. It returns only channels the authenticated user has permission to
-// view.
+// ListChannels handles GET /api/v1/server/channels. Active and timed-out members see all channels they have permission
+// to view. Pending members see only the welcome channel (if configured). Non-members see an empty list.
 func (h *ChannelHandler) ListChannels(c fiber.Ctx) error {
 	userID, ok := c.Locals("userID").(uuid.UUID)
 	if !ok {
 		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
 	}
 
+	status, err := h.members.GetStatus(c, userID)
+	if err != nil {
+		if errors.Is(err, member.ErrNotFound) {
+			return httputil.Success(c, []models.Channel{})
+		}
+		h.log.Error().Err(err).Str("handler", "channel").Msg("get member status failed")
+		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
+	}
+
+	if status == models.MemberStatusPending {
+		return h.listWelcomeChannel(c)
+	}
+
+	return h.listPermittedChannels(c, userID)
+}
+
+// listPermittedChannels returns all channels the user has ViewChannels permission for.
+func (h *ChannelHandler) listPermittedChannels(c fiber.Ctx, userID uuid.UUID) error {
 	all, err := h.channels.List(c)
 	if err != nil {
 		h.log.Error().Err(err).Str("handler", "channel").Msg("list channels failed")
@@ -61,6 +103,29 @@ func (h *ChannelHandler) ListChannels(c fiber.Ctx) error {
 		}
 	}
 	return httputil.Success(c, result)
+}
+
+// listWelcomeChannel returns only the configured welcome channel for pending members.
+func (h *ChannelHandler) listWelcomeChannel(c fiber.Ctx) error {
+	cfg, err := h.onboarding.GetOnboardingConfig(c)
+	if err != nil {
+		h.log.Error().Err(err).Str("handler", "channel").Msg("get onboarding config failed")
+		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
+	}
+	if cfg.WelcomeChannelID == nil {
+		return httputil.Success(c, []models.Channel{})
+	}
+
+	ch, err := h.channels.GetByID(c, *cfg.WelcomeChannelID)
+	if err != nil {
+		if errors.Is(err, channel.ErrNotFound) {
+			return httputil.Success(c, []models.Channel{})
+		}
+		h.log.Error().Err(err).Str("handler", "channel").Msg("get welcome channel failed")
+		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
+	}
+
+	return httputil.Success(c, []models.Channel{toChannelModel(ch)})
 }
 
 // CreateChannel handles POST /api/v1/server/channels.

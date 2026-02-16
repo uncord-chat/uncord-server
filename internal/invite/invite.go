@@ -40,6 +40,7 @@ type Invite struct {
 
 // OnboardingConfig holds the onboarding requirements read from the onboarding_config table.
 type OnboardingConfig struct {
+	WelcomeChannelID         *uuid.UUID
 	RequireRulesAcceptance   bool
 	RequireEmailVerification bool
 	MinAccountAgeSeconds     int

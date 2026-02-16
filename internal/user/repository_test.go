@@ -330,4 +330,3 @@ func TestValidateThemeColour(t *testing.T) {
 func ptr(s string) *string { return &s }
 
 func intPtr(i int) *int { return &i }
-

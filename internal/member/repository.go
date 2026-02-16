@@ -285,7 +285,7 @@ func (r *PGRepository) CreatePending(ctx context.Context, userID uuid.UUID) (*Me
 		return nil, err
 	}
 
-	return r.getByUserIDAnyStatus(ctx, userID)
+	return r.GetByUserIDAnyStatus(ctx, userID)
 }
 
 // Activate transitions a pending member to active status, assigns auto-roles, and returns the updated profile. Returns
@@ -317,11 +317,24 @@ func (r *PGRepository) Activate(ctx context.Context, userID uuid.UUID, autoRoles
 		return nil, err
 	}
 
-	return r.getByUserIDAnyStatus(ctx, userID)
+	return r.GetByUserIDAnyStatus(ctx, userID)
 }
 
-// getByUserIDAnyStatus returns a member profile regardless of status, including pending members.
-func (r *PGRepository) getByUserIDAnyStatus(ctx context.Context, userID uuid.UUID) (*MemberWithProfile, error) {
+// GetStatus returns the status string for a member. Returns ErrNotFound if no member record exists.
+func (r *PGRepository) GetStatus(ctx context.Context, userID uuid.UUID) (string, error) {
+	var status string
+	err := r.db.QueryRow(ctx, "SELECT status FROM members WHERE user_id = $1", userID).Scan(&status)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", ErrNotFound
+		}
+		return "", fmt.Errorf("query member status: %w", err)
+	}
+	return status, nil
+}
+
+// GetByUserIDAnyStatus returns a member profile regardless of status, including pending members.
+func (r *PGRepository) GetByUserIDAnyStatus(ctx context.Context, userID uuid.UUID) (*MemberWithProfile, error) {
 	row := r.db.QueryRow(ctx,
 		memberQueryAnyStatus+` AND m.user_id = $1
 GROUP BY m.user_id, u.username, u.display_name, u.avatar_key,

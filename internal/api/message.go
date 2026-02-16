@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -179,11 +180,12 @@ func (h *MessageHandler) CreateMessage(c fiber.Ctx) error {
 
 	result := h.toMessageModel(msg, linked)
 
-	// Best-effort Typesense indexing.
+	// Best-effort Typesense indexing. Uses context.Background because Fiber recycles the request context after the
+	// handler returns.
 	if h.indexer != nil {
 		go func() {
 			if err := h.indexer.IndexMessage(
-				c, msg.ID.String(), msg.Content, msg.AuthorID.String(),
+				context.Background(), msg.ID.String(), msg.Content, msg.AuthorID.String(),
 				msg.ChannelID.String(), msg.CreatedAt.Unix(),
 			); err != nil {
 				h.log.Warn().Err(err).Str("message_id", msg.ID.String()).Msg("Typesense index failed")
@@ -191,10 +193,10 @@ func (h *MessageHandler) CreateMessage(c fiber.Ctx) error {
 		}()
 	}
 
-	// Best-effort gateway event publish.
+	// Best-effort gateway event publish. Uses context.Background for the same reason as above.
 	if h.gateway != nil {
 		go func() {
-			if err := h.gateway.Publish(c, events.MessageCreate, result); err != nil {
+			if err := h.gateway.Publish(context.Background(), events.MessageCreate, result); err != nil {
 				h.log.Warn().Err(err).Str("message_id", msg.ID.String()).Msg("Gateway publish failed")
 			}
 		}()
@@ -247,19 +249,20 @@ func (h *MessageHandler) EditMessage(c fiber.Ctx) error {
 
 	result := h.toMessageModel(msg, attachments)
 
-	// Best-effort Typesense upsert.
+	// Best-effort Typesense upsert. Uses context.Background because Fiber recycles the request context after the
+	// handler returns.
 	if h.indexer != nil {
 		go func() {
-			if err := h.indexer.UpdateMessage(c, msg.ID.String(), msg.Content); err != nil {
+			if err := h.indexer.UpdateMessage(context.Background(), msg.ID.String(), msg.Content); err != nil {
 				h.log.Warn().Err(err).Str("message_id", msg.ID.String()).Msg("Typesense upsert failed")
 			}
 		}()
 	}
 
-	// Best-effort gateway event publish.
+	// Best-effort gateway event publish. Uses context.Background for the same reason as above.
 	if h.gateway != nil {
 		go func() {
-			if err := h.gateway.Publish(c, events.MessageUpdate, result); err != nil {
+			if err := h.gateway.Publish(context.Background(), events.MessageUpdate, result); err != nil {
 				h.log.Warn().Err(err).Str("message_id", msg.ID.String()).Msg("Gateway publish failed")
 			}
 		}()
@@ -302,23 +305,24 @@ func (h *MessageHandler) DeleteMessage(c fiber.Ctx) error {
 		return h.mapMessageError(c, err)
 	}
 
-	// Best-effort Typesense deletion.
+	// Best-effort Typesense deletion. Uses context.Background because Fiber recycles the request context after the
+	// handler returns.
 	if h.indexer != nil {
 		go func() {
-			if err := h.indexer.DeleteMessage(c, messageID.String()); err != nil {
+			if err := h.indexer.DeleteMessage(context.Background(), messageID.String()); err != nil {
 				h.log.Warn().Err(err).Str("message_id", messageID.String()).Msg("Typesense delete failed")
 			}
 		}()
 	}
 
-	// Best-effort gateway event publish.
+	// Best-effort gateway event publish. Uses context.Background for the same reason as above.
 	if h.gateway != nil {
 		go func() {
 			deletePayload := models.MessageDeleteData{
 				ID:        messageID.String(),
 				ChannelID: existing.ChannelID.String(),
 			}
-			if err := h.gateway.Publish(c, events.MessageDelete, deletePayload); err != nil {
+			if err := h.gateway.Publish(context.Background(), events.MessageDelete, deletePayload); err != nil {
 				h.log.Warn().Err(err).Str("message_id", messageID.String()).Msg("Gateway publish failed")
 			}
 		}()

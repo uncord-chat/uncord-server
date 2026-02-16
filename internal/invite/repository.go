@@ -192,12 +192,12 @@ func (r *PGRepository) diagnoseUseFailure(ctx context.Context, code string) erro
 func (r *PGRepository) GetOnboardingConfig(ctx context.Context) (*OnboardingConfig, error) {
 	var cfg OnboardingConfig
 	err := r.db.QueryRow(ctx,
-		`SELECT require_rules_acceptance, require_email_verification,
+		`SELECT welcome_channel_id, require_rules_acceptance, require_email_verification,
 		        min_account_age_seconds, require_phone, require_captcha, auto_roles
 		 FROM onboarding_config
 		 LIMIT 1`,
 	).Scan(
-		&cfg.RequireRulesAcceptance, &cfg.RequireEmailVerification,
+		&cfg.WelcomeChannelID, &cfg.RequireRulesAcceptance, &cfg.RequireEmailVerification,
 		&cfg.MinAccountAgeSeconds, &cfg.RequirePhone, &cfg.RequireCaptcha, &cfg.AutoRoles,
 	)
 	if err != nil {
