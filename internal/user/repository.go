@@ -450,11 +450,11 @@ func (r *PGRepository) PurgeLoginAttempts(ctx context.Context, olderThan time.Ti
 		return 0, fmt.Errorf("purge login attempts: database pool is nil")
 	}
 
-	const query = `DELETE FROM login_attempts WHERE ctid IN (SELECT ctid FROM login_attempts WHERE created_at < $1 LIMIT 1000)`
+	const query = `DELETE FROM login_attempts WHERE ctid IN (SELECT ctid FROM login_attempts WHERE created_at < $1 LIMIT $2)`
 
 	var total int64
 	for {
-		tag, err := r.db.Exec(ctx, query, olderThan)
+		tag, err := r.db.Exec(ctx, query, olderThan, purgeBatchSize)
 		if err != nil {
 			return total, fmt.Errorf("purge login attempts: %w", err)
 		}
@@ -473,11 +473,11 @@ func (r *PGRepository) PurgeTombstones(ctx context.Context, olderThan time.Time)
 		return 0, fmt.Errorf("purge deletion tombstones: database pool is nil")
 	}
 
-	const query = `DELETE FROM deletion_tombstones WHERE ctid IN (SELECT ctid FROM deletion_tombstones WHERE created_at < $1 LIMIT 1000)`
+	const query = `DELETE FROM deletion_tombstones WHERE ctid IN (SELECT ctid FROM deletion_tombstones WHERE created_at < $1 LIMIT $2)`
 
 	var total int64
 	for {
-		tag, err := r.db.Exec(ctx, query, olderThan)
+		tag, err := r.db.Exec(ctx, query, olderThan, purgeBatchSize)
 		if err != nil {
 			return total, fmt.Errorf("purge deletion tombstones: %w", err)
 		}
