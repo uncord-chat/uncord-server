@@ -61,12 +61,17 @@ func IncrementMFASetupAttempts(ctx context.Context, rdb *redis.Client, userID uu
 		return 0, fmt.Errorf("increment MFA setup attempts: %w", err)
 	}
 	if count == 1 {
-		rdb.Expire(ctx, key, pendingMFATTL)
+		if err := rdb.Expire(ctx, key, pendingMFATTL).Err(); err != nil {
+			return count, fmt.Errorf("set MFA attempts TTL: %w", err)
+		}
 	}
 	return count, nil
 }
 
 // ResetMFASetupAttempts deletes the failed attempt counter, called when a new MFA setup begins.
-func ResetMFASetupAttempts(ctx context.Context, rdb *redis.Client, userID uuid.UUID) {
-	rdb.Del(ctx, mfaPendingAttemptsKey(userID))
+func ResetMFASetupAttempts(ctx context.Context, rdb *redis.Client, userID uuid.UUID) error {
+	if err := rdb.Del(ctx, mfaPendingAttemptsKey(userID)).Err(); err != nil {
+		return fmt.Errorf("reset MFA setup attempts: %w", err)
+	}
+	return nil
 }

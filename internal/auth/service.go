@@ -439,7 +439,9 @@ func (s *Service) BeginMFASetup(ctx context.Context, userID uuid.UUID, password 
 	if err := StorePendingMFASecret(ctx, s.redis, userID, encrypted); err != nil {
 		return nil, err
 	}
-	ResetMFASetupAttempts(ctx, s.redis, userID)
+	if err := ResetMFASetupAttempts(ctx, s.redis, userID); err != nil {
+		s.log.Warn().Err(err).Str("user_id", userID.String()).Msg("Failed to reset MFA setup attempts")
+	}
 
 	return &MFASetupResult{
 		Secret: key.Secret(),

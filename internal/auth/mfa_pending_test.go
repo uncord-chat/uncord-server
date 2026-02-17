@@ -130,7 +130,9 @@ func TestResetMFASetupAttempts(t *testing.T) {
 		}
 	}
 
-	ResetMFASetupAttempts(ctx, rdb, userID)
+	if err := ResetMFASetupAttempts(ctx, rdb, userID); err != nil {
+		t.Fatalf("ResetMFASetupAttempts() error = %v", err)
+	}
 
 	count, err := IncrementMFASetupAttempts(ctx, rdb, userID)
 	if err != nil {
