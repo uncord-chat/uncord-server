@@ -432,7 +432,7 @@ func (h *Hub) refreshPresence(ctx context.Context, userID uuid.UUID) {
 // ephemeralEvent returns true for dispatch event types that should be sent without a sequence number and not stored in
 // the replay buffer.
 func ephemeralEvent(eventType events.DispatchEvent) bool {
-	return eventType == events.TypingStart
+	return eventType == events.TypingStart || eventType == events.TypingStop
 }
 
 // channelScoped extracts the channel_id from an event payload for permission filtering.

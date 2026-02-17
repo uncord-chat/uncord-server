@@ -236,7 +236,7 @@ func testMessageAppWithAttachments(
 ) *fiber.App {
 	t.Helper()
 	storage := media.NewLocalStorage(t.TempDir(), "http://localhost:8080")
-	handler := NewMessageHandler(repo, attachRepo, storage, resolver, nil, nil, testMaxContent, 10, zerolog.Nop())
+	handler := NewMessageHandler(repo, attachRepo, storage, resolver, nil, nil, nil, testMaxContent, 10, zerolog.Nop())
 	app := fiber.New()
 
 	app.Use(fakeAuth(userID))

@@ -206,6 +206,47 @@ func TestSetTypingExpires(t *testing.T) {
 	}
 }
 
+func TestClearTyping_Exists(t *testing.T) {
+	t.Parallel()
+	_, rdb := newTestRedis(t)
+	store := NewStore(rdb)
+	ctx := context.Background()
+
+	channelID := uuid.New()
+	userID := uuid.New()
+
+	created, err := store.SetTyping(ctx, channelID, userID)
+	if err != nil {
+		t.Fatalf("SetTyping() error = %v", err)
+	}
+	if !created {
+		t.Fatal("SetTyping() created = false, want true")
+	}
+
+	existed, err := store.ClearTyping(ctx, channelID, userID)
+	if err != nil {
+		t.Fatalf("ClearTyping() error = %v", err)
+	}
+	if !existed {
+		t.Error("ClearTyping() existed = false, want true")
+	}
+}
+
+func TestClearTyping_NotExists(t *testing.T) {
+	t.Parallel()
+	_, rdb := newTestRedis(t)
+	store := NewStore(rdb)
+	ctx := context.Background()
+
+	existed, err := store.ClearTyping(ctx, uuid.New(), uuid.New())
+	if err != nil {
+		t.Fatalf("ClearTyping() error = %v", err)
+	}
+	if existed {
+		t.Error("ClearTyping() existed = true, want false")
+	}
+}
+
 func TestValidStatus(t *testing.T) {
 	t.Parallel()
 

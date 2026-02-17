@@ -1631,6 +1631,25 @@
 					}
 				},
 				{
+					"name": "Stop Typing",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/channels/{{channel_id}}/typing",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"channels",
+								"{{channel_id}}",
+								"typing"
+							]
+						},
+						"description": "DELETE /api/v1/channels/:channelID/typing\n\nClears the typing indicator for the authenticated user in the channel. Returns 204 No Content. Idempotent: returns 204 even if the user was not typing."
+					}
+				},
+				{
 					"name": "Edit Message",
 					"request": {
 						"method": "PATCH",

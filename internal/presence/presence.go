@@ -127,6 +127,16 @@ func (s *Store) SetTyping(ctx context.Context, channelID, userID uuid.UUID) (boo
 	return ok, nil
 }
 
+// ClearTyping removes the typing indicator for the given user in the given channel. It returns true when the key existed
+// and was deleted (meaning a TYPING_STOP dispatch should be sent), and false when the key did not exist.
+func (s *Store) ClearTyping(ctx context.Context, channelID, userID uuid.UUID) (bool, error) {
+	n, err := s.rdb.Del(ctx, typingKey(channelID, userID)).Result()
+	if err != nil {
+		return false, fmt.Errorf("clear typing for %s in %s: %w", userID, channelID, err)
+	}
+	return n > 0, nil
+}
+
 // ValidStatus returns true for statuses that a client may set via opcode 3. StatusOffline is not valid because clients
 // go offline by disconnecting (or set StatusInvisible to appear offline while staying connected).
 func ValidStatus(status string) bool {

@@ -554,60 +554,73 @@ func TestAssembleReadyWithPresences(t *testing.T) {
 
 func TestHandlePubSubEventEphemeral(t *testing.T) {
 	t.Parallel()
-	_, rdb := newTestRedis(t)
-	cfg := testConfig()
-	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 
-	hub := NewHub(rdb, cfg, sessions, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, zerolog.Nop())
-
-	userID := uuid.New()
-	client := &Client{
-		hub:  hub,
-		send: make(chan []byte, 256),
-		log:  zerolog.Nop(),
-	}
-	client.mu.Lock()
-	client.userID = userID
-	client.sessionID = "test-session"
-	client.identified = true
-	client.mu.Unlock()
-
-	hub.mu.Lock()
-	hub.clients[userID] = client
-	hub.mu.Unlock()
-
-	// The envelope omits channel_id to avoid triggering the permission filter (which requires a non-nil resolver).
-	// Channel-scoped permission filtering is exercised separately. This test focuses on the ephemeral dispatch path
-	// (no sequence number, no replay buffer).
-	env := envelope{Type: string(events.TypingStart), Data: map[string]string{
-		"user_id": uuid.New().String(),
-	}}
-	payload, _ := json.Marshal(env)
-
-	hub.handlePubSubEvent(context.Background(), string(payload))
-
-	select {
-	case msg := <-client.send:
-		var f events.Frame
-		if err := json.Unmarshal(msg, &f); err != nil {
-			t.Fatalf("unmarshal frame: %v", err)
-		}
-		if f.Op != events.OpcodeDispatch {
-			t.Errorf("Op = %d, want %d", f.Op, events.OpcodeDispatch)
-		}
-		if f.Type == nil || *f.Type != events.TypingStart {
-			t.Errorf("Type = %v, want %q", f.Type, events.TypingStart)
-		}
-		if f.Seq != nil {
-			t.Errorf("Seq = %v, want nil (ephemeral)", f.Seq)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for ephemeral dispatch")
+	ephemeralEvents := []struct {
+		name      string
+		eventType events.DispatchEvent
+	}{
+		{"TypingStart", events.TypingStart},
+		{"TypingStop", events.TypingStop},
 	}
 
-	// Verify no sequence was consumed.
-	if seq := client.currentSeq(); seq != 0 {
-		t.Errorf("currentSeq() = %d, want 0 (ephemeral should not increment)", seq)
+	for _, tt := range ephemeralEvents {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, rdb := newTestRedis(t)
+			cfg := testConfig()
+			sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
+
+			hub := NewHub(rdb, cfg, sessions, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, zerolog.Nop())
+
+			userID := uuid.New()
+			client := &Client{
+				hub:  hub,
+				send: make(chan []byte, 256),
+				log:  zerolog.Nop(),
+			}
+			client.mu.Lock()
+			client.userID = userID
+			client.sessionID = "test-session"
+			client.identified = true
+			client.mu.Unlock()
+
+			hub.mu.Lock()
+			hub.clients[userID] = client
+			hub.mu.Unlock()
+
+			// The envelope omits channel_id to avoid triggering the permission filter (which requires a non-nil
+			// resolver). Channel-scoped permission filtering is exercised separately. This test focuses on the
+			// ephemeral dispatch path (no sequence number, no replay buffer).
+			env := envelope{Type: string(tt.eventType), Data: map[string]string{
+				"user_id": uuid.New().String(),
+			}}
+			payload, _ := json.Marshal(env)
+
+			hub.handlePubSubEvent(context.Background(), string(payload))
+
+			select {
+			case msg := <-client.send:
+				var f events.Frame
+				if err := json.Unmarshal(msg, &f); err != nil {
+					t.Fatalf("unmarshal frame: %v", err)
+				}
+				if f.Op != events.OpcodeDispatch {
+					t.Errorf("Op = %d, want %d", f.Op, events.OpcodeDispatch)
+				}
+				if f.Type == nil || *f.Type != tt.eventType {
+					t.Errorf("Type = %v, want %q", f.Type, tt.eventType)
+				}
+				if f.Seq != nil {
+					t.Errorf("Seq = %v, want nil (ephemeral)", f.Seq)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("timed out waiting for ephemeral dispatch")
+			}
+
+			if seq := client.currentSeq(); seq != 0 {
+				t.Errorf("currentSeq() = %d, want 0 (ephemeral should not increment)", seq)
+			}
+		})
 	}
 }
 

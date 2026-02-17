@@ -21,6 +21,7 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/media"
 	"github.com/uncord-chat/uncord-server/internal/message"
 	"github.com/uncord-chat/uncord-server/internal/permission"
+	"github.com/uncord-chat/uncord-server/internal/presence"
 	"github.com/uncord-chat/uncord-server/internal/typesense"
 )
 
@@ -32,6 +33,7 @@ type MessageHandler struct {
 	resolver       *permission.Resolver
 	indexer        *typesense.Indexer
 	gateway        *gateway.Publisher
+	presence       *presence.Store
 	maxContent     int
 	maxAttachments int
 	log            zerolog.Logger
@@ -45,6 +47,7 @@ func NewMessageHandler(
 	resolver *permission.Resolver,
 	indexer *typesense.Indexer,
 	gw *gateway.Publisher,
+	presenceStore *presence.Store,
 	maxContent int,
 	maxAttachments int,
 	logger zerolog.Logger,
@@ -56,6 +59,7 @@ func NewMessageHandler(
 		resolver:       resolver,
 		indexer:        indexer,
 		gateway:        gw,
+		presence:       presenceStore,
 		maxContent:     maxContent,
 		maxAttachments: maxAttachments,
 		log:            logger,
@@ -198,6 +202,28 @@ func (h *MessageHandler) CreateMessage(c fiber.Ctx) error {
 		go func() {
 			if err := h.gateway.Publish(context.Background(), events.MessageCreate, result); err != nil {
 				h.log.Warn().Err(err).Str("message_id", msg.ID.String()).Msg("Gateway publish failed")
+			}
+		}()
+	}
+
+	// Clear the typing indicator now that the message has been sent. Uses context.Background because Fiber recycles
+	// the request context after the handler returns.
+	if h.presence != nil && h.gateway != nil {
+		go func() {
+			ctx := context.Background()
+			existed, cErr := h.presence.ClearTyping(ctx, channelID, userID)
+			if cErr != nil {
+				h.log.Warn().Err(cErr).Msg("Failed to clear typing on message send")
+				return
+			}
+			if existed {
+				data := models.TypingStopData{
+					ChannelID: channelID.String(),
+					UserID:    userID.String(),
+				}
+				if pErr := h.gateway.Publish(ctx, events.TypingStop, data); pErr != nil {
+					h.log.Warn().Err(pErr).Msg("Failed to publish typing stop on message send")
+				}
 			}
 		}()
 	}
