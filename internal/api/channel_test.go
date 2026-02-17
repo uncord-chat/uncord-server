@@ -269,11 +269,11 @@ func seedChannel(repo *fakeChannelRepo) *channel.Channel {
 	return &ch
 }
 
-func testChannelApp(t *testing.T, repo channel.Repository, resolver *permission.Resolver, maxChannels int, userID uuid.UUID) *fiber.App {
+func testChannelApp(t *testing.T, repo channel.Repository, resolver *permission.Resolver, userID uuid.UUID) *fiber.App {
 	t.Helper()
 	memberRepo := newFakeChannelMemberRepo(userID)
 	onboardingRepo := &fakeOnboardingRepo{}
-	handler := NewChannelHandler(repo, memberRepo, onboardingRepo, resolver, nil, maxChannels, zerolog.Nop())
+	handler := NewChannelHandler(repo, memberRepo, onboardingRepo, resolver, nil, 500, zerolog.Nop())
 	app := fiber.New()
 
 	app.Use(fakeAuth(userID))
@@ -299,7 +299,7 @@ func denyAllResolver() *permission.Resolver {
 func TestListChannels_Unauthenticated(t *testing.T) {
 	t.Parallel()
 	repo := newFakeChannelRepo()
-	app := testChannelApp(t, repo, allowAllResolver(), 500, uuid.Nil)
+	app := testChannelApp(t, repo, allowAllResolver(), uuid.Nil)
 
 	resp := doReq(t, app, jsonReq(http.MethodGet, "/channels", ""))
 	body := readBody(t, resp)
@@ -316,7 +316,7 @@ func TestListChannels_Unauthenticated(t *testing.T) {
 func TestListChannels_Empty(t *testing.T) {
 	t.Parallel()
 	repo := newFakeChannelRepo()
-	app := testChannelApp(t, repo, allowAllResolver(), 500, uuid.New())
+	app := testChannelApp(t, repo, allowAllResolver(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodGet, "/channels", ""))
 	body := readBody(t, resp)
@@ -339,7 +339,7 @@ func TestListChannels_Success(t *testing.T) {
 	t.Parallel()
 	repo := newFakeChannelRepo()
 	seedChannel(repo)
-	app := testChannelApp(t, repo, allowAllResolver(), 500, uuid.New())
+	app := testChannelApp(t, repo, allowAllResolver(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodGet, "/channels", ""))
 	body := readBody(t, resp)
@@ -372,7 +372,7 @@ func TestListChannels_PermissionFiltering(t *testing.T) {
 	t.Parallel()
 	repo := newFakeChannelRepo()
 	seedChannel(repo)
-	app := testChannelApp(t, repo, denyAllResolver(), 500, uuid.New())
+	app := testChannelApp(t, repo, denyAllResolver(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodGet, "/channels", ""))
 	body := readBody(t, resp)
@@ -500,7 +500,7 @@ func TestListChannels_NonMemberSeesEmpty(t *testing.T) {
 func TestCreateChannel_InvalidJSON(t *testing.T) {
 	t.Parallel()
 	repo := newFakeChannelRepo()
-	app := testChannelApp(t, repo, allowAllResolver(), 500, uuid.New())
+	app := testChannelApp(t, repo, allowAllResolver(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/channels", "not json"))
 	body := readBody(t, resp)
@@ -517,7 +517,7 @@ func TestCreateChannel_InvalidJSON(t *testing.T) {
 func TestCreateChannel_EmptyName(t *testing.T) {
 	t.Parallel()
 	repo := newFakeChannelRepo()
-	app := testChannelApp(t, repo, allowAllResolver(), 500, uuid.New())
+	app := testChannelApp(t, repo, allowAllResolver(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/channels", `{"name":""}`))
 	body := readBody(t, resp)
@@ -534,7 +534,7 @@ func TestCreateChannel_EmptyName(t *testing.T) {
 func TestCreateChannel_InvalidType(t *testing.T) {
 	t.Parallel()
 	repo := newFakeChannelRepo()
-	app := testChannelApp(t, repo, allowAllResolver(), 500, uuid.New())
+	app := testChannelApp(t, repo, allowAllResolver(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/channels", `{"name":"test","type":"video"}`))
 	body := readBody(t, resp)
@@ -551,7 +551,7 @@ func TestCreateChannel_InvalidType(t *testing.T) {
 func TestCreateChannel_TopicTooLong(t *testing.T) {
 	t.Parallel()
 	repo := newFakeChannelRepo()
-	app := testChannelApp(t, repo, allowAllResolver(), 500, uuid.New())
+	app := testChannelApp(t, repo, allowAllResolver(), uuid.New())
 
 	longTopic := strings.Repeat("a", 1025)
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/channels", `{"name":"test","topic":"`+longTopic+`"}`))
@@ -569,7 +569,7 @@ func TestCreateChannel_TopicTooLong(t *testing.T) {
 func TestCreateChannel_SlowmodeOutOfRange(t *testing.T) {
 	t.Parallel()
 	repo := newFakeChannelRepo()
-	app := testChannelApp(t, repo, allowAllResolver(), 500, uuid.New())
+	app := testChannelApp(t, repo, allowAllResolver(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/channels", `{"name":"test","slowmode_seconds":99999}`))
 	body := readBody(t, resp)
@@ -587,7 +587,7 @@ func TestCreateChannel_MaxReached(t *testing.T) {
 	t.Parallel()
 	repo := newFakeChannelRepo()
 	repo.maxReached = true
-	app := testChannelApp(t, repo, allowAllResolver(), 500, uuid.New())
+	app := testChannelApp(t, repo, allowAllResolver(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/channels", `{"name":"test"}`))
 	body := readBody(t, resp)
@@ -604,7 +604,7 @@ func TestCreateChannel_MaxReached(t *testing.T) {
 func TestCreateChannel_CategoryNotFound(t *testing.T) {
 	t.Parallel()
 	repo := newFakeChannelRepo()
-	app := testChannelApp(t, repo, allowAllResolver(), 500, uuid.New())
+	app := testChannelApp(t, repo, allowAllResolver(), uuid.New())
 
 	catID := uuid.New().String()
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/channels", `{"name":"test","category_id":"`+catID+`"}`))
@@ -622,7 +622,7 @@ func TestCreateChannel_CategoryNotFound(t *testing.T) {
 func TestCreateChannel_DefaultsToText(t *testing.T) {
 	t.Parallel()
 	repo := newFakeChannelRepo()
-	app := testChannelApp(t, repo, allowAllResolver(), 500, uuid.New())
+	app := testChannelApp(t, repo, allowAllResolver(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/channels", `{"name":"general"}`))
 	body := readBody(t, resp)
@@ -647,7 +647,7 @@ func TestCreateChannel_DefaultsToText(t *testing.T) {
 func TestCreateChannel_Success(t *testing.T) {
 	t.Parallel()
 	repo := newFakeChannelRepo()
-	app := testChannelApp(t, repo, allowAllResolver(), 500, uuid.New())
+	app := testChannelApp(t, repo, allowAllResolver(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/channels", `{"name":"voice-chat","type":"voice","nsfw":true}`))
 	body := readBody(t, resp)
@@ -685,7 +685,7 @@ func TestCreateChannel_Success(t *testing.T) {
 func TestGetChannel_InvalidID(t *testing.T) {
 	t.Parallel()
 	repo := newFakeChannelRepo()
-	app := testChannelApp(t, repo, allowAllResolver(), 500, uuid.New())
+	app := testChannelApp(t, repo, allowAllResolver(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodGet, "/channels/not-a-uuid", ""))
 	body := readBody(t, resp)
@@ -702,7 +702,7 @@ func TestGetChannel_InvalidID(t *testing.T) {
 func TestGetChannel_NotFound(t *testing.T) {
 	t.Parallel()
 	repo := newFakeChannelRepo()
-	app := testChannelApp(t, repo, allowAllResolver(), 500, uuid.New())
+	app := testChannelApp(t, repo, allowAllResolver(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodGet, "/channels/"+uuid.New().String(), ""))
 	body := readBody(t, resp)
@@ -720,7 +720,7 @@ func TestGetChannel_Success(t *testing.T) {
 	t.Parallel()
 	repo := newFakeChannelRepo()
 	ch := seedChannel(repo)
-	app := testChannelApp(t, repo, allowAllResolver(), 500, uuid.New())
+	app := testChannelApp(t, repo, allowAllResolver(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodGet, "/channels/"+ch.ID.String(), ""))
 	body := readBody(t, resp)
@@ -750,7 +750,7 @@ func TestGetChannel_Success(t *testing.T) {
 func TestUpdateChannel_NotFound(t *testing.T) {
 	t.Parallel()
 	repo := newFakeChannelRepo()
-	app := testChannelApp(t, repo, allowAllResolver(), 500, uuid.New())
+	app := testChannelApp(t, repo, allowAllResolver(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPatch, "/channels/"+uuid.New().String(), `{"name":"updated"}`))
 	body := readBody(t, resp)
@@ -768,7 +768,7 @@ func TestUpdateChannel_NameValidation(t *testing.T) {
 	t.Parallel()
 	repo := newFakeChannelRepo()
 	ch := seedChannel(repo)
-	app := testChannelApp(t, repo, allowAllResolver(), 500, uuid.New())
+	app := testChannelApp(t, repo, allowAllResolver(), uuid.New())
 
 	longName := strings.Repeat("a", 101)
 	resp := doReq(t, app, jsonReq(http.MethodPatch, "/channels/"+ch.ID.String(), `{"name":"`+longName+`"}`))
@@ -800,7 +800,7 @@ func TestUpdateChannel_RemoveCategory(t *testing.T) {
 	}
 	repo.channels = append(repo.channels, ch)
 
-	app := testChannelApp(t, repo, allowAllResolver(), 500, uuid.New())
+	app := testChannelApp(t, repo, allowAllResolver(), uuid.New())
 
 	// Empty string category_id should remove the channel from its category.
 	resp := doReq(t, app, jsonReq(http.MethodPatch, "/channels/"+ch.ID.String(), `{"category_id":""}`))
@@ -826,7 +826,7 @@ func TestUpdateChannel_Success(t *testing.T) {
 	t.Parallel()
 	repo := newFakeChannelRepo()
 	ch := seedChannel(repo)
-	app := testChannelApp(t, repo, allowAllResolver(), 500, uuid.New())
+	app := testChannelApp(t, repo, allowAllResolver(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPatch, "/channels/"+ch.ID.String(), `{"name":"updated","topic":"New topic"}`))
 	body := readBody(t, resp)
@@ -855,7 +855,7 @@ func TestUpdateChannel_EmptyBody(t *testing.T) {
 	t.Parallel()
 	repo := newFakeChannelRepo()
 	ch := seedChannel(repo)
-	app := testChannelApp(t, repo, allowAllResolver(), 500, uuid.New())
+	app := testChannelApp(t, repo, allowAllResolver(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPatch, "/channels/"+ch.ID.String(), `{}`))
 	body := readBody(t, resp)
@@ -881,7 +881,7 @@ func TestUpdateChannel_EmptyBody(t *testing.T) {
 func TestDeleteChannel_NotFound(t *testing.T) {
 	t.Parallel()
 	repo := newFakeChannelRepo()
-	app := testChannelApp(t, repo, allowAllResolver(), 500, uuid.New())
+	app := testChannelApp(t, repo, allowAllResolver(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodDelete, "/channels/"+uuid.New().String(), ""))
 	body := readBody(t, resp)
@@ -899,7 +899,7 @@ func TestDeleteChannel_Success(t *testing.T) {
 	t.Parallel()
 	repo := newFakeChannelRepo()
 	ch := seedChannel(repo)
-	app := testChannelApp(t, repo, allowAllResolver(), 500, uuid.New())
+	app := testChannelApp(t, repo, allowAllResolver(), uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodDelete, "/channels/"+ch.ID.String(), ""))
 	_ = readBody(t, resp)

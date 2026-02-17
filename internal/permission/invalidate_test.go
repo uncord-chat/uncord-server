@@ -208,16 +208,15 @@ func (c *syncSpyCache) DeleteAll(_ context.Context) error {
 
 // --- Publisher tests with miniredis ---
 
-func setupPubSub(t *testing.T) (*miniredis.Miniredis, *redis.Client) {
+func setupPubSub(t *testing.T) *redis.Client {
 	t.Helper()
 	mr := miniredis.RunT(t)
-	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	return mr, rdb
+	return redis.NewClient(&redis.Options{Addr: mr.Addr()})
 }
 
 func TestPublisherInvalidateUser(t *testing.T) {
 	t.Parallel()
-	_, rdb := setupPubSub(t)
+	rdb := setupPubSub(t)
 	ctx := context.Background()
 	pub := NewPublisher(rdb)
 	userID := uuid.New()
@@ -249,7 +248,7 @@ func TestPublisherInvalidateUser(t *testing.T) {
 
 func TestPublisherInvalidateChannel(t *testing.T) {
 	t.Parallel()
-	_, rdb := setupPubSub(t)
+	rdb := setupPubSub(t)
 	ctx := context.Background()
 	pub := NewPublisher(rdb)
 	channelID := uuid.New()
@@ -280,7 +279,7 @@ func TestPublisherInvalidateChannel(t *testing.T) {
 
 func TestPublisherInvalidateUserChannel(t *testing.T) {
 	t.Parallel()
-	_, rdb := setupPubSub(t)
+	rdb := setupPubSub(t)
 	ctx := context.Background()
 	pub := NewPublisher(rdb)
 	userID := uuid.New()
@@ -312,7 +311,7 @@ func TestPublisherInvalidateUserChannel(t *testing.T) {
 
 func TestSubscriberRunContextCancel(t *testing.T) {
 	t.Parallel()
-	_, rdb := setupPubSub(t)
+	rdb := setupPubSub(t)
 	cache := &spyCache{}
 	sub := NewSubscriber(cache, rdb, zerolog.Nop())
 
@@ -340,7 +339,7 @@ func TestSubscriberRunContextCancel(t *testing.T) {
 
 func TestSubscriberRunReceivesAndInvalidates(t *testing.T) {
 	t.Parallel()
-	_, rdb := setupPubSub(t)
+	rdb := setupPubSub(t)
 	cache := &syncSpyCache{}
 	sub := NewSubscriber(cache, rdb, zerolog.Nop())
 

@@ -25,7 +25,7 @@ func TestSuccess(t *testing.T) {
 		return Success(c, payload{Name: "alice"})
 	})
 
-	resp := doRequest(t, app, http.MethodGet, "/ok")
+	resp := doRequest(t, app, "/ok")
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
@@ -50,7 +50,7 @@ func TestSuccess_nilData(t *testing.T) {
 		return Success(c, nil)
 	})
 
-	resp := doRequest(t, app, http.MethodGet, "/ok")
+	resp := doRequest(t, app, "/ok")
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
@@ -89,7 +89,7 @@ func TestSuccessStatus(t *testing.T) {
 				return SuccessStatus(c, tt.status, tt.data)
 			})
 
-			resp := doRequest(t, app, http.MethodGet, "/s")
+			resp := doRequest(t, app, "/s")
 			defer func() { _ = resp.Body.Close() }()
 
 			if resp.StatusCode != tt.status {
@@ -152,7 +152,7 @@ func TestFail(t *testing.T) {
 				return Fail(c, tt.status, tt.code, tt.message)
 			})
 
-			resp := doRequest(t, app, http.MethodGet, "/err")
+			resp := doRequest(t, app, "/err")
 			defer func() { _ = resp.Body.Close() }()
 
 			if resp.StatusCode != tt.status {
@@ -192,7 +192,7 @@ func TestResponseContentType(t *testing.T) {
 		t.Run(path, func(t *testing.T) {
 			t.Parallel()
 
-			resp := doRequest(t, app, http.MethodGet, path)
+			resp := doRequest(t, app, path)
 			defer func() { _ = resp.Body.Close() }()
 
 			mediaType, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
@@ -207,10 +207,10 @@ func TestResponseContentType(t *testing.T) {
 }
 
 // doRequest sends a request to the Fiber test server and returns the response.
-func doRequest(t *testing.T, app *fiber.App, method, path string) *http.Response {
+func doRequest(t *testing.T, app *fiber.App, path string) *http.Response {
 	t.Helper()
 
-	req := httptest.NewRequest(method, path, nil)
+	req := httptest.NewRequest(http.MethodGet, path, nil)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("app.Test() error: %v", err)

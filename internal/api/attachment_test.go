@@ -63,7 +63,7 @@ func testUploadApp(t *testing.T, repo attachment.Repository, storage media.Stora
 	return app
 }
 
-func multipartFileReq(t *testing.T, url, filename, contentType string, content []byte) *http.Request {
+func multipartFileReq(t *testing.T, url, filename string, content []byte) *http.Request {
 	t.Helper()
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
@@ -92,7 +92,7 @@ func TestUpload_Success(t *testing.T) {
 	app := testUploadApp(t, repo, storage, 10*1024*1024, userID)
 
 	content := []byte("fake jpeg data")
-	req := multipartFileReq(t, "/channels/"+channelID.String()+"/attachments", "photo.jpg", "image/jpeg", content)
+	req := multipartFileReq(t, "/channels/"+channelID.String()+"/attachments", "photo.jpg", content)
 
 	resp, err := app.Test(req, testTimeout)
 	if err != nil {
@@ -137,7 +137,7 @@ func TestUpload_UnsupportedContentType(t *testing.T) {
 	userID := uuid.New()
 	app := testUploadApp(t, repo, storage, 10*1024*1024, userID)
 
-	req := multipartFileReq(t, "/channels/"+channelID.String()+"/attachments", "malware.exe", "application/x-msdownload", []byte("evil"))
+	req := multipartFileReq(t, "/channels/"+channelID.String()+"/attachments", "malware.exe", []byte("evil"))
 
 	resp, err := app.Test(req, testTimeout)
 	if err != nil {
@@ -164,7 +164,7 @@ func TestUpload_FileTooLarge(t *testing.T) {
 	app := testUploadApp(t, repo, storage, maxSize, userID)
 
 	content := make([]byte, 200) // Exceeds 100 byte limit
-	req := multipartFileReq(t, "/channels/"+channelID.String()+"/attachments", "big.txt", "text/plain", content)
+	req := multipartFileReq(t, "/channels/"+channelID.String()+"/attachments", "big.txt", content)
 
 	resp, err := app.Test(req, testTimeout)
 	if err != nil {
@@ -188,7 +188,7 @@ func TestUpload_InvalidChannelID(t *testing.T) {
 	userID := uuid.New()
 	app := testUploadApp(t, repo, storage, 10*1024*1024, userID)
 
-	req := multipartFileReq(t, "/channels/not-a-uuid/attachments", "file.txt", "text/plain", []byte("data"))
+	req := multipartFileReq(t, "/channels/not-a-uuid/attachments", "file.txt", []byte("data"))
 
 	resp, err := app.Test(req, testTimeout)
 	if err != nil {

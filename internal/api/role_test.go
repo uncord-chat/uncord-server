@@ -141,9 +141,9 @@ func seedEveryoneRole(repo *fakeRoleRepo) *role.Role {
 	return &r
 }
 
-func testRoleApp(t *testing.T, repo role.Repository, maxRoles int, userID uuid.UUID) *fiber.App {
+func testRoleApp(t *testing.T, repo role.Repository, userID uuid.UUID) *fiber.App {
 	t.Helper()
-	handler := NewRoleHandler(repo, nil, nil, maxRoles, zerolog.Nop())
+	handler := NewRoleHandler(repo, nil, nil, 250, zerolog.Nop())
 	app := fiber.New()
 
 	app.Use(fakeAuth(userID))
@@ -160,7 +160,7 @@ func testRoleApp(t *testing.T, repo role.Repository, maxRoles int, userID uuid.U
 func TestListRoles_Empty(t *testing.T) {
 	t.Parallel()
 	repo := newFakeRoleRepo()
-	app := testRoleApp(t, repo, 250, uuid.New())
+	app := testRoleApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodGet, "/roles", ""))
 	body := readBody(t, resp)
@@ -183,7 +183,7 @@ func TestListRoles_Success(t *testing.T) {
 	t.Parallel()
 	repo := newFakeRoleRepo()
 	seedRole(repo)
-	app := testRoleApp(t, repo, 250, uuid.New())
+	app := testRoleApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodGet, "/roles", ""))
 	body := readBody(t, resp)
@@ -213,7 +213,7 @@ func TestListRoles_Success(t *testing.T) {
 func TestCreateRole_InvalidJSON(t *testing.T) {
 	t.Parallel()
 	repo := newFakeRoleRepo()
-	app := testRoleApp(t, repo, 250, uuid.New())
+	app := testRoleApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/roles", "not json"))
 	body := readBody(t, resp)
@@ -230,7 +230,7 @@ func TestCreateRole_InvalidJSON(t *testing.T) {
 func TestCreateRole_EmptyName(t *testing.T) {
 	t.Parallel()
 	repo := newFakeRoleRepo()
-	app := testRoleApp(t, repo, 250, uuid.New())
+	app := testRoleApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/roles", `{"name":""}`))
 	body := readBody(t, resp)
@@ -247,7 +247,7 @@ func TestCreateRole_EmptyName(t *testing.T) {
 func TestCreateRole_NameTooLong(t *testing.T) {
 	t.Parallel()
 	repo := newFakeRoleRepo()
-	app := testRoleApp(t, repo, 250, uuid.New())
+	app := testRoleApp(t, repo, uuid.New())
 
 	longName := strings.Repeat("a", 101)
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/roles", `{"name":"`+longName+`"}`))
@@ -266,7 +266,7 @@ func TestCreateRole_MaxReached(t *testing.T) {
 	t.Parallel()
 	repo := newFakeRoleRepo()
 	repo.maxReached = true
-	app := testRoleApp(t, repo, 250, uuid.New())
+	app := testRoleApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/roles", `{"name":"New Role"}`))
 	body := readBody(t, resp)
@@ -283,7 +283,7 @@ func TestCreateRole_MaxReached(t *testing.T) {
 func TestCreateRole_Success(t *testing.T) {
 	t.Parallel()
 	repo := newFakeRoleRepo()
-	app := testRoleApp(t, repo, 250, uuid.New())
+	app := testRoleApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/roles", `{"name":"Admin","colour":3447003,"hoist":true}`))
 	body := readBody(t, resp)
@@ -319,7 +319,7 @@ func TestCreateRole_Success(t *testing.T) {
 func TestCreateRole_InvalidColour(t *testing.T) {
 	t.Parallel()
 	repo := newFakeRoleRepo()
-	app := testRoleApp(t, repo, 250, uuid.New())
+	app := testRoleApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/roles", `{"name":"Bad","colour":16777216}`))
 	body := readBody(t, resp)
@@ -336,7 +336,7 @@ func TestCreateRole_InvalidColour(t *testing.T) {
 func TestCreateRole_InvalidPermissions(t *testing.T) {
 	t.Parallel()
 	repo := newFakeRoleRepo()
-	app := testRoleApp(t, repo, 250, uuid.New())
+	app := testRoleApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/roles", `{"name":"Bad","permissions":-1}`))
 	body := readBody(t, resp)
@@ -355,7 +355,7 @@ func TestCreateRole_InvalidPermissions(t *testing.T) {
 func TestUpdateRole_InvalidID(t *testing.T) {
 	t.Parallel()
 	repo := newFakeRoleRepo()
-	app := testRoleApp(t, repo, 250, uuid.New())
+	app := testRoleApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPatch, "/roles/not-a-uuid", `{"name":"Updated"}`))
 	body := readBody(t, resp)
@@ -372,7 +372,7 @@ func TestUpdateRole_InvalidID(t *testing.T) {
 func TestUpdateRole_NotFound(t *testing.T) {
 	t.Parallel()
 	repo := newFakeRoleRepo()
-	app := testRoleApp(t, repo, 250, uuid.New())
+	app := testRoleApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPatch, "/roles/"+uuid.New().String(), `{"name":"Updated"}`))
 	body := readBody(t, resp)
@@ -390,7 +390,7 @@ func TestUpdateRole_NameValidation(t *testing.T) {
 	t.Parallel()
 	repo := newFakeRoleRepo()
 	r := seedRole(repo)
-	app := testRoleApp(t, repo, 250, uuid.New())
+	app := testRoleApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPatch, "/roles/"+r.ID.String(), `{"name":"   "}`))
 	body := readBody(t, resp)
@@ -408,7 +408,7 @@ func TestUpdateRole_NegativePosition(t *testing.T) {
 	t.Parallel()
 	repo := newFakeRoleRepo()
 	r := seedRole(repo)
-	app := testRoleApp(t, repo, 250, uuid.New())
+	app := testRoleApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPatch, "/roles/"+r.ID.String(), `{"position":-1}`))
 	body := readBody(t, resp)
@@ -426,7 +426,7 @@ func TestUpdateRole_InvalidPermissions(t *testing.T) {
 	t.Parallel()
 	repo := newFakeRoleRepo()
 	r := seedRole(repo)
-	app := testRoleApp(t, repo, 250, uuid.New())
+	app := testRoleApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPatch, "/roles/"+r.ID.String(), `{"permissions":-1}`))
 	body := readBody(t, resp)
@@ -446,7 +446,7 @@ func TestUpdateRole_EveryoneRename(t *testing.T) {
 	r := seedEveryoneRole(repo)
 	// Caller at position 1 (below @everyone at position 0), but @everyone rename is blocked regardless of hierarchy.
 	// Since callerPos defaults to math.MaxInt, the hierarchy check passes; the rename block should still trigger.
-	app := testRoleApp(t, repo, 250, uuid.New())
+	app := testRoleApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPatch, "/roles/"+r.ID.String(), `{"name":"renamed"}`))
 	body := readBody(t, resp)
@@ -466,7 +466,7 @@ func TestUpdateRole_RoleHierarchy(t *testing.T) {
 	r := seedRole(repo)
 	// Give the caller a position equal to the target role (position 5). The handler should reject.
 	repo.callerPos = 5
-	app := testRoleApp(t, repo, 250, uuid.New())
+	app := testRoleApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPatch, "/roles/"+r.ID.String(), `{"name":"Updated"}`))
 	body := readBody(t, resp)
@@ -486,7 +486,7 @@ func TestUpdateRole_RoleHierarchy_PositionMove(t *testing.T) {
 	r := seedRole(repo)
 	// Caller at position 3 (above position 5 target), but trying to move target to position 2 (above caller).
 	repo.callerPos = 3
-	app := testRoleApp(t, repo, 250, uuid.New())
+	app := testRoleApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPatch, "/roles/"+r.ID.String(), `{"position":2}`))
 	body := readBody(t, resp)
@@ -504,7 +504,7 @@ func TestUpdateRole_Success(t *testing.T) {
 	t.Parallel()
 	repo := newFakeRoleRepo()
 	r := seedRole(repo)
-	app := testRoleApp(t, repo, 250, uuid.New())
+	app := testRoleApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPatch, "/roles/"+r.ID.String(), `{"name":"Senior Mod"}`))
 	body := readBody(t, resp)
@@ -529,7 +529,7 @@ func TestUpdateRole_EmptyBody(t *testing.T) {
 	t.Parallel()
 	repo := newFakeRoleRepo()
 	r := seedRole(repo)
-	app := testRoleApp(t, repo, 250, uuid.New())
+	app := testRoleApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPatch, "/roles/"+r.ID.String(), `{}`))
 	body := readBody(t, resp)
@@ -555,7 +555,7 @@ func TestUpdateRole_EmptyBody(t *testing.T) {
 func TestDeleteRole_NotFound(t *testing.T) {
 	t.Parallel()
 	repo := newFakeRoleRepo()
-	app := testRoleApp(t, repo, 250, uuid.New())
+	app := testRoleApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodDelete, "/roles/"+uuid.New().String(), ""))
 	body := readBody(t, resp)
@@ -573,7 +573,7 @@ func TestDeleteRole_EveryoneImmutable(t *testing.T) {
 	t.Parallel()
 	repo := newFakeRoleRepo()
 	r := seedEveryoneRole(repo)
-	app := testRoleApp(t, repo, 250, uuid.New())
+	app := testRoleApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodDelete, "/roles/"+r.ID.String(), ""))
 	body := readBody(t, resp)
@@ -593,7 +593,7 @@ func TestDeleteRole_RoleHierarchy(t *testing.T) {
 	r := seedRole(repo)
 	// Caller at same position as target role
 	repo.callerPos = 5
-	app := testRoleApp(t, repo, 250, uuid.New())
+	app := testRoleApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodDelete, "/roles/"+r.ID.String(), ""))
 	body := readBody(t, resp)
@@ -611,7 +611,7 @@ func TestDeleteRole_Success(t *testing.T) {
 	t.Parallel()
 	repo := newFakeRoleRepo()
 	r := seedRole(repo)
-	app := testRoleApp(t, repo, 250, uuid.New())
+	app := testRoleApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodDelete, "/roles/"+r.ID.String(), ""))
 	_ = readBody(t, resp)

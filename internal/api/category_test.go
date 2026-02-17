@@ -93,9 +93,9 @@ func seedCategory(repo *fakeCategoryRepo) *category.Category {
 	return &cat
 }
 
-func testCategoryApp(t *testing.T, repo category.Repository, maxCategories int, userID uuid.UUID) *fiber.App {
+func testCategoryApp(t *testing.T, repo category.Repository, userID uuid.UUID) *fiber.App {
 	t.Helper()
-	handler := NewCategoryHandler(repo, maxCategories, zerolog.Nop())
+	handler := NewCategoryHandler(repo, 50, zerolog.Nop())
 	app := fiber.New()
 
 	app.Use(fakeAuth(userID))
@@ -112,7 +112,7 @@ func testCategoryApp(t *testing.T, repo category.Repository, maxCategories int, 
 func TestListCategories_Unauthenticated(t *testing.T) {
 	t.Parallel()
 	repo := newFakeCategoryRepo()
-	app := testCategoryApp(t, repo, 50, uuid.Nil)
+	app := testCategoryApp(t, repo, uuid.Nil)
 
 	resp := doReq(t, app, jsonReq(http.MethodGet, "/categories", ""))
 	body := readBody(t, resp)
@@ -129,7 +129,7 @@ func TestListCategories_Unauthenticated(t *testing.T) {
 func TestListCategories_Empty(t *testing.T) {
 	t.Parallel()
 	repo := newFakeCategoryRepo()
-	app := testCategoryApp(t, repo, 50, uuid.New())
+	app := testCategoryApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodGet, "/categories", ""))
 	body := readBody(t, resp)
@@ -152,7 +152,7 @@ func TestListCategories_Success(t *testing.T) {
 	t.Parallel()
 	repo := newFakeCategoryRepo()
 	seedCategory(repo)
-	app := testCategoryApp(t, repo, 50, uuid.New())
+	app := testCategoryApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodGet, "/categories", ""))
 	body := readBody(t, resp)
@@ -182,7 +182,7 @@ func TestListCategories_Success(t *testing.T) {
 func TestCreateCategory_InvalidJSON(t *testing.T) {
 	t.Parallel()
 	repo := newFakeCategoryRepo()
-	app := testCategoryApp(t, repo, 50, uuid.New())
+	app := testCategoryApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/categories", "not json"))
 	body := readBody(t, resp)
@@ -199,7 +199,7 @@ func TestCreateCategory_InvalidJSON(t *testing.T) {
 func TestCreateCategory_EmptyName(t *testing.T) {
 	t.Parallel()
 	repo := newFakeCategoryRepo()
-	app := testCategoryApp(t, repo, 50, uuid.New())
+	app := testCategoryApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/categories", `{"name":""}`))
 	body := readBody(t, resp)
@@ -216,7 +216,7 @@ func TestCreateCategory_EmptyName(t *testing.T) {
 func TestCreateCategory_NameTooLong(t *testing.T) {
 	t.Parallel()
 	repo := newFakeCategoryRepo()
-	app := testCategoryApp(t, repo, 50, uuid.New())
+	app := testCategoryApp(t, repo, uuid.New())
 
 	longName := strings.Repeat("a", 101)
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/categories", `{"name":"`+longName+`"}`))
@@ -235,7 +235,7 @@ func TestCreateCategory_MaxReached(t *testing.T) {
 	t.Parallel()
 	repo := newFakeCategoryRepo()
 	repo.maxReached = true
-	app := testCategoryApp(t, repo, 50, uuid.New())
+	app := testCategoryApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/categories", `{"name":"New Category"}`))
 	body := readBody(t, resp)
@@ -252,7 +252,7 @@ func TestCreateCategory_MaxReached(t *testing.T) {
 func TestCreateCategory_Success(t *testing.T) {
 	t.Parallel()
 	repo := newFakeCategoryRepo()
-	app := testCategoryApp(t, repo, 50, uuid.New())
+	app := testCategoryApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/categories", `{"name":"Voice Channels"}`))
 	body := readBody(t, resp)
@@ -282,7 +282,7 @@ func TestCreateCategory_Success(t *testing.T) {
 func TestUpdateCategory_InvalidID(t *testing.T) {
 	t.Parallel()
 	repo := newFakeCategoryRepo()
-	app := testCategoryApp(t, repo, 50, uuid.New())
+	app := testCategoryApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPatch, "/categories/not-a-uuid", `{"name":"Updated"}`))
 	body := readBody(t, resp)
@@ -299,7 +299,7 @@ func TestUpdateCategory_InvalidID(t *testing.T) {
 func TestUpdateCategory_NotFound(t *testing.T) {
 	t.Parallel()
 	repo := newFakeCategoryRepo()
-	app := testCategoryApp(t, repo, 50, uuid.New())
+	app := testCategoryApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPatch, "/categories/"+uuid.New().String(), `{"name":"Updated"}`))
 	body := readBody(t, resp)
@@ -317,7 +317,7 @@ func TestUpdateCategory_NameValidation(t *testing.T) {
 	t.Parallel()
 	repo := newFakeCategoryRepo()
 	cat := seedCategory(repo)
-	app := testCategoryApp(t, repo, 50, uuid.New())
+	app := testCategoryApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPatch, "/categories/"+cat.ID.String(), `{"name":"   "}`))
 	body := readBody(t, resp)
@@ -335,7 +335,7 @@ func TestUpdateCategory_NegativePosition(t *testing.T) {
 	t.Parallel()
 	repo := newFakeCategoryRepo()
 	cat := seedCategory(repo)
-	app := testCategoryApp(t, repo, 50, uuid.New())
+	app := testCategoryApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPatch, "/categories/"+cat.ID.String(), `{"position":-1}`))
 	body := readBody(t, resp)
@@ -353,7 +353,7 @@ func TestUpdateCategory_Success(t *testing.T) {
 	t.Parallel()
 	repo := newFakeCategoryRepo()
 	cat := seedCategory(repo)
-	app := testCategoryApp(t, repo, 50, uuid.New())
+	app := testCategoryApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPatch, "/categories/"+cat.ID.String(), `{"name":"Updated"}`))
 	body := readBody(t, resp)
@@ -378,7 +378,7 @@ func TestUpdateCategory_EmptyBody(t *testing.T) {
 	t.Parallel()
 	repo := newFakeCategoryRepo()
 	cat := seedCategory(repo)
-	app := testCategoryApp(t, repo, 50, uuid.New())
+	app := testCategoryApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodPatch, "/categories/"+cat.ID.String(), `{}`))
 	body := readBody(t, resp)
@@ -404,7 +404,7 @@ func TestUpdateCategory_EmptyBody(t *testing.T) {
 func TestDeleteCategory_NotFound(t *testing.T) {
 	t.Parallel()
 	repo := newFakeCategoryRepo()
-	app := testCategoryApp(t, repo, 50, uuid.New())
+	app := testCategoryApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodDelete, "/categories/"+uuid.New().String(), ""))
 	body := readBody(t, resp)
@@ -422,7 +422,7 @@ func TestDeleteCategory_Success(t *testing.T) {
 	t.Parallel()
 	repo := newFakeCategoryRepo()
 	cat := seedCategory(repo)
-	app := testCategoryApp(t, repo, 50, uuid.New())
+	app := testCategoryApp(t, repo, uuid.New())
 
 	resp := doReq(t, app, jsonReq(http.MethodDelete, "/categories/"+cat.ID.String(), ""))
 	_ = readBody(t, resp)

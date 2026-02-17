@@ -189,7 +189,7 @@ func testAuthConfig() *config.Config {
 	}
 }
 
-func testAuthHandler(t *testing.T) (*AuthHandler, *fiber.App) {
+func testAuthHandler(t *testing.T) *fiber.App {
 	t.Helper()
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
@@ -211,7 +211,7 @@ func testAuthHandler(t *testing.T) (*AuthHandler, *fiber.App) {
 	app.Post("/verify-email", handler.VerifyEmail)
 	app.Post("/mfa/verify", handler.MFAVerify)
 
-	return handler, app
+	return app
 }
 
 // --- response parsing helpers ---
@@ -287,7 +287,7 @@ func fakeAuth(userID uuid.UUID) fiber.Handler {
 
 func TestRegisterHandler_InvalidJSON(t *testing.T) {
 	t.Parallel()
-	_, app := testAuthHandler(t)
+	app := testAuthHandler(t)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/register", "not json"))
 	body := readBody(t, resp)
@@ -303,7 +303,7 @@ func TestRegisterHandler_InvalidJSON(t *testing.T) {
 
 func TestRegisterHandler_ValidationErrors(t *testing.T) {
 	t.Parallel()
-	_, app := testAuthHandler(t)
+	app := testAuthHandler(t)
 
 	tests := []struct {
 		name     string
@@ -346,7 +346,7 @@ func TestRegisterHandler_ValidationErrors(t *testing.T) {
 
 func TestRegisterHandler_Success(t *testing.T) {
 	t.Parallel()
-	_, app := testAuthHandler(t)
+	app := testAuthHandler(t)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/register",
 		`{"email":"alice@example.com","username":"alice","password":"strongpassword"}`))
@@ -383,7 +383,7 @@ func TestRegisterHandler_Success(t *testing.T) {
 
 func TestLoginHandler_InvalidJSON(t *testing.T) {
 	t.Parallel()
-	_, app := testAuthHandler(t)
+	app := testAuthHandler(t)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/login", "{bad"))
 	body := readBody(t, resp)
@@ -399,7 +399,7 @@ func TestLoginHandler_InvalidJSON(t *testing.T) {
 
 func TestLoginHandler_InvalidCredentials(t *testing.T) {
 	t.Parallel()
-	_, app := testAuthHandler(t)
+	app := testAuthHandler(t)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/login",
 		`{"email":"nobody@example.com","password":"strongpassword"}`))
@@ -416,7 +416,7 @@ func TestLoginHandler_InvalidCredentials(t *testing.T) {
 
 func TestLoginHandler_Success(t *testing.T) {
 	t.Parallel()
-	_, app := testAuthHandler(t)
+	app := testAuthHandler(t)
 
 	// Register first.
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/register",
@@ -452,7 +452,7 @@ func TestLoginHandler_Success(t *testing.T) {
 
 func TestRefreshHandler_InvalidJSON(t *testing.T) {
 	t.Parallel()
-	_, app := testAuthHandler(t)
+	app := testAuthHandler(t)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/refresh", "%%%"))
 	body := readBody(t, resp)
@@ -468,7 +468,7 @@ func TestRefreshHandler_InvalidJSON(t *testing.T) {
 
 func TestRefreshHandler_MissingToken(t *testing.T) {
 	t.Parallel()
-	_, app := testAuthHandler(t)
+	app := testAuthHandler(t)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/refresh", `{}`))
 	body := readBody(t, resp)
@@ -484,7 +484,7 @@ func TestRefreshHandler_MissingToken(t *testing.T) {
 
 func TestRefreshHandler_Success(t *testing.T) {
 	t.Parallel()
-	_, app := testAuthHandler(t)
+	app := testAuthHandler(t)
 
 	// Register to obtain tokens.
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/register",
@@ -531,7 +531,7 @@ func TestRefreshHandler_Success(t *testing.T) {
 
 func TestVerifyEmailHandler_InvalidJSON(t *testing.T) {
 	t.Parallel()
-	_, app := testAuthHandler(t)
+	app := testAuthHandler(t)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/verify-email", "{{"))
 	body := readBody(t, resp)
@@ -547,7 +547,7 @@ func TestVerifyEmailHandler_InvalidJSON(t *testing.T) {
 
 func TestVerifyEmailHandler_MissingToken(t *testing.T) {
 	t.Parallel()
-	_, app := testAuthHandler(t)
+	app := testAuthHandler(t)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/verify-email", `{}`))
 	body := readBody(t, resp)
@@ -563,7 +563,7 @@ func TestVerifyEmailHandler_MissingToken(t *testing.T) {
 
 func TestVerifyEmailHandler_InvalidToken(t *testing.T) {
 	t.Parallel()
-	_, app := testAuthHandler(t)
+	app := testAuthHandler(t)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/verify-email", `{"token":"bad-token"}`))
 	body := readBody(t, resp)
@@ -579,7 +579,7 @@ func TestVerifyEmailHandler_InvalidToken(t *testing.T) {
 
 func TestVerifyEmailHandler_Success(t *testing.T) {
 	t.Parallel()
-	_, app := testAuthHandler(t)
+	app := testAuthHandler(t)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/verify-email", `{"token":"valid-token"}`))
 	body := readBody(t, resp)
@@ -706,7 +706,7 @@ func TestVerifyPasswordHandler_Success(t *testing.T) {
 
 func TestMFAVerifyHandler_InvalidJSON(t *testing.T) {
 	t.Parallel()
-	_, app := testAuthHandler(t)
+	app := testAuthHandler(t)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/mfa/verify", "not json"))
 	body := readBody(t, resp)
@@ -722,7 +722,7 @@ func TestMFAVerifyHandler_InvalidJSON(t *testing.T) {
 
 func TestMFAVerifyHandler_MissingFields(t *testing.T) {
 	t.Parallel()
-	_, app := testAuthHandler(t)
+	app := testAuthHandler(t)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/mfa/verify", `{"ticket":"abc"}`))
 	body := readBody(t, resp)
@@ -738,7 +738,7 @@ func TestMFAVerifyHandler_MissingFields(t *testing.T) {
 
 func TestMFAVerifyHandler_InvalidTicket(t *testing.T) {
 	t.Parallel()
-	_, app := testAuthHandler(t)
+	app := testAuthHandler(t)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/mfa/verify",
 		`{"ticket":"nonexistent","code":"123456"}`))

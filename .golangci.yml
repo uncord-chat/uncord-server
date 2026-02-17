@@ -18,6 +18,7 @@ linters:
     - sqlclosecheck
     - staticcheck
     - unconvert
+    - unparam
     - unused
     - whitespace
   settings:

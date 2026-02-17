@@ -20,7 +20,7 @@ import (
 )
 
 // testMFAApp creates a Fiber app with simulated auth middleware and MFA routes.
-func testMFAApp(t *testing.T) (*fiber.App, *auth.Service) {
+func testMFAApp(t *testing.T) *fiber.App {
 	t.Helper()
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
@@ -61,14 +61,14 @@ func testMFAApp(t *testing.T) (*fiber.App, *auth.Service) {
 	app.Post("/disable", handler.Disable)
 	app.Post("/recovery-codes", handler.RegenerateCodes)
 
-	return app, svc
+	return app
 }
 
 // --- Enable handler tests ---
 
 func TestMFAEnableHandler_InvalidJSON(t *testing.T) {
 	t.Parallel()
-	app, _ := testMFAApp(t)
+	app := testMFAApp(t)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/enable", "not json"))
 	body := readBody(t, resp)
@@ -84,7 +84,7 @@ func TestMFAEnableHandler_InvalidJSON(t *testing.T) {
 
 func TestMFAEnableHandler_MissingPassword(t *testing.T) {
 	t.Parallel()
-	app, _ := testMFAApp(t)
+	app := testMFAApp(t)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/enable", `{}`))
 	body := readBody(t, resp)
@@ -100,7 +100,7 @@ func TestMFAEnableHandler_MissingPassword(t *testing.T) {
 
 func TestMFAEnableHandler_WrongPassword(t *testing.T) {
 	t.Parallel()
-	app, _ := testMFAApp(t)
+	app := testMFAApp(t)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/enable", `{"password":"wrongpassword"}`))
 	body := readBody(t, resp)
@@ -116,7 +116,7 @@ func TestMFAEnableHandler_WrongPassword(t *testing.T) {
 
 func TestMFAEnableHandler_Success(t *testing.T) {
 	t.Parallel()
-	app, _ := testMFAApp(t)
+	app := testMFAApp(t)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/enable", `{"password":"strongpassword"}`))
 	body := readBody(t, resp)
@@ -145,7 +145,7 @@ func TestMFAEnableHandler_Success(t *testing.T) {
 
 func TestMFAConfirmHandler_InvalidJSON(t *testing.T) {
 	t.Parallel()
-	app, _ := testMFAApp(t)
+	app := testMFAApp(t)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/confirm", "not json"))
 	body := readBody(t, resp)
@@ -161,7 +161,7 @@ func TestMFAConfirmHandler_InvalidJSON(t *testing.T) {
 
 func TestMFAConfirmHandler_MissingCode(t *testing.T) {
 	t.Parallel()
-	app, _ := testMFAApp(t)
+	app := testMFAApp(t)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/confirm", `{}`))
 	body := readBody(t, resp)
@@ -177,7 +177,7 @@ func TestMFAConfirmHandler_MissingCode(t *testing.T) {
 
 func TestMFAConfirmHandler_NoPendingSetup(t *testing.T) {
 	t.Parallel()
-	app, _ := testMFAApp(t)
+	app := testMFAApp(t)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/confirm", `{"code":"123456"}`))
 	body := readBody(t, resp)
@@ -193,7 +193,7 @@ func TestMFAConfirmHandler_NoPendingSetup(t *testing.T) {
 
 func TestMFAConfirmHandler_Success(t *testing.T) {
 	t.Parallel()
-	app, _ := testMFAApp(t)
+	app := testMFAApp(t)
 
 	// Begin MFA setup to get a pending secret.
 	enableResp := doReq(t, app, jsonReq(http.MethodPost, "/enable", `{"password":"strongpassword"}`))
@@ -237,7 +237,7 @@ func TestMFAConfirmHandler_Success(t *testing.T) {
 
 func TestMFADisableHandler_InvalidJSON(t *testing.T) {
 	t.Parallel()
-	app, _ := testMFAApp(t)
+	app := testMFAApp(t)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/disable", "not json"))
 	body := readBody(t, resp)
@@ -253,7 +253,7 @@ func TestMFADisableHandler_InvalidJSON(t *testing.T) {
 
 func TestMFADisableHandler_MissingFields(t *testing.T) {
 	t.Parallel()
-	app, _ := testMFAApp(t)
+	app := testMFAApp(t)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/disable", `{"password":"test"}`))
 	body := readBody(t, resp)
@@ -269,7 +269,7 @@ func TestMFADisableHandler_MissingFields(t *testing.T) {
 
 func TestMFADisableHandler_NotEnabled(t *testing.T) {
 	t.Parallel()
-	app, _ := testMFAApp(t)
+	app := testMFAApp(t)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/disable",
 		`{"password":"strongpassword","code":"123456"}`))
@@ -288,7 +288,7 @@ func TestMFADisableHandler_NotEnabled(t *testing.T) {
 
 func TestMFARegenerateCodesHandler_InvalidJSON(t *testing.T) {
 	t.Parallel()
-	app, _ := testMFAApp(t)
+	app := testMFAApp(t)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/recovery-codes", "not json"))
 	body := readBody(t, resp)
@@ -304,7 +304,7 @@ func TestMFARegenerateCodesHandler_InvalidJSON(t *testing.T) {
 
 func TestMFARegenerateCodesHandler_MissingPassword(t *testing.T) {
 	t.Parallel()
-	app, _ := testMFAApp(t)
+	app := testMFAApp(t)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/recovery-codes", `{}`))
 	body := readBody(t, resp)
@@ -320,7 +320,7 @@ func TestMFARegenerateCodesHandler_MissingPassword(t *testing.T) {
 
 func TestMFARegenerateCodesHandler_NotEnabled(t *testing.T) {
 	t.Parallel()
-	app, _ := testMFAApp(t)
+	app := testMFAApp(t)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/recovery-codes",
 		`{"password":"strongpassword"}`))

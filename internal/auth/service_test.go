@@ -971,10 +971,14 @@ func TestServiceRegisterNilSenderSkipsEmail(t *testing.T) {
 
 // registerMFAUser is a test helper that registers a user and runs the full MFA setup flow, returning the TOTP secret
 // for generating valid codes in tests.
-func registerMFAUser(t *testing.T, svc *Service, repo *fakeRepository, email, password string) string {
+func registerMFAUser(t *testing.T, svc *Service, repo *fakeRepository) string {
 	t.Helper()
 	ctx := context.Background()
 
+	const (
+		email    = "alice@example.com"
+		password = "strongpassword"
+	)
 	_, err := svc.Register(ctx, RegisterRequest{
 		Email:    email,
 		Username: "mfauser",
@@ -1059,7 +1063,7 @@ func TestServiceBeginMFASetupAlreadyEnabled(t *testing.T) {
 	svc := newTestService(t, repo)
 	ctx := context.Background()
 
-	registerMFAUser(t, svc, repo, "alice@example.com", "strongpassword")
+	registerMFAUser(t, svc, repo)
 
 	userID := repo.users["alice@example.com"].ID
 	_, err := svc.BeginMFASetup(ctx, userID, "strongpassword")
@@ -1139,7 +1143,7 @@ func TestServiceVerifyMFAWithTOTP(t *testing.T) {
 	svc := newTestService(t, repo)
 	ctx := context.Background()
 
-	secret := registerMFAUser(t, svc, repo, "alice@example.com", "strongpassword")
+	secret := registerMFAUser(t, svc, repo)
 
 	result, err := svc.Login(ctx, LoginRequest{
 		Email:    "alice@example.com",
@@ -1176,7 +1180,7 @@ func TestServiceVerifyMFAWithRecoveryCode(t *testing.T) {
 	svc := newTestService(t, repo)
 	ctx := context.Background()
 
-	_ = registerMFAUser(t, svc, repo, "alice@example.com", "strongpassword")
+	_ = registerMFAUser(t, svc, repo)
 
 	// Get a recovery code from the repo
 	userID := repo.users["alice@example.com"].ID
@@ -1227,7 +1231,7 @@ func TestServiceVerifyMFAInvalidCode(t *testing.T) {
 	svc := newTestService(t, repo)
 	ctx := context.Background()
 
-	_ = registerMFAUser(t, svc, repo, "alice@example.com", "strongpassword")
+	_ = registerMFAUser(t, svc, repo)
 
 	result, err := svc.Login(ctx, LoginRequest{
 		Email:    "alice@example.com",
@@ -1250,7 +1254,7 @@ func TestServiceDisableMFASuccess(t *testing.T) {
 	svc := newTestService(t, repo)
 	ctx := context.Background()
 
-	secret := registerMFAUser(t, svc, repo, "alice@example.com", "strongpassword")
+	secret := registerMFAUser(t, svc, repo)
 	userID := repo.users["alice@example.com"].ID
 
 	code, err := totp.GenerateCode(secret, time.Now())
@@ -1273,7 +1277,7 @@ func TestServiceDisableMFAWithRecoveryCode(t *testing.T) {
 	svc := newTestService(t, repo)
 	ctx := context.Background()
 
-	_ = registerMFAUser(t, svc, repo, "alice@example.com", "strongpassword")
+	_ = registerMFAUser(t, svc, repo)
 	userID := repo.users["alice@example.com"].ID
 
 	plainCodes, err := svc.RegenerateRecoveryCodes(ctx, userID, "strongpassword")
@@ -1296,7 +1300,7 @@ func TestServiceDisableMFAWrongPassword(t *testing.T) {
 	svc := newTestService(t, repo)
 	ctx := context.Background()
 
-	secret := registerMFAUser(t, svc, repo, "alice@example.com", "strongpassword")
+	secret := registerMFAUser(t, svc, repo)
 	userID := repo.users["alice@example.com"].ID
 
 	code, err := totp.GenerateCode(secret, time.Now())
@@ -1316,7 +1320,7 @@ func TestServiceDisableMFAWrongCode(t *testing.T) {
 	svc := newTestService(t, repo)
 	ctx := context.Background()
 
-	_ = registerMFAUser(t, svc, repo, "alice@example.com", "strongpassword")
+	_ = registerMFAUser(t, svc, repo)
 	userID := repo.users["alice@example.com"].ID
 
 	err := svc.DisableMFA(ctx, userID, "strongpassword", "000000")
@@ -1353,7 +1357,7 @@ func TestServiceRegenerateRecoveryCodesSuccess(t *testing.T) {
 	svc := newTestService(t, repo)
 	ctx := context.Background()
 
-	_ = registerMFAUser(t, svc, repo, "alice@example.com", "strongpassword")
+	_ = registerMFAUser(t, svc, repo)
 	userID := repo.users["alice@example.com"].ID
 
 	codes, err := svc.RegenerateRecoveryCodes(ctx, userID, "strongpassword")
@@ -1423,7 +1427,7 @@ func TestServiceVerifyMFANotConfigured(t *testing.T) {
 	svc := newTestService(t, repo)
 	ctx := context.Background()
 
-	_ = registerMFAUser(t, svc, repo, "alice@example.com", "strongpassword")
+	_ = registerMFAUser(t, svc, repo)
 
 	result, err := svc.Login(ctx, LoginRequest{
 		Email:    "alice@example.com",
@@ -1479,7 +1483,7 @@ func TestServiceDisableMFANotConfigured(t *testing.T) {
 	svc := newTestService(t, repo)
 	ctx := context.Background()
 
-	_ = registerMFAUser(t, svc, repo, "alice@example.com", "strongpassword")
+	_ = registerMFAUser(t, svc, repo)
 	userID := repo.users["alice@example.com"].ID
 
 	// Simulate removing the encryption key after users have enrolled.
