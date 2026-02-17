@@ -821,7 +821,8 @@ func purgeExpiredData(ctx context.Context, repo user.Repository, attachRepo atta
 
 // runWithBackoff runs fn in a loop, restarting with exponential backoff when it returns a non-nil, non-cancelled error.
 // If fn returns nil or context.Canceled the goroutine exits. The delay starts at 1 second and doubles on each
-// consecutive failure up to a 2-minute cap.
+// consecutive failure up to a 2-minute cap. If fn runs successfully for at least maxDelay before failing, the backoff
+// resets to initialDelay so that a transient error after a long healthy run does not inherit a stale elevated delay.
 func runWithBackoff(ctx context.Context, name string, fn func(context.Context) error) {
 	const (
 		initialDelay = time.Second
@@ -829,9 +830,13 @@ func runWithBackoff(ctx context.Context, name string, fn func(context.Context) e
 	)
 	delay := initialDelay
 	for {
+		started := time.Now()
 		if err := fn(ctx); err != nil {
 			if errors.Is(err, context.Canceled) {
 				return
+			}
+			if time.Since(started) >= maxDelay {
+				delay = initialDelay
 			}
 			log.Error().Err(err).Str("service", name).Dur("retry_in", delay).
 				Msg("Background service stopped, restarting after delay")
