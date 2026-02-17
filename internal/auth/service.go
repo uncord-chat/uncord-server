@@ -280,7 +280,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResult, er
 
 	return &LoginResult{
 		Auth: &AuthResult{
-			User:         u.User.ToModel(),
+			User:         u.ToModel(),
 			AccessToken:  tokens.AccessToken,
 			RefreshToken: tokens.RefreshToken,
 		},
@@ -685,7 +685,7 @@ func (s *Service) completeMFALogin(ctx context.Context, creds *user.Credentials)
 	}
 
 	return &AuthResult{
-		User:         creds.User.ToModel(),
+		User:         creds.ToModel(),
 		AccessToken:  tokens.AccessToken,
 		RefreshToken: tokens.RefreshToken,
 	}, nil

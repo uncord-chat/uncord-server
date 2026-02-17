@@ -4,11 +4,15 @@ linters:
   default: none
   enable:
     - bodyclose
+    - copyloopvar
     - errcheck
     - goconst
+    - gocritic
     - govet
     - ineffassign
     - misspell
+    - nakedret
+    - nilerr
     - noctx
     - revive
     - sqlclosecheck
