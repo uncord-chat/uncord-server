@@ -372,6 +372,10 @@ func run() error {
 		ExposeHeaders: []string{"X-Request-ID"},
 	}))
 
+	// Restrict non-upload request bodies to a sensible size for JSON payloads. Multipart (file upload) requests are
+	// exempt because they are protected by the global Fiber body limit and per-handler size checks instead.
+	app.Use(jsonBodyLimit(cfg.BodyLimitJSONBytes()))
+
 	// Global API rate limiter
 	app.Use(limiter.New(limiter.Config{
 		Max:          cfg.RateLimitAPIRequests,
@@ -790,6 +794,23 @@ func runWithBackoff(ctx context.Context, name string, fn func(context.Context) e
 			continue
 		}
 		return
+	}
+}
+
+// jsonBodyLimit returns middleware that rejects non-multipart requests whose Content-Length exceeds maxBytes. Multipart
+// requests (file uploads) are exempt because they are governed by the global Fiber body limit and per-handler size
+// validation. Requests without a Content-Length header are allowed through; Fiber's global limit still applies when
+// reading the body.
+func jsonBodyLimit(maxBytes int) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		ct := c.Get("Content-Type")
+		if strings.HasPrefix(ct, "multipart/") {
+			return c.Next()
+		}
+		if cl := c.Request().Header.ContentLength(); cl > 0 && cl > maxBytes {
+			return httputil.Fail(c, fiber.StatusRequestEntityTooLarge, apierrors.PayloadTooLarge, "Request body too large")
+		}
+		return c.Next()
 	}
 }
 

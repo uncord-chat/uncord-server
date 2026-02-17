@@ -288,6 +288,12 @@ func (c *Config) BodyLimitBytes() int {
 	return (c.MaxUploadSizeMB + 1) * 1024 * 1024
 }
 
+// BodyLimitJSONBytes returns the maximum body size in bytes for non-upload (JSON) requests. This is intentionally much
+// smaller than BodyLimitBytes to prevent memory exhaustion from oversized payloads sent to regular API endpoints.
+func (c *Config) BodyLimitJSONBytes() int {
+	return 1024 * 1024 // 1 MiB
+}
+
 // MaxUploadSizeBytes returns the maximum file upload size in bytes.
 func (c *Config) MaxUploadSizeBytes() int64 {
 	return int64(c.MaxUploadSizeMB) * 1024 * 1024
