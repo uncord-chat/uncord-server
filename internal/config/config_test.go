@@ -33,7 +33,8 @@ func TestLoadDefaults(t *testing.T) {
 		"SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM",
 		"SERVER_SECRET", "DELETION_TOMBSTONE_USERNAMES", "DELETION_TOMBSTONE_RETENTION",
 		"LOGIN_ATTEMPT_RETENTION", "DATA_CLEANUP_INTERVAL",
-		"GATEWAY_HEARTBEAT_INTERVAL_MS", "GATEWAY_SESSION_TTL_SECONDS",
+		"GATEWAY_HEARTBEAT_INTERVAL_MS", "GATEWAY_OFFLINE_DELAY_MS",
+		"GATEWAY_SESSION_TTL_SECONDS",
 		"GATEWAY_REPLAY_BUFFER_SIZE", "GATEWAY_MAX_CONNECTIONS",
 		"RATE_LIMIT_WS_COUNT", "RATE_LIMIT_WS_WINDOW_SECONDS",
 		"RATE_LIMIT_MSG_COUNT", "RATE_LIMIT_MSG_WINDOW_SECONDS",
@@ -138,8 +139,11 @@ func TestLoadDefaults(t *testing.T) {
 	}
 
 	// Gateway defaults
-	if cfg.GatewayHeartbeatIntervalMS != 45000 {
-		t.Errorf("GatewayHeartbeatIntervalMS = %d, want 45000", cfg.GatewayHeartbeatIntervalMS)
+	if cfg.GatewayHeartbeatIntervalMS != 20000 {
+		t.Errorf("GatewayHeartbeatIntervalMS = %d, want 20000", cfg.GatewayHeartbeatIntervalMS)
+	}
+	if cfg.GatewayOfflineDelayMS != 3000 {
+		t.Errorf("GatewayOfflineDelayMS = %d, want 3000", cfg.GatewayOfflineDelayMS)
 	}
 	if cfg.GatewaySessionTTL != 300*time.Second {
 		t.Errorf("GatewaySessionTTL = %v, want 5m0s", cfg.GatewaySessionTTL)
@@ -866,6 +870,20 @@ func TestLoadValidationGatewayHeartbeatTooLow(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "GATEWAY_HEARTBEAT_INTERVAL_MS must be at least 1000") {
 		t.Errorf("error %q does not mention GATEWAY_HEARTBEAT_INTERVAL_MS", err.Error())
+	}
+}
+
+func TestLoadValidationGatewayOfflineDelayTooLow(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+	t.Setenv("SERVER_SECRET", testServerSecret)
+	t.Setenv("GATEWAY_OFFLINE_DELAY_MS", "500")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() returned nil error, want validation error for GATEWAY_OFFLINE_DELAY_MS < 1000")
+	}
+	if !strings.Contains(err.Error(), "GATEWAY_OFFLINE_DELAY_MS must be at least 1000") {
+		t.Errorf("error %q does not mention GATEWAY_OFFLINE_DELAY_MS", err.Error())
 	}
 }
 

@@ -156,7 +156,8 @@ func (r *fakeMemberRepo) GetByUserIDAnyStatus(context.Context, uuid.UUID) (*memb
 
 func testConfig() *config.Config {
 	return &config.Config{
-		GatewayHeartbeatIntervalMS: 45000,
+		GatewayHeartbeatIntervalMS: 20000,
+		GatewayOfflineDelayMS:      3000,
 		GatewaySessionTTL:          5 * time.Minute,
 		GatewayReplayBufferSize:    100,
 		GatewayMaxConnections:      10,

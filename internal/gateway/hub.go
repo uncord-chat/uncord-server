@@ -154,10 +154,6 @@ func (h *Hub) register(client *Client) error {
 	return nil
 }
 
-// offlineDelay is the time to wait after a client disconnects before publishing an offline presence event. This grace
-// period allows the client to resume without triggering a false offline/online cycle.
-const offlineDelay = 10 * time.Second
-
 // unregister removes a client from the Hub and persists its session for future resume.
 func (h *Hub) unregister(client *Client) {
 	h.mu.Lock()
@@ -188,10 +184,10 @@ func (h *Hub) unregister(client *Client) {
 	h.log.Debug().Stringer("user_id", userID).Msg("Client unregistered")
 }
 
-// delayedOffline waits for the offline grace period then publishes an offline presence event if the user has not
-// reconnected.
+// delayedOffline waits for the configured offline grace period then publishes an offline presence event if the user
+// has not reconnected. The delay is controlled by GatewayOfflineDelayMS in the server configuration.
 func (h *Hub) delayedOffline(userID uuid.UUID) {
-	time.Sleep(offlineDelay)
+	time.Sleep(time.Duration(h.cfg.GatewayOfflineDelayMS) * time.Millisecond)
 
 	h.mu.RLock()
 	_, reconnected := h.clients[userID]

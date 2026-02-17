@@ -70,7 +70,8 @@ type Config struct {
 	OnboardingRequireCaptcha           bool
 
 	// Gateway
-	GatewayHeartbeatIntervalMS int           // Heartbeat interval sent to clients in the Hello frame. Default: 45000.
+	GatewayHeartbeatIntervalMS int           // Heartbeat interval sent to clients in the Hello frame. Default: 20000.
+	GatewayOfflineDelayMS      int           // Grace period before broadcasting offline presence after disconnect. Default: 3000.
 	GatewaySessionTTL          time.Duration // How long a disconnected session remains resumable. Default: 300s.
 	GatewayReplayBufferSize    int           // Maximum number of events retained for session replay. Default: 1000.
 	GatewayMaxConnections      int           // Maximum concurrent WebSocket connections. Default: 10000.
@@ -184,7 +185,8 @@ func Load() (*Config, error) {
 		OnboardingRequirePhone:             p.bool("ONBOARDING_REQUIRE_PHONE", false),
 		OnboardingRequireCaptcha:           p.bool("ONBOARDING_REQUIRE_CAPTCHA", false),
 
-		GatewayHeartbeatIntervalMS: p.int("GATEWAY_HEARTBEAT_INTERVAL_MS", 45000),
+		GatewayHeartbeatIntervalMS: p.int("GATEWAY_HEARTBEAT_INTERVAL_MS", 20000),
+		GatewayOfflineDelayMS:      p.int("GATEWAY_OFFLINE_DELAY_MS", 3000),
 		GatewaySessionTTL:          time.Duration(p.int("GATEWAY_SESSION_TTL_SECONDS", 300)) * time.Second,
 		GatewayReplayBufferSize:    p.int("GATEWAY_REPLAY_BUFFER_SIZE", 1000),
 		GatewayMaxConnections:      p.int("GATEWAY_MAX_CONNECTIONS", 10000),
@@ -398,6 +400,9 @@ func (c *Config) validate() error {
 
 	if c.GatewayHeartbeatIntervalMS < 1000 {
 		errs = append(errs, fmt.Errorf("GATEWAY_HEARTBEAT_INTERVAL_MS must be at least 1000"))
+	}
+	if c.GatewayOfflineDelayMS < 1000 {
+		errs = append(errs, fmt.Errorf("GATEWAY_OFFLINE_DELAY_MS must be at least 1000"))
 	}
 	if c.GatewaySessionTTL < 10*time.Second {
 		errs = append(errs, fmt.Errorf("GATEWAY_SESSION_TTL_SECONDS must be at least 10"))
