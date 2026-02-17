@@ -248,6 +248,31 @@ func (r *PGRepository) UpdatePasswordHash(ctx context.Context, userID uuid.UUID,
 // Safety: the query is built dynamically, but every SET clause and named arg key is a hardcoded string literal. No
 // caller-supplied value enters the SQL structure; all values flow through pgx named parameter binding.
 func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdateParams) (*User, error) {
+	setClauses, namedArgs := buildUpdateClauses(id, params)
+
+	// No fields to update. Return the current row without issuing an UPDATE so the database trigger does not bump
+	// updated_at. A no-op PATCH should not alter the modification timestamp.
+	if len(setClauses) == 0 {
+		return r.GetByID(ctx, id)
+	}
+
+	query := "UPDATE users SET " + strings.Join(setClauses, ", ") +
+		" WHERE id = @id RETURNING " + selectColumns
+
+	u, err := scanUser(r.db.QueryRow(ctx, query, namedArgs))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("update user: %w", err)
+	}
+	return u, nil
+}
+
+// buildUpdateClauses assembles SET clauses and named args from the non-nil fields in params. The returned namedArgs
+// always includes the "id" key. Separating this from the database call allows the query-building logic to be unit
+// tested without a live PostgreSQL connection.
+func buildUpdateClauses(id uuid.UUID, params UpdateParams) ([]string, pgx.NamedArgs) {
 	var setClauses []string
 	namedArgs := pgx.NamedArgs{"id": id}
 
@@ -280,23 +305,7 @@ func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdatePa
 		namedArgs["theme_colour_secondary"] = *params.ThemeColourSecondary
 	}
 
-	// No fields to update. Return the current row without issuing an UPDATE so the database trigger does not bump
-	// updated_at. A no-op PATCH should not alter the modification timestamp.
-	if len(setClauses) == 0 {
-		return r.GetByID(ctx, id)
-	}
-
-	query := "UPDATE users SET " + strings.Join(setClauses, ", ") +
-		" WHERE id = @id RETURNING " + selectColumns
-
-	u, err := scanUser(r.db.QueryRow(ctx, query, namedArgs))
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
-		}
-		return nil, fmt.Errorf("update user: %w", err)
-	}
-	return u, nil
+	return setClauses, namedArgs
 }
 
 // EnableMFA atomically sets the user's MFA secret and enabled flag, and inserts the initial set of recovery code

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 func TestSentinelErrors(t *testing.T) {
@@ -322,6 +324,128 @@ func TestValidateThemeColour(t *testing.T) {
 			}
 			if err != nil && !errors.Is(err, ErrThemeColourRange) {
 				t.Errorf("ValidateThemeColour() error = %v, want ErrThemeColourRange", err)
+			}
+		})
+	}
+}
+
+func TestBuildUpdateClauses(t *testing.T) {
+	t.Parallel()
+	id := uuid.New()
+
+	tests := []struct {
+		name           string
+		params         UpdateParams
+		wantClauses    int
+		wantArgKeys    []string
+		notWantArgKeys []string
+	}{
+		{
+			name:        "empty params produces no SET clauses",
+			params:      UpdateParams{},
+			wantClauses: 0,
+			wantArgKeys: []string{"id"},
+		},
+		{
+			name:        "display name only",
+			params:      UpdateParams{DisplayName: ptr("Alice")},
+			wantClauses: 1,
+			wantArgKeys: []string{"id", "display_name"},
+		},
+		{
+			name:        "avatar key only",
+			params:      UpdateParams{AvatarKey: ptr("avatars/abc.png")},
+			wantClauses: 1,
+			wantArgKeys: []string{"id", "avatar_key"},
+		},
+		{
+			name:        "pronouns only",
+			params:      UpdateParams{Pronouns: ptr("they/them")},
+			wantClauses: 1,
+			wantArgKeys: []string{"id", "pronouns"},
+		},
+		{
+			name:        "banner key only",
+			params:      UpdateParams{BannerKey: ptr("banners/xyz.jpg")},
+			wantClauses: 1,
+			wantArgKeys: []string{"id", "banner_key"},
+		},
+		{
+			name:        "about only",
+			params:      UpdateParams{About: ptr("hello world")},
+			wantClauses: 1,
+			wantArgKeys: []string{"id", "about"},
+		},
+		{
+			name:        "theme colour primary only",
+			params:      UpdateParams{ThemeColourPrimary: intPtr(0xFF0000)},
+			wantClauses: 1,
+			wantArgKeys: []string{"id", "theme_colour_primary"},
+		},
+		{
+			name:        "theme colour secondary only",
+			params:      UpdateParams{ThemeColourSecondary: intPtr(0x00FF00)},
+			wantClauses: 1,
+			wantArgKeys: []string{"id", "theme_colour_secondary"},
+		},
+		{
+			name: "all fields set",
+			params: UpdateParams{
+				DisplayName:          ptr("Bob"),
+				AvatarKey:            ptr("a.png"),
+				Pronouns:             ptr("he/him"),
+				BannerKey:            ptr("b.jpg"),
+				About:                ptr("bio"),
+				ThemeColourPrimary:   intPtr(100),
+				ThemeColourSecondary: intPtr(200),
+			},
+			wantClauses: 7,
+			wantArgKeys: []string{
+				"id", "display_name", "avatar_key", "pronouns",
+				"banner_key", "about", "theme_colour_primary", "theme_colour_secondary",
+			},
+		},
+		{
+			name:           "partial mix: display name and about",
+			params:         UpdateParams{DisplayName: ptr("Eve"), About: ptr("about me")},
+			wantClauses:    2,
+			wantArgKeys:    []string{"id", "display_name", "about"},
+			notWantArgKeys: []string{"avatar_key", "pronouns", "banner_key", "theme_colour_primary", "theme_colour_secondary"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			clauses, args := buildUpdateClauses(id, tt.params)
+
+			if len(clauses) != tt.wantClauses {
+				t.Errorf("len(clauses) = %d, want %d; clauses: %v", len(clauses), tt.wantClauses, clauses)
+			}
+
+			for _, key := range tt.wantArgKeys {
+				if _, ok := args[key]; !ok {
+					t.Errorf("named args missing key %q", key)
+				}
+			}
+
+			for _, key := range tt.notWantArgKeys {
+				if _, ok := args[key]; ok {
+					t.Errorf("named args should not contain key %q", key)
+				}
+			}
+
+			// Every SET clause must reference a named arg that exists in the map.
+			for _, clause := range clauses {
+				// Extract the @name from the clause (e.g., "display_name = @display_name" → "display_name").
+				parts := strings.SplitN(clause, "@", 2)
+				if len(parts) != 2 {
+					t.Errorf("clause %q does not contain a named parameter", clause)
+					continue
+				}
+				if _, ok := args[parts[1]]; !ok {
+					t.Errorf("clause references @%s but named args does not contain it", parts[1])
+				}
 			}
 		})
 	}
