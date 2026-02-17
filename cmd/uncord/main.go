@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"os"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -696,11 +697,16 @@ func (s *server) registerRoutes(app *fiber.App) {
 	banGroup.Delete("/:userID", memberHandler.UnbanMember)
 
 	// Public media file serving (outside /api/v1/, no auth required). The UUID component of each storage key provides
-	// sufficient entropy to prevent guessing. Directory traversal is prevented by Fiber's path parameter sanitisation.
+	// sufficient entropy to prevent guessing. The key is validated against traversal by cleaning the path and rejecting
+	// anything that normalises differently, contains parent references, uses absolute paths, or includes null bytes or
+	// backslashes.
 	if _, ok := s.storage.(*media.LocalStorage); ok {
 		app.Get("/media/*", func(c fiber.Ctx) error {
 			key := c.Params("*")
-			if key == "" || strings.Contains(key, "..") {
+			if key == "" || strings.ContainsAny(key, "\x00\\") {
+				return fiber.ErrNotFound
+			}
+			if cleaned := path.Clean(key); cleaned != key || strings.HasPrefix(cleaned, "..") || path.IsAbs(cleaned) {
 				return fiber.ErrNotFound
 			}
 			rc, err := s.storage.Get(c.Context(), key)
