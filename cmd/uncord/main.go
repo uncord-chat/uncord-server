@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"mime"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -664,6 +665,18 @@ func (s *server) registerRoutes(app *fiber.App) {
 			}
 			defer func() { _ = rc.Close() }()
 
+			// Derive the content type from the storage key extension. The key preserves the original file extension
+			// (e.g. "attachments/{channelID}/{uuid}.jpg"), so mime.TypeByExtension produces the correct type without
+			// a database lookup. Falls back to application/octet-stream, which triggers a download rather than inline
+			// rendering for unrecognised extensions.
+			contentType := "application/octet-stream"
+			if ext := filepath.Ext(key); ext != "" {
+				if mt := mime.TypeByExtension(ext); mt != "" {
+					contentType = mt
+				}
+			}
+			c.Set("Content-Type", contentType)
+			c.Set("X-Content-Type-Options", "nosniff")
 			// Set a long cache header since attachment URLs include a unique UUID.
 			c.Set("Cache-Control", "public, max-age=31536000, immutable")
 			return c.SendStream(rc)
