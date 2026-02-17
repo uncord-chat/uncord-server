@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -106,6 +107,49 @@ func TestDeleteMessage_Success(t *testing.T) {
 	idx := NewIndexer(srv.URL, "test-key", 5*time.Second)
 	if err := idx.DeleteMessage(context.Background(), "msg-1"); err != nil {
 		t.Fatalf("DeleteMessage() error = %v", err)
+	}
+}
+
+func TestIndexMessage_RetriesOnTransient500(t *testing.T) {
+	t.Parallel()
+
+	var attempts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if attempts.Add(1) == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte("transient"))
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer srv.Close()
+
+	idx := NewIndexer(srv.URL, "test-key", 5*time.Second)
+	if err := idx.IndexMessage(context.Background(), "msg-1", "hello", "a", "c", 0); err != nil {
+		t.Fatalf("IndexMessage() error = %v, want success after retry", err)
+	}
+	if got := attempts.Load(); got != 2 {
+		t.Errorf("attempts = %d, want 2", got)
+	}
+}
+
+func TestIndexMessage_Persistent500ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	var attempts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempts.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("permanent failure"))
+	}))
+	defer srv.Close()
+
+	idx := NewIndexer(srv.URL, "test-key", 5*time.Second)
+	if err := idx.IndexMessage(context.Background(), "msg-1", "hello", "a", "c", 0); err == nil {
+		t.Fatal("IndexMessage() expected error for persistent 500")
+	}
+	if got := attempts.Load(); got != 2 {
+		t.Errorf("attempts = %d, want 2 (initial + 1 retry)", got)
 	}
 }
 

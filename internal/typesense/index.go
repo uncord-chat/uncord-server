@@ -26,6 +26,53 @@ func NewIndexer(baseURL, apiKey string, timeout time.Duration) *Indexer {
 	}
 }
 
+// retryableStatusMin is the lower bound (inclusive) of HTTP status codes that are considered transient and worth
+// retrying. All 5xx responses indicate a server-side problem that may resolve on a subsequent attempt.
+const retryableStatusMin = 500
+
+// retryDelay is the fixed pause between the initial attempt and the single retry. Kept short because index operations
+// are best-effort and run in background goroutines.
+const retryDelay = 500 * time.Millisecond
+
+// do executes an HTTP request with a single retry on transient failures (network errors or 5xx responses). Index
+// operations are best-effort, so one retry is enough to ride out brief Typesense restarts without adding latency to the
+// happy path.
+func (idx *Indexer) do(req *http.Request) (*http.Response, error) {
+	resp, firstErr := idx.client.Do(req)
+	if firstErr == nil && resp.StatusCode < retryableStatusMin {
+		return resp, nil
+	}
+
+	// Close the failed response body before retrying.
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+
+	// Reset the request body for the retry. http.NewRequestWithContext sets GetBody automatically when the body is a
+	// *bytes.Reader, so this is a no-op for DELETE requests (nil body).
+	if req.GetBody != nil {
+		body, bodyErr := req.GetBody()
+		if bodyErr != nil {
+			if firstErr != nil {
+				return nil, firstErr
+			}
+			return nil, fmt.Errorf("reset request body for retry: %w", bodyErr)
+		}
+		req.Body = body
+	}
+
+	select {
+	case <-req.Context().Done():
+		if firstErr != nil {
+			return nil, firstErr
+		}
+		return nil, req.Context().Err()
+	case <-time.After(retryDelay):
+	}
+
+	return idx.client.Do(req)
+}
+
 // messageDoc is the JSON structure indexed in Typesense.
 type messageDoc struct {
 	ID        string `json:"id"`
@@ -58,7 +105,7 @@ func (idx *Indexer) IndexMessage(ctx context.Context, id, content, authorID, cha
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-TYPESENSE-API-KEY", idx.apiKey)
 
-	resp, err := idx.client.Do(req)
+	resp, err := idx.do(req)
 	if err != nil {
 		return fmt.Errorf("index request failed: %w", err)
 	}
@@ -92,7 +139,7 @@ func (idx *Indexer) UpdateMessage(ctx context.Context, id, content string) error
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-TYPESENSE-API-KEY", idx.apiKey)
 
-	resp, err := idx.client.Do(req)
+	resp, err := idx.do(req)
 	if err != nil {
 		return fmt.Errorf("upsert request failed: %w", err)
 	}
@@ -115,7 +162,7 @@ func (idx *Indexer) DeleteMessage(ctx context.Context, id string) error {
 	}
 	req.Header.Set("X-TYPESENSE-API-KEY", idx.apiKey)
 
-	resp, err := idx.client.Do(req)
+	resp, err := idx.do(req)
 	if err != nil {
 		return fmt.Errorf("delete request failed: %w", err)
 	}
