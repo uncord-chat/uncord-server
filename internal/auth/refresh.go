@@ -42,12 +42,16 @@ redis.call('DEL', KEYS[1])
 local userSetKey = 'user_refresh:' .. userId
 redis.call('SREM', userSetKey, ARGV[1])
 
--- Remove stale entries whose refresh:{token} key has expired.
+-- Collect stale entries whose refresh:{token} key has expired, then remove them in a single SREM call.
 local members = redis.call('SMEMBERS', userSetKey)
-for _, member in ipairs(members) do
-    if redis.call('EXISTS', 'refresh:' .. member) == 0 then
-        redis.call('SREM', userSetKey, member)
+local stale = {}
+for _, m in ipairs(members) do
+    if redis.call('EXISTS', 'refresh:' .. m) == 0 then
+        stale[#stale + 1] = m
     end
+end
+if #stale > 0 then
+    redis.call('SREM', userSetKey, unpack(stale))
 end
 
 local newKey = 'refresh:' .. ARGV[2]
@@ -67,12 +71,16 @@ return userId
 //	ARGV[2] = token UUID string (for SADD into user set)
 //	ARGV[3] = TTL in seconds
 var createScript = redis.NewScript(`
--- Remove stale entries whose refresh:{token} key has expired.
+-- Collect stale entries whose refresh:{token} key has expired, then remove them in a single SREM call.
 local members = redis.call('SMEMBERS', KEYS[2])
-for _, member in ipairs(members) do
-    if redis.call('EXISTS', 'refresh:' .. member) == 0 then
-        redis.call('SREM', KEYS[2], member)
+local stale = {}
+for _, m in ipairs(members) do
+    if redis.call('EXISTS', 'refresh:' .. m) == 0 then
+        stale[#stale + 1] = m
     end
+end
+if #stale > 0 then
+    redis.call('SREM', KEYS[2], unpack(stale))
 end
 
 redis.call('SET', KEYS[1], ARGV[1], 'EX', tonumber(ARGV[3]))
@@ -86,8 +94,12 @@ return 1
 //	KEYS[1] = user_refresh:{userID}
 var revokeAllScript = redis.NewScript(`
 local tokens = redis.call('SMEMBERS', KEYS[1])
-for _, token in ipairs(tokens) do
-    redis.call('DEL', 'refresh:' .. token)
+if #tokens > 0 then
+    local keys = {}
+    for i, token in ipairs(tokens) do
+        keys[i] = 'refresh:' .. token
+    end
+    redis.call('DEL', unpack(keys))
 end
 redis.call('DEL', KEYS[1])
 return #tokens
