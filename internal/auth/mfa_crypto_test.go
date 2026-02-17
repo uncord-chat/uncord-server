@@ -75,12 +75,12 @@ func TestGenerateRecoveryCodes(t *testing.T) {
 
 	seen := make(map[string]bool)
 	for _, code := range codes {
-		// Verify format: xxxx-xxxx-xxxx-xxxx (16 hex chars with 3 hyphens)
-		if len(code) != 19 {
-			t.Errorf("code %q has length %d, want 19", code, len(code))
+		// Verify format: xxxx-xxxx-xxxx-xxxx-xxxx (20 hex chars with 4 hyphens)
+		if len(code) != 24 {
+			t.Errorf("code %q has length %d, want 24", code, len(code))
 			continue
 		}
-		for _, pos := range []int{4, 9, 14} {
+		for _, pos := range []int{4, 9, 14, 19} {
 			if code[pos] != '-' {
 				t.Errorf("code %q missing hyphen at position %d", code, pos)
 			}
@@ -88,8 +88,8 @@ func TestGenerateRecoveryCodes(t *testing.T) {
 
 		// Verify all characters are hex (except the hyphens)
 		stripped := strings.ReplaceAll(code, "-", "")
-		if len(stripped) != 16 {
-			t.Errorf("code %q has %d hex characters, want 16", code, len(stripped))
+		if len(stripped) != 20 {
+			t.Errorf("code %q has %d hex characters, want 20", code, len(stripped))
 		}
 		for _, c := range stripped {
 			if !strings.ContainsRune("0123456789abcdef", c) {
@@ -106,7 +106,7 @@ func TestGenerateRecoveryCodes(t *testing.T) {
 
 func TestHashVerifyRecoveryCode(t *testing.T) {
 	t.Parallel()
-	code := "abcd-ef01-2345-6789"
+	code := "abcd-ef01-2345-6789-abcd"
 
 	hash, err := HashRecoveryCode(code, 64*1024, 1, 1, 16, 32)
 	if err != nil {
@@ -125,14 +125,14 @@ func TestHashVerifyRecoveryCode(t *testing.T) {
 func TestVerifyRecoveryCodeHyphenStripping(t *testing.T) {
 	t.Parallel()
 	// Hash with hyphens, verify without; should still match because both strip hyphens before hashing.
-	code := "abcd-ef01-2345-6789"
+	code := "abcd-ef01-2345-6789-abcd"
 
 	hash, err := HashRecoveryCode(code, 64*1024, 1, 1, 16, 32)
 	if err != nil {
 		t.Fatalf("HashRecoveryCode() error = %v", err)
 	}
 
-	match, err := VerifyRecoveryCode("abcdef0123456789", hash)
+	match, err := VerifyRecoveryCode("abcdef0123456789abcd", hash)
 	if err != nil {
 		t.Fatalf("VerifyRecoveryCode() error = %v", err)
 	}
@@ -143,14 +143,14 @@ func TestVerifyRecoveryCodeHyphenStripping(t *testing.T) {
 
 func TestVerifyRecoveryCodeWrongCode(t *testing.T) {
 	t.Parallel()
-	code := "abcd-ef01-2345-6789"
+	code := "abcd-ef01-2345-6789-abcd"
 
 	hash, err := HashRecoveryCode(code, 64*1024, 1, 1, 16, 32)
 	if err != nil {
 		t.Fatalf("HashRecoveryCode() error = %v", err)
 	}
 
-	match, err := VerifyRecoveryCode("0000-0000-0000-0000", hash)
+	match, err := VerifyRecoveryCode("0000-0000-0000-0000-0000", hash)
 	if err != nil {
 		t.Fatalf("VerifyRecoveryCode() error = %v", err)
 	}
