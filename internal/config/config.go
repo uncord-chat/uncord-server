@@ -61,6 +61,7 @@ type Config struct {
 	// First-run owner
 	InitOwnerEmail    string
 	InitOwnerPassword string
+	InitOwnerUsername string
 
 	// Data directory
 	DataDir string
@@ -179,6 +180,7 @@ func Load() (*Config, error) {
 
 		InitOwnerEmail:    envStr("INIT_OWNER_EMAIL", ""),
 		InitOwnerPassword: envStr("INIT_OWNER_PASSWORD", ""),
+		InitOwnerUsername: envStr("INIT_OWNER_USERNAME", ""),
 
 		DataDir: envStr("DATA_DIR", ""),
 

@@ -22,7 +22,7 @@ func TestLoadDefaults(t *testing.T) {
 		"ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_REFRESH_INTERVAL", "ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_TIMEOUT",
 		"VALKEY_DIAL_TIMEOUT",
 		"TYPESENSE_URL", "TYPESENSE_API_KEY", "TYPESENSE_TIMEOUT",
-		"INIT_OWNER_EMAIL", "INIT_OWNER_PASSWORD",
+		"INIT_OWNER_EMAIL", "INIT_OWNER_USERNAME", "INIT_OWNER_PASSWORD",
 		"ONBOARDING_OPEN_JOIN", "ONBOARDING_REQUIRE_EMAIL_VERIFICATION",
 		"ONBOARDING_MIN_ACCOUNT_AGE", "ONBOARDING_REQUIRE_PHONE", "ONBOARDING_REQUIRE_CAPTCHA",
 		"MAX_UPLOAD_SIZE_MB", "MAX_AVATAR_SIZE_MB", "MAX_AVATAR_DIMENSION",
@@ -288,6 +288,7 @@ func TestLoadOverrides(t *testing.T) {
 	t.Setenv("ARGON2_MEMORY", "131072")
 	t.Setenv("ONBOARDING_OPEN_JOIN", "true")
 	t.Setenv("INIT_OWNER_EMAIL", "test@example.com")
+	t.Setenv("INIT_OWNER_USERNAME", "testadmin")
 	t.Setenv("JWT_SECRET", "test-secret-key-that-is-32-chars!")
 	t.Setenv("SERVER_SECRET", testServerSecret)
 	t.Setenv("JWT_ACCESS_TTL", "30m")
@@ -326,6 +327,9 @@ func TestLoadOverrides(t *testing.T) {
 	}
 	if cfg.InitOwnerEmail != "test@example.com" {
 		t.Errorf("InitOwnerEmail = %q, want %q", cfg.InitOwnerEmail, "test@example.com")
+	}
+	if cfg.InitOwnerUsername != "testadmin" {
+		t.Errorf("InitOwnerUsername = %q, want %q", cfg.InitOwnerUsername, "testadmin")
 	}
 	if cfg.JWTSecret != "test-secret-key-that-is-32-chars!" {
 		t.Errorf("JWTSecret = %q, want %q", cfg.JWTSecret, "test-secret-key-that-is-32-chars!")

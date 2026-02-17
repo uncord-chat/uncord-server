@@ -3,8 +3,6 @@ package bootstrap
 import (
 	"context"
 	"fmt"
-	"regexp"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -16,8 +14,6 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/config"
 	"github.com/uncord-chat/uncord-server/internal/postgres"
 )
-
-var sanitizeUsername = regexp.MustCompile(`[^a-zA-Z0-9_.]`)
 
 // DefaultEveryonePermissions is the permission bitfield assigned to the @everyone role during first-run initialization.
 var DefaultEveryonePermissions = permissions.ViewChannels |
@@ -43,14 +39,19 @@ func IsFirstRun(ctx context.Context, db *pgxpool.Pool) (bool, error) {
 // RunFirstInit seeds the database with the owner account, default roles, channels, and onboarding config inside a
 // single transaction.
 func RunFirstInit(ctx context.Context, db *pgxpool.Pool, cfg *config.Config, logger zerolog.Logger) error {
-	if cfg.InitOwnerEmail == "" || cfg.InitOwnerPassword == "" {
-		return fmt.Errorf("INIT_OWNER_EMAIL and INIT_OWNER_PASSWORD must be set for first-run initialization")
+	if cfg.InitOwnerEmail == "" || cfg.InitOwnerPassword == "" || cfg.InitOwnerUsername == "" {
+		return fmt.Errorf("INIT_OWNER_EMAIL, INIT_OWNER_PASSWORD, and INIT_OWNER_USERNAME must be set for first-run initialization")
 	}
 
 	ownerEmail, _, err := auth.ValidateEmail(cfg.InitOwnerEmail)
 	if err != nil {
 		return fmt.Errorf("invalid INIT_OWNER_EMAIL: %w", err)
 	}
+
+	if err := auth.ValidateUsername(cfg.InitOwnerUsername); err != nil {
+		return fmt.Errorf("invalid INIT_OWNER_USERNAME: %w", err)
+	}
+	username := cfg.InitOwnerUsername
 
 	hash, err := auth.HashPassword(
 		cfg.InitOwnerPassword,
@@ -62,16 +63,6 @@ func RunFirstInit(ctx context.Context, db *pgxpool.Pool, cfg *config.Config, log
 	)
 	if err != nil {
 		return fmt.Errorf("hash owner password: %w", err)
-	}
-
-	// Derive username from email local part, stripping invalid characters.
-	username := ownerEmail
-	if idx := strings.Index(username, "@"); idx > 0 {
-		username = username[:idx]
-	}
-	username = sanitizeUsername.ReplaceAllString(username, "")
-	if err := auth.ValidateUsername(username); err != nil {
-		return fmt.Errorf("derived owner username %q from email is invalid: %w", username, err)
 	}
 
 	return postgres.WithTx(ctx, db, func(tx pgx.Tx) error {
