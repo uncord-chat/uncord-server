@@ -49,7 +49,7 @@ func ValidateAccessToken(tokenStr, secret, issuer string) (*AccessClaims, error)
 	}
 
 	claims := &AccessClaims{}
-	token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (any, error) {
+	_, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
@@ -57,10 +57,6 @@ func ValidateAccessToken(tokenStr, secret, issuer string) (*AccessClaims, error)
 	}, jwt.WithIssuer(issuer))
 	if err != nil {
 		return nil, err
-	}
-
-	if !token.Valid {
-		return nil, fmt.Errorf("invalid token")
 	}
 
 	return claims, nil
