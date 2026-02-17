@@ -145,7 +145,7 @@ func (h *Hub) register(client *Client) error {
 		if frame, err := NewInvalidSessionFrame(false); err == nil {
 			existing.enqueue(frame)
 		}
-		close(existing.send)
+		existing.closeSend()
 		delete(h.clients, userID)
 	}
 
@@ -167,7 +167,7 @@ func (h *Hub) unregister(client *Client) {
 	delete(h.clients, userID)
 	h.mu.Unlock()
 
-	close(client.send)
+	client.closeSend()
 
 	if client.IsIdentified() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -617,7 +617,7 @@ func (h *Hub) Shutdown() {
 		if reconnect != nil {
 			client.enqueue(reconnect)
 		}
-		close(client.send)
+		client.closeSend()
 		_ = client.conn.WriteControl(
 			websocket.CloseMessage,
 			websocket.FormatCloseMessage(websocket.CloseGoingAway, "server shutting down"),

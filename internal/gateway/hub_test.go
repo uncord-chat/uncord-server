@@ -248,6 +248,7 @@ func TestHandlePubSubEventBroadcast(t *testing.T) {
 	client := &Client{
 		hub:  hub,
 		send: make(chan []byte, 256),
+		done: make(chan struct{}),
 		log:  zerolog.Nop(),
 	}
 	client.mu.Lock()
@@ -296,7 +297,7 @@ func TestRegisterDisplacesExisting(t *testing.T) {
 
 	userID := uuid.New()
 
-	old := &Client{hub: hub, send: make(chan []byte, 256), log: zerolog.Nop()}
+	old := &Client{hub: hub, send: make(chan []byte, 256), done: make(chan struct{}), log: zerolog.Nop()}
 	old.mu.Lock()
 	old.userID = userID
 	old.sessionID = "old-session"
@@ -307,7 +308,7 @@ func TestRegisterDisplacesExisting(t *testing.T) {
 	hub.clients[userID] = old
 	hub.mu.Unlock()
 
-	newer := &Client{hub: hub, send: make(chan []byte, 256), log: zerolog.Nop()}
+	newer := &Client{hub: hub, send: make(chan []byte, 256), done: make(chan struct{}), log: zerolog.Nop()}
 	newer.mu.Lock()
 	newer.userID = userID
 	newer.sessionID = "new-session"
@@ -318,17 +319,9 @@ func TestRegisterDisplacesExisting(t *testing.T) {
 		t.Fatalf("register() error = %v", err)
 	}
 
-	// The old client's send channel should be closed (displaced).
+	// The old client's done channel should be closed (displaced).
 	select {
-	case _, ok := <-old.send:
-		// We expect to receive an InvalidSession frame and then the channel to be closed.
-		if ok {
-			// Drain the frame, then check closure.
-			_, ok = <-old.send
-		}
-		if ok {
-			t.Error("old client's send channel was not closed after displacement")
-		}
+	case <-old.done:
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for old client displacement")
 	}
@@ -352,7 +345,7 @@ func TestRegisterMaxConnections(t *testing.T) {
 
 	// Register one client.
 	uid1 := uuid.New()
-	c1 := &Client{hub: hub, send: make(chan []byte, 256), log: zerolog.Nop()}
+	c1 := &Client{hub: hub, send: make(chan []byte, 256), done: make(chan struct{}), log: zerolog.Nop()}
 	c1.mu.Lock()
 	c1.userID = uid1
 	c1.sessionID = "s1"
@@ -364,7 +357,7 @@ func TestRegisterMaxConnections(t *testing.T) {
 
 	// A second user should be rejected.
 	uid2 := uuid.New()
-	c2 := &Client{hub: hub, send: make(chan []byte, 256), log: zerolog.Nop()}
+	c2 := &Client{hub: hub, send: make(chan []byte, 256), done: make(chan struct{}), log: zerolog.Nop()}
 	c2.mu.Lock()
 	c2.userID = uid2
 	c2.sessionID = "s2"
@@ -584,6 +577,7 @@ func TestHandlePubSubEventEphemeral(t *testing.T) {
 			client := &Client{
 				hub:  hub,
 				send: make(chan []byte, 256),
+				done: make(chan struct{}),
 				log:  zerolog.Nop(),
 			}
 			client.mu.Lock()

@@ -35,6 +35,12 @@ type Client struct {
 	send chan []byte
 	log  zerolog.Logger
 
+	// done is closed to signal that the client is shutting down. The send channel is never closed directly; writePump
+	// and enqueue both select on done to detect termination, avoiding send-on-closed-channel panics that would
+	// otherwise occur when unregister races with dispatch.
+	done      chan struct{}
+	closeOnce sync.Once
+
 	// Session state, protected by mu. Fields are written during Identify/Resume and read by the Hub during dispatch.
 	mu         sync.RWMutex
 	userID     uuid.UUID
@@ -52,8 +58,15 @@ func newClient(hub *Hub, conn *websocket.Conn, logger zerolog.Logger) *Client {
 		hub:  hub,
 		conn: conn,
 		send: make(chan []byte, 256),
+		done: make(chan struct{}),
 		log:  logger,
 	}
+}
+
+// closeSend signals the client's write loop to stop. It is safe to call from multiple goroutines; only the first call
+// has any effect.
+func (c *Client) closeSend() {
+	c.closeOnce.Do(func() { close(c.done) })
 }
 
 // UserID returns the authenticated user ID. The caller must hold at least a read lock or call this after the client
@@ -150,15 +163,31 @@ func (c *Client) readPump() {
 }
 
 // writePump writes messages from the send channel to the WebSocket connection. It runs in its own goroutine and exits
-// when the send channel is closed.
+// when done is closed. Any messages remaining in the send buffer are drained before returning.
 func (c *Client) writePump() {
 	defer func() { _ = c.conn.Close() }()
 
-	for msg := range c.send {
-		_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-		if err := c.conn.WriteMessage(websocket.TextMessage, msg); err != nil {
-			c.log.Debug().Err(err).Msg("WebSocket write error")
-			return
+	for {
+		select {
+		case msg := <-c.send:
+			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+				c.log.Debug().Err(err).Msg("WebSocket write error")
+				return
+			}
+		case <-c.done:
+			// Drain any messages already buffered so the client receives them before the connection closes.
+			for {
+				select {
+				case msg := <-c.send:
+					_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+					if err := c.conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+						return
+					}
+				default:
+					return
+				}
+			}
 		}
 	}
 }
@@ -245,14 +274,22 @@ func (c *Client) handlePresenceUpdate(data json.RawMessage) {
 	c.hub.handlePresenceUpdate(c, req.Status)
 }
 
-// enqueue sends a message to the client's write channel. If the channel is full, the message is dropped and the
-// connection is closed to prevent backpressure from stalling the Hub.
+// enqueue sends a message to the client's write channel. If the client has already been shut down the message is
+// silently dropped. If the channel is full, the message is dropped and the connection is closed to prevent backpressure
+// from stalling the Hub.
 func (c *Client) enqueue(msg []byte) {
 	select {
+	case <-c.done:
+		return
+	default:
+	}
+
+	select {
 	case c.send <- msg:
+	case <-c.done:
 	default:
 		c.log.Warn().Msg("Client send buffer full, closing connection")
-		c.hub.unregister(c)
+		c.closeSend()
 		_ = c.conn.Close()
 	}
 }
