@@ -111,6 +111,9 @@ func (r *PGRepository) Create(ctx context.Context, params CreateParams, maxChann
 }
 
 // Update applies the non-nil fields in params to the channel row and returns the updated channel.
+//
+// Safety: the query is built dynamically, but every SET clause and named arg key is a hardcoded string literal. No
+// caller-supplied value enters the SQL structure; all values flow through pgx named parameter binding.
 func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdateParams) (*Channel, error) {
 	var setClauses []string
 	namedArgs := pgx.NamedArgs{"id": id}

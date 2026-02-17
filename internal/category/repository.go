@@ -102,6 +102,9 @@ func (r *PGRepository) Create(ctx context.Context, params CreateParams, maxCateg
 }
 
 // Update applies the non-nil fields in params to the category row and returns the updated category.
+//
+// Safety: the query is built dynamically, but every SET clause and named arg key is a hardcoded string literal. No
+// caller-supplied value enters the SQL structure; all values flow through pgx named parameter binding.
 func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdateParams) (*Category, error) {
 	var setClauses []string
 	namedArgs := pgx.NamedArgs{"id": id}

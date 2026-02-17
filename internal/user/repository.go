@@ -244,6 +244,9 @@ func (r *PGRepository) UpdatePasswordHash(ctx context.Context, userID uuid.UUID,
 
 // Update applies the non-nil fields in params to the user row and returns the updated user. Returns ErrNotFound if no
 // row matches the given ID.
+//
+// Safety: the query is built dynamically, but every SET clause and named arg key is a hardcoded string literal. No
+// caller-supplied value enters the SQL structure; all values flow through pgx named parameter binding.
 func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdateParams) (*User, error) {
 	var setClauses []string
 	namedArgs := pgx.NamedArgs{"id": id}

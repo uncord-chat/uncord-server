@@ -39,6 +39,9 @@ func (r *PGRepository) Get(ctx context.Context) (*Config, error) {
 }
 
 // Update applies the non-nil fields in params to the onboarding config row and returns the updated config.
+//
+// Safety: the query is built dynamically, but every SET clause and named arg key is a hardcoded string literal. No
+// caller-supplied value enters the SQL structure; all values flow through pgx named parameter binding.
 func (r *PGRepository) Update(ctx context.Context, params UpdateParams) (*Config, error) {
 	var setClauses []string
 	namedArgs := pgx.NamedArgs{}
