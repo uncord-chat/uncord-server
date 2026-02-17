@@ -137,7 +137,7 @@ CREATE TABLE messages (
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON messages
     FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
 
-CREATE INDEX idx_messages_channel_time ON messages (channel_id, created_at DESC);
+CREATE INDEX idx_messages_channel_time ON messages (channel_id, created_at DESC) WHERE deleted = false;
 CREATE INDEX idx_messages_author ON messages (author_id, created_at DESC);
 CREATE INDEX idx_messages_thread ON messages (thread_id) WHERE thread_id IS NOT NULL;
 CREATE INDEX idx_messages_reply ON messages (reply_to_id) WHERE reply_to_id IS NOT NULL;
