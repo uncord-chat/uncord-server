@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -693,6 +695,121 @@ func TestAssembleReadyWithOnboarding(t *testing.T) {
 	}
 	if !ready.Onboarding.OpenJoin {
 		t.Error("Onboarding.OpenJoin = false, want true")
+	}
+}
+
+func TestHubConcurrentRegisterUnregisterDispatch(t *testing.T) {
+	t.Parallel()
+	_, rdb := newTestRedis(t)
+	cfg := testConfig()
+	cfg.GatewayMaxConnections = 200
+	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
+
+	hub := NewHub(HubDeps{RDB: rdb, Cfg: cfg, Sessions: sessions, Logger: zerolog.Nop()})
+
+	const goroutines = 50
+
+	// Build a broadcast payload once. All goroutines use the same immutable bytes.
+	env := envelope{Type: string(events.ServerUpdate), Data: map[string]string{"name": "stress"}}
+	payload, err := json.Marshal(env)
+	if err != nil {
+		t.Fatalf("marshal envelope: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var wg sync.WaitGroup
+
+	// Spawn goroutines that each register a client, dispatch events, then unregister. Running under -race exposes
+	// data races in the hub's lock discipline and the client's done/send channel coordination.
+	for i := range goroutines {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+
+			userID := uuid.New()
+			client := &Client{
+				hub:  hub,
+				send: make(chan []byte, 256),
+				done: make(chan struct{}),
+				log:  zerolog.Nop(),
+			}
+			client.mu.Lock()
+			client.userID = userID
+			client.sessionID = fmt.Sprintf("stress-%d", n)
+			client.identified = true
+			client.mu.Unlock()
+
+			if rErr := hub.register(client); rErr != nil {
+				return
+			}
+
+			// Interleave dispatches with the register/unregister traffic from all other goroutines. Multiple
+			// iterations increase the window for race conditions between broadcast and unregister.
+			for range 5 {
+				hub.handlePubSubEvent(ctx, string(payload))
+			}
+
+			hub.unregister(client)
+		}(i)
+	}
+
+	wg.Wait()
+
+	// After all goroutines complete, the hub should be empty.
+	hub.mu.RLock()
+	remaining := len(hub.clients)
+	hub.mu.RUnlock()
+	if remaining != 0 {
+		t.Errorf("hub.clients has %d entries after full teardown, want 0", remaining)
+	}
+}
+
+func TestHubConcurrentDisplacement(t *testing.T) {
+	t.Parallel()
+	_, rdb := newTestRedis(t)
+	cfg := testConfig()
+	cfg.GatewayMaxConnections = 200
+	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
+
+	hub := NewHub(HubDeps{RDB: rdb, Cfg: cfg, Sessions: sessions, Logger: zerolog.Nop()})
+
+	// A single userID is shared by all goroutines so each register() call displaces the previous client.
+	userID := uuid.New()
+	const goroutines = 30
+
+	var wg sync.WaitGroup
+	for i := range goroutines {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+
+			client := &Client{
+				hub:  hub,
+				send: make(chan []byte, 256),
+				done: make(chan struct{}),
+				log:  zerolog.Nop(),
+			}
+			client.mu.Lock()
+			client.userID = userID
+			client.sessionID = fmt.Sprintf("displace-%d", n)
+			client.identified = true
+			client.mu.Unlock()
+
+			// Ignore ErrMaxConnections; the test validates lock safety, not capacity.
+			_ = hub.register(client)
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Exactly one client should remain for the shared userID.
+	hub.mu.RLock()
+	remaining := len(hub.clients)
+	hub.mu.RUnlock()
+	if remaining != 1 {
+		t.Errorf("hub.clients has %d entries after displacement, want 1", remaining)
 	}
 }
 
