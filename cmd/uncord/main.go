@@ -307,7 +307,22 @@ func run() error {
 
 	// Initialise gateway WebSocket hub and start the pub/sub subscriber with reconnection.
 	sessionStore := gateway.NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
-	gatewayHub := gateway.NewHub(rdb, cfg, sessionStore, permResolver, userRepo, serverRepo, channelRepo, roleRepo, memberRepo, presenceStore, gatewayPub, onboardingRepo, documentStore, log.Logger)
+	gatewayHub := gateway.NewHub(gateway.HubDeps{
+		RDB:            rdb,
+		Cfg:            cfg,
+		Sessions:       sessionStore,
+		Resolver:       permResolver,
+		Users:          userRepo,
+		Server:         serverRepo,
+		Channels:       channelRepo,
+		Roles:          roleRepo,
+		Members:        memberRepo,
+		Presence:       presenceStore,
+		Publisher:      gatewayPub,
+		OnboardingRepo: onboardingRepo,
+		DocumentStore:  documentStore,
+		Logger:         log.Logger,
+	})
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

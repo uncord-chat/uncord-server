@@ -28,6 +28,24 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/user"
 )
 
+// HubDeps holds the dependencies required to construct a Hub.
+type HubDeps struct {
+	RDB            *redis.Client
+	Cfg            *config.Config
+	Sessions       *SessionStore
+	Resolver       *permission.Resolver
+	Users          user.Repository
+	Server         servercfg.Repository
+	Channels       channel.Repository
+	Roles          role.Repository
+	Members        member.Repository
+	Presence       *presence.Store
+	Publisher      *Publisher
+	OnboardingRepo onboarding.Repository
+	DocumentStore  *onboarding.DocumentStore
+	Logger         zerolog.Logger
+}
+
 // Hub is the central WebSocket connection registry and event distributor. It manages client connections, subscribes to
 // gateway events via Valkey pub/sub, and dispatches events to connected clients with permission filtering.
 type Hub struct {
@@ -50,38 +68,23 @@ type Hub struct {
 }
 
 // NewHub creates a new gateway hub.
-func NewHub(
-	rdb *redis.Client,
-	cfg *config.Config,
-	sessions *SessionStore,
-	resolver *permission.Resolver,
-	users user.Repository,
-	server servercfg.Repository,
-	channels channel.Repository,
-	roles role.Repository,
-	members member.Repository,
-	presenceStore *presence.Store,
-	publisher *Publisher,
-	onboardingRepo onboarding.Repository,
-	documentStore *onboarding.DocumentStore,
-	logger zerolog.Logger,
-) *Hub {
+func NewHub(d HubDeps) *Hub {
 	return &Hub{
 		clients:        make(map[uuid.UUID]*Client),
-		rdb:            rdb,
-		cfg:            cfg,
-		sessions:       sessions,
-		resolver:       resolver,
-		users:          users,
-		server:         server,
-		channels:       channels,
-		roles:          roles,
-		members:        members,
-		presence:       presenceStore,
-		publisher:      publisher,
-		onboardingRepo: onboardingRepo,
-		documentStore:  documentStore,
-		log:            logger.With().Str("component", "gateway").Logger(),
+		rdb:            d.RDB,
+		cfg:            d.Cfg,
+		sessions:       d.Sessions,
+		resolver:       d.Resolver,
+		users:          d.Users,
+		server:         d.Server,
+		channels:       d.Channels,
+		roles:          d.Roles,
+		members:        d.Members,
+		presence:       d.Presence,
+		publisher:      d.Publisher,
+		onboardingRepo: d.OnboardingRepo,
+		documentStore:  d.DocumentStore,
+		log:            d.Logger.With().Str("component", "gateway").Logger(),
 	}
 }
 

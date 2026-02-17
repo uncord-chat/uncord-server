@@ -187,28 +187,31 @@ func TestAssembleReady(t *testing.T) {
 	cfg := testConfig()
 	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 
-	hub := NewHub(rdb, cfg, sessions, nil,
-		&fakeUserRepo{user: &user.User{
+	hub := NewHub(HubDeps{
+		RDB:      rdb,
+		Cfg:      cfg,
+		Sessions: sessions,
+		Users: &fakeUserRepo{user: &user.User{
 			ID:       userID,
 			Email:    "test@example.com",
 			Username: "testuser",
 		}},
-		&fakeServerRepo{cfg: &servercfg.Config{
+		Server: &fakeServerRepo{cfg: &servercfg.Config{
 			ID:      serverID,
 			Name:    "Test Server",
 			OwnerID: userID,
 		}},
-		&fakeChannelRepo{channels: []channel.Channel{
+		Channels: &fakeChannelRepo{channels: []channel.Channel{
 			{ID: channelID, Name: "general", Type: "text"},
 		}},
-		&fakeRoleRepo{roles: []role.Role{
+		Roles: &fakeRoleRepo{roles: []role.Role{
 			{ID: roleID, Name: "everyone", IsEveryone: true},
 		}},
-		&fakeMemberRepo{members: []member.MemberWithProfile{
+		Members: &fakeMemberRepo{members: []member.MemberWithProfile{
 			{UserID: userID, Username: "testuser", Status: "active", RoleIDs: []uuid.UUID{roleID}},
 		}},
-		nil, nil, nil, nil, zerolog.Nop(),
-	)
+		Logger: zerolog.Nop(),
+	})
 
 	ctx := context.Background()
 	ready, err := hub.assembleReady(ctx, userID)
@@ -242,7 +245,7 @@ func TestHandlePubSubEventBroadcast(t *testing.T) {
 	cfg := testConfig()
 	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 
-	hub := NewHub(rdb, cfg, sessions, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, zerolog.Nop())
+	hub := NewHub(HubDeps{RDB: rdb, Cfg: cfg, Sessions: sessions, Logger: zerolog.Nop()})
 
 	userID := uuid.New()
 	client := &Client{
@@ -293,7 +296,7 @@ func TestRegisterDisplacesExisting(t *testing.T) {
 	cfg := testConfig()
 	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 
-	hub := NewHub(rdb, cfg, sessions, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, zerolog.Nop())
+	hub := NewHub(HubDeps{RDB: rdb, Cfg: cfg, Sessions: sessions, Logger: zerolog.Nop()})
 
 	userID := uuid.New()
 
@@ -341,7 +344,7 @@ func TestRegisterMaxConnections(t *testing.T) {
 	cfg.GatewayMaxConnections = 1
 	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 
-	hub := NewHub(rdb, cfg, sessions, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, zerolog.Nop())
+	hub := NewHub(HubDeps{RDB: rdb, Cfg: cfg, Sessions: sessions, Logger: zerolog.Nop()})
 
 	// Register one client.
 	uid1 := uuid.New()
@@ -530,16 +533,20 @@ func TestAssembleReadyWithPresences(t *testing.T) {
 		t.Fatalf("presence.Set() error = %v", err)
 	}
 
-	hub := NewHub(rdb, cfg, sessions, nil,
-		&fakeUserRepo{user: &user.User{ID: userID, Email: "a@b.com", Username: "a"}},
-		&fakeServerRepo{cfg: &servercfg.Config{ID: uuid.New(), Name: "S", OwnerID: userID}},
-		&fakeChannelRepo{},
-		&fakeRoleRepo{},
-		&fakeMemberRepo{members: []member.MemberWithProfile{
+	hub := NewHub(HubDeps{
+		RDB:      rdb,
+		Cfg:      cfg,
+		Sessions: sessions,
+		Users:    &fakeUserRepo{user: &user.User{ID: userID, Email: "a@b.com", Username: "a"}},
+		Server:   &fakeServerRepo{cfg: &servercfg.Config{ID: uuid.New(), Name: "S", OwnerID: userID}},
+		Channels: &fakeChannelRepo{},
+		Roles:    &fakeRoleRepo{},
+		Members: &fakeMemberRepo{members: []member.MemberWithProfile{
 			{UserID: userID, Username: "a", Status: "active"},
 		}},
-		presenceStore, nil, nil, nil, zerolog.Nop(),
-	)
+		Presence: presenceStore,
+		Logger:   zerolog.Nop(),
+	})
 
 	ready, err := hub.assembleReady(ctx, userID)
 	if err != nil {
@@ -571,7 +578,7 @@ func TestHandlePubSubEventEphemeral(t *testing.T) {
 			cfg := testConfig()
 			sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 
-			hub := NewHub(rdb, cfg, sessions, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, zerolog.Nop())
+			hub := NewHub(HubDeps{RDB: rdb, Cfg: cfg, Sessions: sessions, Logger: zerolog.Nop()})
 
 			userID := uuid.New()
 			client := &Client{
@@ -657,19 +664,21 @@ func TestAssembleReadyWithOnboarding(t *testing.T) {
 		OpenJoin:                 true,
 	}
 
-	hub := NewHub(rdb, cfg, sessions, nil,
-		&fakeUserRepo{user: &user.User{ID: userID, Email: "a@b.com", Username: "a"}},
-		&fakeServerRepo{cfg: &servercfg.Config{ID: uuid.New(), Name: "S", OwnerID: userID}},
-		&fakeChannelRepo{},
-		&fakeRoleRepo{},
-		&fakeMemberRepo{members: []member.MemberWithProfile{
+	hub := NewHub(HubDeps{
+		RDB:      rdb,
+		Cfg:      cfg,
+		Sessions: sessions,
+		Users:    &fakeUserRepo{user: &user.User{ID: userID, Email: "a@b.com", Username: "a"}},
+		Server:   &fakeServerRepo{cfg: &servercfg.Config{ID: uuid.New(), Name: "S", OwnerID: userID}},
+		Channels: &fakeChannelRepo{},
+		Roles:    &fakeRoleRepo{},
+		Members: &fakeMemberRepo{members: []member.MemberWithProfile{
 			{UserID: userID, Username: "a", Status: "active"},
 		}},
-		nil, nil,
-		&fakeOnboardingRepo{cfg: onboardingCfg},
-		onboarding.EmptyDocumentStore(),
-		zerolog.Nop(),
-	)
+		OnboardingRepo: &fakeOnboardingRepo{cfg: onboardingCfg},
+		DocumentStore:  onboarding.EmptyDocumentStore(),
+		Logger:         zerolog.Nop(),
+	})
 
 	ctx := context.Background()
 	ready, err := hub.assembleReady(ctx, userID)
@@ -695,16 +704,19 @@ func TestAssembleReadyNilOnboardingDeps(t *testing.T) {
 	cfg := testConfig()
 	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 
-	hub := NewHub(rdb, cfg, sessions, nil,
-		&fakeUserRepo{user: &user.User{ID: userID, Email: "a@b.com", Username: "a"}},
-		&fakeServerRepo{cfg: &servercfg.Config{ID: uuid.New(), Name: "S", OwnerID: userID}},
-		&fakeChannelRepo{},
-		&fakeRoleRepo{},
-		&fakeMemberRepo{members: []member.MemberWithProfile{
+	hub := NewHub(HubDeps{
+		RDB:      rdb,
+		Cfg:      cfg,
+		Sessions: sessions,
+		Users:    &fakeUserRepo{user: &user.User{ID: userID, Email: "a@b.com", Username: "a"}},
+		Server:   &fakeServerRepo{cfg: &servercfg.Config{ID: uuid.New(), Name: "S", OwnerID: userID}},
+		Channels: &fakeChannelRepo{},
+		Roles:    &fakeRoleRepo{},
+		Members: &fakeMemberRepo{members: []member.MemberWithProfile{
 			{UserID: userID, Username: "a", Status: "active"},
 		}},
-		nil, nil, nil, nil, zerolog.Nop(),
-	)
+		Logger: zerolog.Nop(),
+	})
 
 	ctx := context.Background()
 	ready, err := hub.assembleReady(ctx, userID)
