@@ -232,6 +232,12 @@ func (f *fakeUserLookup) DeleteWithTombstones(context.Context, uuid.UUID, []user
 func (f *fakeUserLookup) CheckTombstone(context.Context, user.TombstoneType, string) (bool, error) {
 	panic("not implemented")
 }
+func (f *fakeUserLookup) PurgeLoginAttempts(context.Context, time.Time) (int64, error) {
+	panic("not implemented")
+}
+func (f *fakeUserLookup) PurgeTombstones(context.Context, time.Time) (int64, error) {
+	panic("not implemented")
+}
 
 func TestRequireVerifiedEmail(t *testing.T) {
 	t.Parallel()

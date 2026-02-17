@@ -162,6 +162,12 @@ func (r *fakeRepo) DeleteWithTombstones(context.Context, uuid.UUID, []user.Tombs
 func (r *fakeRepo) CheckTombstone(context.Context, user.TombstoneType, string) (bool, error) {
 	return false, nil
 }
+func (r *fakeRepo) PurgeLoginAttempts(context.Context, time.Time) (int64, error) {
+	return 0, nil
+}
+func (r *fakeRepo) PurgeTombstones(context.Context, time.Time) (int64, error) {
+	return 0, nil
+}
 
 func testAuthConfig() *config.Config {
 	return &config.Config{

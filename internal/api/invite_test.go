@@ -180,6 +180,12 @@ func (r *fakeInviteUserRepo) DeleteWithTombstones(context.Context, uuid.UUID, []
 func (r *fakeInviteUserRepo) CheckTombstone(context.Context, user.TombstoneType, string) (bool, error) {
 	return false, nil
 }
+func (r *fakeInviteUserRepo) PurgeLoginAttempts(context.Context, time.Time) (int64, error) {
+	return 0, nil
+}
+func (r *fakeInviteUserRepo) PurgeTombstones(context.Context, time.Time) (int64, error) {
+	return 0, nil
+}
 
 // fakeInviteMemberRepo implements member.Repository for invite handler tests.
 type fakeInviteMemberRepo struct {

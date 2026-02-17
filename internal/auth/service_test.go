@@ -232,6 +232,14 @@ func (r *fakeRepository) CheckTombstone(_ context.Context, identifierType user.T
 	return r.tombstones[string(identifierType)+":"+hmacHash], nil
 }
 
+func (r *fakeRepository) PurgeLoginAttempts(context.Context, time.Time) (int64, error) {
+	return 0, nil
+}
+
+func (r *fakeRepository) PurgeTombstones(context.Context, time.Time) (int64, error) {
+	return 0, nil
+}
+
 // fakeServerRepo implements server.Repository for unit tests.
 type fakeServerRepo struct {
 	ownerID uuid.UUID

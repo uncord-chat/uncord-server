@@ -66,6 +66,12 @@ func (r *fakeUserRepo) DeleteWithTombstones(context.Context, uuid.UUID, []user.T
 func (r *fakeUserRepo) CheckTombstone(context.Context, user.TombstoneType, string) (bool, error) {
 	return false, nil
 }
+func (r *fakeUserRepo) PurgeLoginAttempts(context.Context, time.Time) (int64, error) {
+	return 0, nil
+}
+func (r *fakeUserRepo) PurgeTombstones(context.Context, time.Time) (int64, error) {
+	return 0, nil
+}
 
 // fakeServerRepo implements servercfg.Repository for testing.
 type fakeServerRepo struct {
