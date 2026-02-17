@@ -79,6 +79,7 @@ type Config struct {
 	GatewaySessionTTL          time.Duration // How long a disconnected session remains resumable. Default: 300s.
 	GatewayReplayBufferSize    int           // Maximum number of events retained for session replay. Default: 1000.
 	GatewayMaxConnections      int           // Maximum concurrent WebSocket connections. Default: 10000.
+	GatewayReadyMemberLimit    int           // Maximum number of members included in the READY payload. Default: 1000.
 
 	// Rate Limiting
 	RateLimitAPIRequests            int
@@ -195,6 +196,7 @@ func Load() (*Config, error) {
 		GatewaySessionTTL:          time.Duration(p.int("GATEWAY_SESSION_TTL_SECONDS", 300)) * time.Second,
 		GatewayReplayBufferSize:    p.int("GATEWAY_REPLAY_BUFFER_SIZE", 1000),
 		GatewayMaxConnections:      p.int("GATEWAY_MAX_CONNECTIONS", 10000),
+		GatewayReadyMemberLimit:    p.int("GATEWAY_READY_MEMBER_LIMIT", 1000),
 
 		RateLimitAPIRequests:            p.int("RATE_LIMIT_API_REQUESTS", 60),
 		RateLimitAPIWindowSeconds:       p.int("RATE_LIMIT_API_WINDOW_SECONDS", 60),
@@ -417,6 +419,9 @@ func (c *Config) validate() error {
 	}
 	if c.GatewayMaxConnections < 1 {
 		errs = append(errs, fmt.Errorf("GATEWAY_MAX_CONNECTIONS must be at least 1"))
+	}
+	if c.GatewayReadyMemberLimit < 1 {
+		errs = append(errs, fmt.Errorf("GATEWAY_READY_MEMBER_LIMIT must be at least 1"))
 	}
 
 	if c.MFAEncryptionKey != "" {

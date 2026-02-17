@@ -555,7 +555,7 @@ func (h *Hub) assembleReady(ctx context.Context, userID uuid.UUID) (*models.Read
 		return nil, fmt.Errorf("list roles: %w", err)
 	}
 
-	ms, err := h.members.List(ctx, nil, 1000)
+	ms, err := h.members.List(ctx, nil, h.cfg.GatewayReadyMemberLimit)
 	if err != nil {
 		return nil, fmt.Errorf("list members: %w", err)
 	}
