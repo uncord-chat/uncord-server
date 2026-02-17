@@ -392,7 +392,10 @@ func (s *Service) VerifyMFA(ctx context.Context, ticket, code string) (*AuthResu
 
 	// The code did not match TOTP; try recovery codes.
 	if err := s.tryRecoveryCode(ctx, userID, code); err != nil {
-		return nil, ErrInvalidMFACode
+		if errors.Is(err, ErrInvalidMFACode) {
+			return nil, ErrInvalidMFACode
+		}
+		return nil, fmt.Errorf("try recovery code during login: %w", err)
 	}
 
 	return s.completeMFALogin(ctx, creds)
@@ -538,7 +541,10 @@ func (s *Service) DisableMFA(ctx context.Context, userID uuid.UUID, password, co
 	if !totp.Validate(code, secret) {
 		// The code did not match TOTP; try recovery codes.
 		if err := s.tryRecoveryCode(ctx, userID, code); err != nil {
-			return ErrInvalidMFACode
+			if errors.Is(err, ErrInvalidMFACode) {
+				return ErrInvalidMFACode
+			}
+			return fmt.Errorf("try recovery code during MFA disable: %w", err)
 		}
 	}
 
