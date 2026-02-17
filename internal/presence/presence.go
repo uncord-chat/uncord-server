@@ -5,6 +5,7 @@ package presence
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -56,7 +57,7 @@ func (s *Store) Set(ctx context.Context, userID uuid.UUID, status string) error 
 // Get returns the user's current presence status. If the key does not exist the user is considered offline.
 func (s *Store) Get(ctx context.Context, userID uuid.UUID) (string, error) {
 	val, err := s.rdb.Get(ctx, presenceKey(userID)).Result()
-	if err == redis.Nil {
+	if errors.Is(err, redis.Nil) {
 		return StatusOffline, nil
 	}
 	if err != nil {

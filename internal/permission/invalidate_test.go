@@ -3,6 +3,7 @@ package permission
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -329,7 +330,7 @@ func TestSubscriberRunContextCancel(t *testing.T) {
 
 	select {
 	case err := <-done:
-		if err != nil && err != context.Canceled {
+		if err != nil && !errors.Is(err, context.Canceled) {
 			t.Errorf("Run() error = %v, want nil or context.Canceled", err)
 		}
 	case <-time.After(2 * time.Second):

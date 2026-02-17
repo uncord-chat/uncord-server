@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -50,7 +51,7 @@ func TestSessionLoadNotFound(t *testing.T) {
 	store := NewSessionStore(rdb, 5*time.Minute, 100)
 
 	_, err := store.Load(context.Background(), "nonexistent")
-	if err != ErrSessionNotFound {
+	if !errors.Is(err, ErrSessionNotFound) {
 		t.Errorf("Load() error = %v, want ErrSessionNotFound", err)
 	}
 }
@@ -69,7 +70,7 @@ func TestSessionLoadExpired(t *testing.T) {
 	mr.FastForward(6 * time.Minute)
 
 	_, err := store.Load(ctx, sid)
-	if err != ErrSessionNotFound {
+	if !errors.Is(err, ErrSessionNotFound) {
 		t.Errorf("Load() after expiry error = %v, want ErrSessionNotFound", err)
 	}
 }
@@ -89,7 +90,7 @@ func TestSessionDelete(t *testing.T) {
 	}
 
 	_, err := store.Load(ctx, sid)
-	if err != ErrSessionNotFound {
+	if !errors.Is(err, ErrSessionNotFound) {
 		t.Errorf("Load() after delete error = %v, want ErrSessionNotFound", err)
 	}
 }

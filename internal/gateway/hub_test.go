@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -369,7 +370,7 @@ func TestRegisterMaxConnections(t *testing.T) {
 	c2.sessionID = "s2"
 	c2.identified = true
 	c2.mu.Unlock()
-	if err := hub.register(c2); err != ErrMaxConnections {
+	if err := hub.register(c2); !errors.Is(err, ErrMaxConnections) {
 		t.Errorf("register(c2) error = %v, want ErrMaxConnections", err)
 	}
 }

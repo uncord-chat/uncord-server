@@ -76,7 +76,7 @@ func LoadDocuments(dir string) (*DocumentStore, error) {
 
 	var mf manifestFile
 	if err := json.Unmarshal(data, &mf); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrManifestInvalid, err)
+		return nil, fmt.Errorf("%w: %w", ErrManifestInvalid, err)
 	}
 
 	policy := bluemonday.UGCPolicy()

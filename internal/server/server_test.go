@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -28,7 +29,7 @@ func TestValidateName(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidateName(%v) error = %v, wantErr %v", tt.input, err, tt.wantErr)
 			}
-			if err != nil && tt.wantErr && err != ErrNameLength {
+			if err != nil && tt.wantErr && !errors.Is(err, ErrNameLength) {
 				t.Errorf("ValidateName(%v) error = %v, want ErrNameLength", tt.input, err)
 			}
 		})
@@ -67,7 +68,7 @@ func TestValidateDescription(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidateDescription(%v) error = %v, wantErr %v", tt.input, err, tt.wantErr)
 			}
-			if err != nil && tt.wantErr && err != ErrDescriptionLength {
+			if err != nil && tt.wantErr && !errors.Is(err, ErrDescriptionLength) {
 				t.Errorf("ValidateDescription(%v) error = %v, want ErrDescriptionLength", tt.input, err)
 			}
 		})

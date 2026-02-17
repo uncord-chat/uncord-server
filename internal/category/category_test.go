@@ -1,6 +1,7 @@
 package category
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -28,7 +29,7 @@ func TestValidateName(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidateName(%v) error = %v, wantErr %v", tt.input, err, tt.wantErr)
 			}
-			if err != nil && tt.wantErr && err != ErrNameLength {
+			if err != nil && tt.wantErr && !errors.Is(err, ErrNameLength) {
 				t.Errorf("ValidateName(%v) error = %v, want ErrNameLength", tt.input, err)
 			}
 		})
@@ -98,7 +99,7 @@ func TestValidatePosition(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidatePosition(%v) error = %v, wantErr %v", tt.input, err, tt.wantErr)
 			}
-			if err != nil && tt.wantErr && err != ErrInvalidPosition {
+			if err != nil && tt.wantErr && !errors.Is(err, ErrInvalidPosition) {
 				t.Errorf("ValidatePosition(%v) error = %v, want ErrInvalidPosition", tt.input, err)
 			}
 		})

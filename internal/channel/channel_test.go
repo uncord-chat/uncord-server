@@ -1,6 +1,7 @@
 package channel
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -28,7 +29,7 @@ func TestValidateName(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidateName(%v) error = %v, wantErr %v", tt.input, err, tt.wantErr)
 			}
-			if err != nil && tt.wantErr && err != ErrNameLength {
+			if err != nil && tt.wantErr && !errors.Is(err, ErrNameLength) {
 				t.Errorf("ValidateName(%v) error = %v, want ErrNameLength", tt.input, err)
 			}
 		})
@@ -101,7 +102,7 @@ func TestValidateType(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidateType(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
 			}
-			if err != nil && tt.wantErr && err != ErrInvalidType {
+			if err != nil && tt.wantErr && !errors.Is(err, ErrInvalidType) {
 				t.Errorf("ValidateType(%q) error = %v, want ErrInvalidType", tt.input, err)
 			}
 		})
@@ -129,7 +130,7 @@ func TestValidateTopic(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidateTopic(%v) error = %v, wantErr %v", tt.input, err, tt.wantErr)
 			}
-			if err != nil && tt.wantErr && err != ErrTopicLength {
+			if err != nil && tt.wantErr && !errors.Is(err, ErrTopicLength) {
 				t.Errorf("ValidateTopic(%v) error = %v, want ErrTopicLength", tt.input, err)
 			}
 		})
@@ -158,7 +159,7 @@ func TestValidateSlowmode(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidateSlowmode(%v) error = %v, wantErr %v", tt.input, err, tt.wantErr)
 			}
-			if err != nil && tt.wantErr && err != ErrInvalidSlowmode {
+			if err != nil && tt.wantErr && !errors.Is(err, ErrInvalidSlowmode) {
 				t.Errorf("ValidateSlowmode(%v) error = %v, want ErrInvalidSlowmode", tt.input, err)
 			}
 		})
@@ -186,7 +187,7 @@ func TestValidatePosition(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidatePosition(%v) error = %v, wantErr %v", tt.input, err, tt.wantErr)
 			}
-			if err != nil && tt.wantErr && err != ErrInvalidPosition {
+			if err != nil && tt.wantErr && !errors.Is(err, ErrInvalidPosition) {
 				t.Errorf("ValidatePosition(%v) error = %v, want ErrInvalidPosition", tt.input, err)
 			}
 		})

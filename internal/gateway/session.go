@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -67,7 +68,7 @@ type LoadedSession struct {
 func (s *SessionStore) Load(ctx context.Context, sessionID string) (*LoadedSession, error) {
 	raw, err := s.rdb.Get(ctx, sessionKey(sessionID)).Bytes()
 	if err != nil {
-		if err == redis.Nil {
+		if errors.Is(err, redis.Nil) {
 			return nil, ErrSessionNotFound
 		}
 		return nil, fmt.Errorf("load session: %w", err)
