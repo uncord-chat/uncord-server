@@ -82,6 +82,13 @@ type messageDoc struct {
 	CreatedAt int64  `json:"created_at"`
 }
 
+// messageDocUpdate is the subset of messageDoc fields sent during a content update. Kept as a named type so it stays
+// visually coupled to messageDoc and is easy to extend if new updatable fields are added.
+type messageDocUpdate struct {
+	ID      string `json:"id"`
+	Content string `json:"content"`
+}
+
 // IndexMessage adds a message document to the Typesense messages collection.
 func (idx *Indexer) IndexMessage(ctx context.Context, id, content, authorID, channelID string, createdAt int64) error {
 	doc := messageDoc{
@@ -121,10 +128,7 @@ func (idx *Indexer) IndexMessage(ctx context.Context, id, content, authorID, cha
 
 // UpdateMessage upserts a message document in the Typesense messages collection, updating its content.
 func (idx *Indexer) UpdateMessage(ctx context.Context, id, content string) error {
-	doc := struct {
-		ID      string `json:"id"`
-		Content string `json:"content"`
-	}{ID: id, Content: content}
+	doc := messageDocUpdate{ID: id, Content: content}
 
 	body, err := json.Marshal(doc)
 	if err != nil {
