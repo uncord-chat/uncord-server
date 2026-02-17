@@ -6,19 +6,19 @@
   </picture>
 </p>
 
-The Go server for the [Uncord](https://github.com/uncord-chat) project, deployed as a single binary behind Docker Compose. Handles the REST API, WebSocket gateway, permission engine, media processing, and plugin system.
+The Go server for the [Uncord](https://github.com/uncord-chat) project, deployed as a single binary behind Docker Compose. Handles the REST API, WebSocket gateway, permission engine, and media processing.
 
 ### Tech stack
 
 | Component | Technology |
 |-----------|------------|
-| Language | Go |
+| Language | Go 1.26 |
 | HTTP Framework | Fiber v3 |
 | WebSocket | Fiber contrib/websocket (fasthttp/websocket) |
 | Database | PostgreSQL 18 |
 | Cache / Pub-Sub | Valkey 9 |
-| Search | Typesense |
-| Voice/Video | Pion (WebRTC SFU) |
+| Search | Typesense 30 |
+| Voice/Video | Pion WebRTC SFU (planned) |
 
 ### Quick start
 
@@ -50,14 +50,32 @@ Docker Compose includes [Mailpit](https://mailpit.axigen.com/), a local SMTP ser
 ```
 cmd/uncord/             Entry point
 internal/
-  api/                  HTTP handlers and response helpers
-  bootstrap/            First-run initialization
-  config/               Environment configuration
-  domain/               Core entities and interfaces
-  permission/           Permission engine
-  postgres/             Database pool, migrations
-  typesense/            Search integration
-  valkey/               Cache and pub-sub
+  api/                  HTTP handlers
+  attachment/           File attachment storage and metadata
+  auth/                 JWT, Argon2id hashing, refresh tokens, MFA
+  bootstrap/            First-run database seeding
+  category/             Channel category CRUD
+  channel/              Channel CRUD
+  config/               Environment variable loading and validation
+  disposable/           Disposable email domain blocklist
+  email/                SMTP client for transactional email
+  gateway/              WebSocket hub, pub/sub fan-out, sessions
+  httputil/             Shared JSON response helpers
+  invite/               Invite code creation and redemption
+  media/                Storage providers and thumbnail generation
+  member/               Server membership, bans, timeouts
+  message/              Message CRUD and history
+  onboarding/           New member onboarding flow
+  page/                 Browser-facing HTML pages
+  permission/           4-step permission resolver with caching
+  postgres/             Connection pool, embedded migrations
+  presence/             Online/typing presence tracking
+  role/                 Role CRUD and assignment
+  search/               Typesense message search
+  server/               Server configuration CRUD
+  typesense/            Search collection management
+  user/                 User CRUD and account deletion
+  valkey/               Valkey/Redis connection
 ```
 
 ### Related repositories
