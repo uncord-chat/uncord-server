@@ -51,8 +51,10 @@ func (f *fakeStatusRepo) ClearTimeout(context.Context, uuid.UUID) (*MemberWithPr
 func (f *fakeStatusRepo) Ban(context.Context, uuid.UUID, uuid.UUID, *string, *time.Time) error {
 	panic("not implemented")
 }
-func (f *fakeStatusRepo) Unban(context.Context, uuid.UUID) error            { panic("not implemented") }
-func (f *fakeStatusRepo) ListBans(context.Context) ([]BanRecord, error)     { panic("not implemented") }
+func (f *fakeStatusRepo) Unban(context.Context, uuid.UUID) error { panic("not implemented") }
+func (f *fakeStatusRepo) ListBans(context.Context, *uuid.UUID, int) ([]BanRecord, error) {
+	panic("not implemented")
+}
 func (f *fakeStatusRepo) IsBanned(context.Context, uuid.UUID) (bool, error) { panic("not implemented") }
 func (f *fakeStatusRepo) AssignRole(context.Context, uuid.UUID, uuid.UUID) error {
 	panic("not implemented")

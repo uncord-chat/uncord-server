@@ -387,7 +387,19 @@ func (h *MemberHandler) UnbanMember(c fiber.Ctx) error {
 
 // ListBans handles GET /api/v1/server/bans.
 func (h *MemberHandler) ListBans(c fiber.Ctx) error {
-	bans, err := h.members.ListBans(c)
+	var after *uuid.UUID
+	if raw := c.Query("after"); raw != "" {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid after parameter")
+		}
+		after = &id
+	}
+
+	rawLimit, _ := strconv.Atoi(c.Query("limit"))
+	limit := member.ClampLimit(rawLimit)
+
+	bans, err := h.members.ListBans(c, after, limit)
 	if err != nil {
 		h.log.Error().Err(err).Str("handler", "member").Msg("list bans failed")
 		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")

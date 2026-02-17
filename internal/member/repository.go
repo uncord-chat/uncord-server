@@ -198,14 +198,31 @@ func (r *PGRepository) Unban(ctx context.Context, userID uuid.UUID) error {
 	return nil
 }
 
-// ListBans returns all ban records joined with the banned user's public profile, ordered by creation time descending.
-func (r *PGRepository) ListBans(ctx context.Context) ([]BanRecord, error) {
-	rows, err := r.db.Query(ctx,
-		`SELECT b.user_id, u.username, u.display_name, u.avatar_key,
-		        b.reason, b.banned_by, b.expires_at, b.created_at
-		 FROM bans b
-		 JOIN users u ON u.id = b.user_id
-		 ORDER BY b.created_at DESC`)
+// ListBans returns ban records joined with the banned user's public profile, ordered by creation time descending with
+// keyset pagination. The cursor is the user_id from the last item on the previous page.
+func (r *PGRepository) ListBans(ctx context.Context, after *uuid.UUID, limit int) ([]BanRecord, error) {
+	var (
+		rows pgx.Rows
+		err  error
+	)
+	if after == nil {
+		rows, err = r.db.Query(ctx,
+			`SELECT b.user_id, u.username, u.display_name, u.avatar_key,
+			        b.reason, b.banned_by, b.expires_at, b.created_at
+			 FROM bans b
+			 JOIN users u ON u.id = b.user_id
+			 ORDER BY b.created_at DESC, b.user_id
+			 LIMIT $1`, limit)
+	} else {
+		rows, err = r.db.Query(ctx,
+			`SELECT b.user_id, u.username, u.display_name, u.avatar_key,
+			        b.reason, b.banned_by, b.expires_at, b.created_at
+			 FROM bans b
+			 JOIN users u ON u.id = b.user_id
+			 WHERE (b.created_at, b.user_id) < (SELECT b2.created_at, b2.user_id FROM bans b2 WHERE b2.user_id = $1)
+			 ORDER BY b.created_at DESC, b.user_id
+			 LIMIT $2`, *after, limit)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("query bans: %w", err)
 	}

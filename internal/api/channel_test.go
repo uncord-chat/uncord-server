@@ -231,7 +231,7 @@ func (r *fakeChannelMemberRepo) Ban(context.Context, uuid.UUID, uuid.UUID, *stri
 	return nil
 }
 func (r *fakeChannelMemberRepo) Unban(context.Context, uuid.UUID) error { return nil }
-func (r *fakeChannelMemberRepo) ListBans(context.Context) ([]member.BanRecord, error) {
+func (r *fakeChannelMemberRepo) ListBans(context.Context, *uuid.UUID, int) ([]member.BanRecord, error) {
 	return nil, nil
 }
 func (r *fakeChannelMemberRepo) IsBanned(context.Context, uuid.UUID) (bool, error)      { return false, nil }

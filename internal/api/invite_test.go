@@ -255,8 +255,10 @@ func (r *fakeInviteMemberRepo) ClearTimeout(context.Context, uuid.UUID) (*member
 func (r *fakeInviteMemberRepo) Ban(context.Context, uuid.UUID, uuid.UUID, *string, *time.Time) error {
 	return nil
 }
-func (r *fakeInviteMemberRepo) Unban(context.Context, uuid.UUID) error                 { return nil }
-func (r *fakeInviteMemberRepo) ListBans(context.Context) ([]member.BanRecord, error)   { return nil, nil }
+func (r *fakeInviteMemberRepo) Unban(context.Context, uuid.UUID) error { return nil }
+func (r *fakeInviteMemberRepo) ListBans(context.Context, *uuid.UUID, int) ([]member.BanRecord, error) {
+	return nil, nil
+}
 func (r *fakeInviteMemberRepo) AssignRole(context.Context, uuid.UUID, uuid.UUID) error { return nil }
 func (r *fakeInviteMemberRepo) RemoveRole(context.Context, uuid.UUID, uuid.UUID) error { return nil }
 

@@ -133,8 +133,24 @@ func (r *fakeMemberRepo) Unban(_ context.Context, userID uuid.UUID) error {
 	return member.ErrBanNotFound
 }
 
-func (r *fakeMemberRepo) ListBans(_ context.Context) ([]member.BanRecord, error) {
-	return r.bans, nil
+func (r *fakeMemberRepo) ListBans(_ context.Context, after *uuid.UUID, limit int) ([]member.BanRecord, error) {
+	start := 0
+	if after != nil {
+		for i, b := range r.bans {
+			if b.UserID == *after {
+				start = i + 1
+				break
+			}
+		}
+	}
+	if start >= len(r.bans) {
+		return nil, nil
+	}
+	end := start + limit
+	if end > len(r.bans) {
+		end = len(r.bans)
+	}
+	return r.bans[start:end], nil
 }
 
 func (r *fakeMemberRepo) IsBanned(_ context.Context, userID uuid.UUID) (bool, error) {
@@ -1052,6 +1068,75 @@ func TestListBans_Success(t *testing.T) {
 	}
 	if bans[0].User.Username != "banned_user" {
 		t.Errorf("username = %q, want %q", bans[0].User.Username, "banned_user")
+	}
+}
+
+func TestListBans_Pagination(t *testing.T) {
+	t.Parallel()
+	repo := newFakeMemberRepo()
+	id1 := uuid.New()
+	id2 := uuid.New()
+	id3 := uuid.New()
+	seedBan(repo, id1, "ban_one")
+	seedBan(repo, id2, "ban_two")
+	seedBan(repo, id3, "ban_three")
+	app := testMemberApp(t, repo, newFakeRoleRepo(), &fakePermStore{}, uuid.New())
+
+	// First page: limit=2
+	resp := doReq(t, app, jsonReq(http.MethodGet, "/bans?limit=2", ""))
+	body := readBody(t, resp)
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, fiber.StatusOK)
+	}
+	env := parseSuccess(t, body)
+	var page1 []struct {
+		User struct {
+			ID string `json:"id"`
+		} `json:"user"`
+	}
+	if err := json.Unmarshal(env.Data, &page1); err != nil {
+		t.Fatalf("unmarshal page 1: %v", err)
+	}
+	if len(page1) != 2 {
+		t.Fatalf("page 1 got %d bans, want 2", len(page1))
+	}
+
+	// Second page: after=last item from page 1
+	resp = doReq(t, app, jsonReq(http.MethodGet, "/bans?limit=2&after="+page1[1].User.ID, ""))
+	body = readBody(t, resp)
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, fiber.StatusOK)
+	}
+	env = parseSuccess(t, body)
+	var page2 []struct {
+		User struct {
+			ID string `json:"id"`
+		} `json:"user"`
+	}
+	if err := json.Unmarshal(env.Data, &page2); err != nil {
+		t.Fatalf("unmarshal page 2: %v", err)
+	}
+	if len(page2) != 1 {
+		t.Fatalf("page 2 got %d bans, want 1", len(page2))
+	}
+	if page2[0].User.ID != id3.String() {
+		t.Errorf("page 2 user ID = %q, want %q", page2[0].User.ID, id3.String())
+	}
+}
+
+func TestListBans_InvalidAfter(t *testing.T) {
+	t.Parallel()
+	app := testMemberApp(t, newFakeMemberRepo(), newFakeRoleRepo(), &fakePermStore{}, uuid.New())
+
+	resp := doReq(t, app, jsonReq(http.MethodGet, "/bans?after=not-a-uuid", ""))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusBadRequest)
+	}
+	env := parseError(t, body)
+	if env.Error.Code != string(apierrors.ValidationError) {
+		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.ValidationError)
 	}
 }
 

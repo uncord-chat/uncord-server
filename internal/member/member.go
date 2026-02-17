@@ -136,7 +136,7 @@ type Repository interface {
 	// Bans
 	Ban(ctx context.Context, userID, bannedBy uuid.UUID, reason *string, expiresAt *time.Time) error
 	Unban(ctx context.Context, userID uuid.UUID) error
-	ListBans(ctx context.Context) ([]BanRecord, error)
+	ListBans(ctx context.Context, after *uuid.UUID, limit int) ([]BanRecord, error)
 	IsBanned(ctx context.Context, userID uuid.UUID) (bool, error)
 
 	// Roles

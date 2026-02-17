@@ -149,8 +149,10 @@ func (r *fakeMemberRepo) ClearTimeout(context.Context, uuid.UUID) (*member.Membe
 func (r *fakeMemberRepo) Ban(context.Context, uuid.UUID, uuid.UUID, *string, *time.Time) error {
 	return nil
 }
-func (r *fakeMemberRepo) Unban(context.Context, uuid.UUID) error                 { return nil }
-func (r *fakeMemberRepo) ListBans(context.Context) ([]member.BanRecord, error)   { return nil, nil }
+func (r *fakeMemberRepo) Unban(context.Context, uuid.UUID) error { return nil }
+func (r *fakeMemberRepo) ListBans(context.Context, *uuid.UUID, int) ([]member.BanRecord, error) {
+	return nil, nil
+}
 func (r *fakeMemberRepo) IsBanned(context.Context, uuid.UUID) (bool, error)      { return false, nil }
 func (r *fakeMemberRepo) AssignRole(context.Context, uuid.UUID, uuid.UUID) error { return nil }
 func (r *fakeMemberRepo) RemoveRole(context.Context, uuid.UUID, uuid.UUID) error { return nil }
