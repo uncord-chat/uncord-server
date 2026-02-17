@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -39,41 +38,30 @@ func (r *PGRepository) Get(ctx context.Context) (*Config, error) {
 	return cfg, nil
 }
 
-// Update applies the non-nil fields in params to the server config row and returns the updated config.
-//
-// Safety: the query is built dynamically, but every SET clause and named arg key is a hardcoded string literal. No
-// caller-supplied value enters the SQL structure; all values flow through pgx named parameter binding.
+// Update applies the non-nil fields in params to the server config row and returns the updated config. Nil pointer
+// fields are left unchanged via COALESCE; all values flow through pgx named parameter binding.
 func (r *PGRepository) Update(ctx context.Context, params UpdateParams) (*Config, error) {
-	var setClauses []string
-	namedArgs := pgx.NamedArgs{}
-
-	if params.Name != nil {
-		setClauses = append(setClauses, "name = @name")
-		namedArgs["name"] = *params.Name
-	}
-	if params.Description != nil {
-		setClauses = append(setClauses, "description = @description")
-		namedArgs["description"] = *params.Description
-	}
-	if params.IconKey != nil {
-		setClauses = append(setClauses, "icon_key = @icon_key")
-		namedArgs["icon_key"] = *params.IconKey
-	}
-	if params.BannerKey != nil {
-		setClauses = append(setClauses, "banner_key = @banner_key")
-		namedArgs["banner_key"] = *params.BannerKey
-	}
-
 	// No fields to update. Return the current row without issuing an UPDATE so the database trigger does not bump
 	// updated_at. A no-op PATCH should not alter the modification timestamp.
-	if len(setClauses) == 0 {
+	if params.Name == nil && params.Description == nil && params.IconKey == nil && params.BannerKey == nil {
 		return r.Get(ctx)
 	}
 
-	query := "UPDATE server_config SET " + strings.Join(setClauses, ", ") +
-		" RETURNING " + selectColumns
+	const query = `UPDATE server_config SET
+		name        = COALESCE(@name, name),
+		description = COALESCE(@description, description),
+		icon_key    = COALESCE(@icon_key, icon_key),
+		banner_key  = COALESCE(@banner_key, banner_key)
+		RETURNING ` + selectColumns
 
-	row := r.db.QueryRow(ctx, query, namedArgs)
+	args := pgx.NamedArgs{
+		"name":        params.Name,
+		"description": params.Description,
+		"icon_key":    params.IconKey,
+		"banner_key":  params.BannerKey,
+	}
+
+	row := r.db.QueryRow(ctx, query, args)
 	cfg, err := scanConfig(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

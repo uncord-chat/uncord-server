@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -110,22 +109,20 @@ func (r *PGRepository) Create(ctx context.Context, params CreateParams, maxChann
 	return ch, nil
 }
 
-// Update applies the non-nil fields in params to the channel row and returns the updated channel.
-//
-// Safety: the query is built dynamically, but every SET clause and named arg key is a hardcoded string literal. No
-// caller-supplied value enters the SQL structure; all values flow through pgx named parameter binding.
+// Update applies the non-nil fields in params to the channel row and returns the updated channel. Nil pointer fields
+// are left unchanged via COALESCE; the nullable category_id column uses a CASE expression so that SetCategoryNull can
+// explicitly clear it. All values flow through pgx named parameter binding.
 func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdateParams) (*Channel, error) {
-	var setClauses []string
-	namedArgs := pgx.NamedArgs{"id": id}
-
-	if params.Name != nil {
-		setClauses = append(setClauses, "name = @name")
-		namedArgs["name"] = *params.Name
+	// No fields to update. Return the current row without issuing an UPDATE so the database trigger does not bump
+	// updated_at. A no-op PATCH should not alter the modification timestamp.
+	if params.Name == nil && !params.SetCategoryNull && params.CategoryID == nil &&
+		params.Topic == nil && params.Position == nil &&
+		params.SlowmodeSeconds == nil && params.NSFW == nil {
+		return r.GetByID(ctx, id)
 	}
-	if params.SetCategoryNull {
-		setClauses = append(setClauses, "category_id = NULL")
-	} else if params.CategoryID != nil {
-		// Validate the category exists before updating.
+
+	// Validate the category exists before updating.
+	if params.CategoryID != nil {
 		var exists bool
 		err := r.db.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM categories WHERE id = $1)", *params.CategoryID).Scan(&exists)
 		if err != nil {
@@ -134,36 +131,29 @@ func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdatePa
 		if !exists {
 			return nil, ErrCategoryNotFound
 		}
-		setClauses = append(setClauses, "category_id = @category_id")
-		namedArgs["category_id"] = *params.CategoryID
-	}
-	if params.Topic != nil {
-		setClauses = append(setClauses, "topic = @topic")
-		namedArgs["topic"] = *params.Topic
-	}
-	if params.Position != nil {
-		setClauses = append(setClauses, "position = @position")
-		namedArgs["position"] = *params.Position
-	}
-	if params.SlowmodeSeconds != nil {
-		setClauses = append(setClauses, "slowmode_seconds = @slowmode_seconds")
-		namedArgs["slowmode_seconds"] = *params.SlowmodeSeconds
-	}
-	if params.NSFW != nil {
-		setClauses = append(setClauses, "nsfw = @nsfw")
-		namedArgs["nsfw"] = *params.NSFW
 	}
 
-	// No fields to update. Return the current row without issuing an UPDATE so the database trigger does not bump
-	// updated_at. A no-op PATCH should not alter the modification timestamp.
-	if len(setClauses) == 0 {
-		return r.GetByID(ctx, id)
+	const query = `UPDATE channels SET
+		name             = COALESCE(@name, name),
+		category_id      = CASE WHEN @clear_category THEN NULL ELSE COALESCE(@category_id, category_id) END,
+		topic            = COALESCE(@topic, topic),
+		position         = COALESCE(@position, position),
+		slowmode_seconds = COALESCE(@slowmode_seconds, slowmode_seconds),
+		nsfw             = COALESCE(@nsfw, nsfw)
+		WHERE id = @id RETURNING ` + selectColumns
+
+	args := pgx.NamedArgs{
+		"id":               id,
+		"name":             params.Name,
+		"clear_category":   params.SetCategoryNull,
+		"category_id":      params.CategoryID,
+		"topic":            params.Topic,
+		"position":         params.Position,
+		"slowmode_seconds": params.SlowmodeSeconds,
+		"nsfw":             params.NSFW,
 	}
 
-	query := "UPDATE channels SET " + strings.Join(setClauses, ", ") +
-		" WHERE id = @id RETURNING " + selectColumns
-
-	row := r.db.QueryRow(ctx, query, namedArgs)
+	row := r.db.QueryRow(ctx, query, args)
 	ch, err := scanChannel(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

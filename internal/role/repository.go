@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -104,45 +103,34 @@ func (r *PGRepository) Create(ctx context.Context, params CreateParams, maxRoles
 	return role, nil
 }
 
-// Update applies the non-nil fields in params to the role row and returns the updated role.
-//
-// Safety: the query is built dynamically, but every SET clause and named arg key is a hardcoded string literal. No
-// caller-supplied value enters the SQL structure; all values flow through pgx named parameter binding.
+// Update applies the non-nil fields in params to the role row and returns the updated role. Nil pointer fields are left
+// unchanged via COALESCE; all values flow through pgx named parameter binding.
 func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdateParams) (*Role, error) {
-	var setClauses []string
-	namedArgs := pgx.NamedArgs{"id": id}
-
-	if params.Name != nil {
-		setClauses = append(setClauses, "name = @name")
-		namedArgs["name"] = *params.Name
-	}
-	if params.Colour != nil {
-		setClauses = append(setClauses, "colour = @colour")
-		namedArgs["colour"] = *params.Colour
-	}
-	if params.Position != nil {
-		setClauses = append(setClauses, "position = @position")
-		namedArgs["position"] = *params.Position
-	}
-	if params.Permissions != nil {
-		setClauses = append(setClauses, "permissions = @permissions")
-		namedArgs["permissions"] = *params.Permissions
-	}
-	if params.Hoist != nil {
-		setClauses = append(setClauses, "hoist = @hoist")
-		namedArgs["hoist"] = *params.Hoist
-	}
-
 	// No fields to update. Return the current row without issuing an UPDATE so the database trigger does not bump
 	// updated_at. A no-op PATCH should not alter the modification timestamp.
-	if len(setClauses) == 0 {
+	if params.Name == nil && params.Colour == nil && params.Position == nil &&
+		params.Permissions == nil && params.Hoist == nil {
 		return r.GetByID(ctx, id)
 	}
 
-	query := "UPDATE roles SET " + strings.Join(setClauses, ", ") +
-		" WHERE id = @id RETURNING " + selectColumns
+	const query = `UPDATE roles SET
+		name        = COALESCE(@name, name),
+		colour      = COALESCE(@colour, colour),
+		position    = COALESCE(@position, position),
+		permissions = COALESCE(@permissions, permissions),
+		hoist       = COALESCE(@hoist, hoist)
+		WHERE id = @id RETURNING ` + selectColumns
 
-	row := r.db.QueryRow(ctx, query, namedArgs)
+	args := pgx.NamedArgs{
+		"id":          id,
+		"name":        params.Name,
+		"colour":      params.Colour,
+		"position":    params.Position,
+		"permissions": params.Permissions,
+		"hoist":       params.Hoist,
+	}
+
+	row := r.db.QueryRow(ctx, query, args)
 	role, err := scanRole(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -101,33 +100,27 @@ func (r *PGRepository) Create(ctx context.Context, params CreateParams, maxCateg
 	return cat, nil
 }
 
-// Update applies the non-nil fields in params to the category row and returns the updated category.
-//
-// Safety: the query is built dynamically, but every SET clause and named arg key is a hardcoded string literal. No
-// caller-supplied value enters the SQL structure; all values flow through pgx named parameter binding.
+// Update applies the non-nil fields in params to the category row and returns the updated category. Nil pointer fields
+// are left unchanged via COALESCE; all values flow through pgx named parameter binding.
 func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdateParams) (*Category, error) {
-	var setClauses []string
-	namedArgs := pgx.NamedArgs{"id": id}
-
-	if params.Name != nil {
-		setClauses = append(setClauses, "name = @name")
-		namedArgs["name"] = *params.Name
-	}
-	if params.Position != nil {
-		setClauses = append(setClauses, "position = @position")
-		namedArgs["position"] = *params.Position
-	}
-
 	// No fields to update. Return the current row without issuing an UPDATE so the database trigger does not bump
 	// updated_at. A no-op PATCH should not alter the modification timestamp.
-	if len(setClauses) == 0 {
+	if params.Name == nil && params.Position == nil {
 		return r.GetByID(ctx, id)
 	}
 
-	query := "UPDATE categories SET " + strings.Join(setClauses, ", ") +
-		" WHERE id = @id RETURNING " + selectColumns
+	const query = `UPDATE categories SET
+		name     = COALESCE(@name, name),
+		position = COALESCE(@position, position)
+		WHERE id = @id RETURNING ` + selectColumns
 
-	row := r.db.QueryRow(ctx, query, namedArgs)
+	args := pgx.NamedArgs{
+		"id":       id,
+		"name":     params.Name,
+		"position": params.Position,
+	}
+
+	row := r.db.QueryRow(ctx, query, args)
 	cat, err := scanCategory(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

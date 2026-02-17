@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -243,23 +242,39 @@ func (r *PGRepository) UpdatePasswordHash(ctx context.Context, userID uuid.UUID,
 }
 
 // Update applies the non-nil fields in params to the user row and returns the updated user. Returns ErrNotFound if no
-// row matches the given ID.
-//
-// Safety: the query is built dynamically, but every SET clause and named arg key is a hardcoded string literal. No
-// caller-supplied value enters the SQL structure; all values flow through pgx named parameter binding.
+// row matches the given ID. Nil pointer fields are left unchanged via COALESCE; all values flow through pgx named
+// parameter binding.
 func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdateParams) (*User, error) {
-	setClauses, namedArgs := buildUpdateClauses(id, params)
-
 	// No fields to update. Return the current row without issuing an UPDATE so the database trigger does not bump
 	// updated_at. A no-op PATCH should not alter the modification timestamp.
-	if len(setClauses) == 0 {
+	if params.DisplayName == nil && params.AvatarKey == nil && params.Pronouns == nil &&
+		params.BannerKey == nil && params.About == nil &&
+		params.ThemeColourPrimary == nil && params.ThemeColourSecondary == nil {
 		return r.GetByID(ctx, id)
 	}
 
-	query := "UPDATE users SET " + strings.Join(setClauses, ", ") +
-		" WHERE id = @id RETURNING " + selectColumns
+	const query = `UPDATE users SET
+		display_name           = COALESCE(@display_name, display_name),
+		avatar_key             = COALESCE(@avatar_key, avatar_key),
+		pronouns               = COALESCE(@pronouns, pronouns),
+		banner_key             = COALESCE(@banner_key, banner_key),
+		about                  = COALESCE(@about, about),
+		theme_colour_primary   = COALESCE(@theme_colour_primary, theme_colour_primary),
+		theme_colour_secondary = COALESCE(@theme_colour_secondary, theme_colour_secondary)
+		WHERE id = @id RETURNING ` + selectColumns
 
-	u, err := scanUser(r.db.QueryRow(ctx, query, namedArgs))
+	args := pgx.NamedArgs{
+		"id":                     id,
+		"display_name":           params.DisplayName,
+		"avatar_key":             params.AvatarKey,
+		"pronouns":               params.Pronouns,
+		"banner_key":             params.BannerKey,
+		"about":                  params.About,
+		"theme_colour_primary":   params.ThemeColourPrimary,
+		"theme_colour_secondary": params.ThemeColourSecondary,
+	}
+
+	u, err := scanUser(r.db.QueryRow(ctx, query, args))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -267,45 +282,6 @@ func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdatePa
 		return nil, fmt.Errorf("update user: %w", err)
 	}
 	return u, nil
-}
-
-// buildUpdateClauses assembles SET clauses and named args from the non-nil fields in params. The returned namedArgs
-// always includes the "id" key. Separating this from the database call allows the query-building logic to be unit
-// tested without a live PostgreSQL connection.
-func buildUpdateClauses(id uuid.UUID, params UpdateParams) ([]string, pgx.NamedArgs) {
-	var setClauses []string
-	namedArgs := pgx.NamedArgs{"id": id}
-
-	if params.DisplayName != nil {
-		setClauses = append(setClauses, "display_name = @display_name")
-		namedArgs["display_name"] = *params.DisplayName
-	}
-	if params.AvatarKey != nil {
-		setClauses = append(setClauses, "avatar_key = @avatar_key")
-		namedArgs["avatar_key"] = *params.AvatarKey
-	}
-	if params.Pronouns != nil {
-		setClauses = append(setClauses, "pronouns = @pronouns")
-		namedArgs["pronouns"] = *params.Pronouns
-	}
-	if params.BannerKey != nil {
-		setClauses = append(setClauses, "banner_key = @banner_key")
-		namedArgs["banner_key"] = *params.BannerKey
-	}
-	if params.About != nil {
-		setClauses = append(setClauses, "about = @about")
-		namedArgs["about"] = *params.About
-	}
-	if params.ThemeColourPrimary != nil {
-		setClauses = append(setClauses, "theme_colour_primary = @theme_colour_primary")
-		namedArgs["theme_colour_primary"] = *params.ThemeColourPrimary
-	}
-	if params.ThemeColourSecondary != nil {
-		setClauses = append(setClauses, "theme_colour_secondary = @theme_colour_secondary")
-		namedArgs["theme_colour_secondary"] = *params.ThemeColourSecondary
-	}
-
-	return setClauses, namedArgs
 }
 
 // EnableMFA atomically sets the user's MFA secret and enabled flag, and inserts the initial set of recovery code

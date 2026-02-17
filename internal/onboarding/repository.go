@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -38,49 +37,39 @@ func (r *PGRepository) Get(ctx context.Context) (*Config, error) {
 	return cfg, nil
 }
 
-// Update applies the non-nil fields in params to the onboarding config row and returns the updated config.
-//
-// Safety: the query is built dynamically, but every SET clause and named arg key is a hardcoded string literal. No
-// caller-supplied value enters the SQL structure; all values flow through pgx named parameter binding.
+// Update applies the non-nil fields in params to the onboarding config row and returns the updated config. Nil pointer
+// fields are left unchanged via COALESCE; the nullable welcome_channel_id column and the auto_roles array use CASE
+// expressions so that SetWelcomeChannelNull and SetAutoRoles can explicitly clear or replace them. All values flow
+// through pgx named parameter binding.
 func (r *PGRepository) Update(ctx context.Context, params UpdateParams) (*Config, error) {
-	var setClauses []string
-	namedArgs := pgx.NamedArgs{}
-
-	if params.SetWelcomeChannelNull {
-		setClauses = append(setClauses, "welcome_channel_id = NULL")
-	} else if params.WelcomeChannelID != nil {
-		setClauses = append(setClauses, "welcome_channel_id = @welcome_channel_id")
-		namedArgs["welcome_channel_id"] = *params.WelcomeChannelID
-	}
-
-	if params.RequireEmailVerification != nil {
-		setClauses = append(setClauses, "require_email_verification = @require_email_verification")
-		namedArgs["require_email_verification"] = *params.RequireEmailVerification
-	}
-
-	if params.OpenJoin != nil {
-		setClauses = append(setClauses, "open_join = @open_join")
-		namedArgs["open_join"] = *params.OpenJoin
-	}
-
-	if params.MinAccountAgeSeconds != nil {
-		setClauses = append(setClauses, "min_account_age_seconds = @min_account_age_seconds")
-		namedArgs["min_account_age_seconds"] = *params.MinAccountAgeSeconds
-	}
-
-	if params.SetAutoRoles {
-		setClauses = append(setClauses, "auto_roles = @auto_roles")
-		namedArgs["auto_roles"] = params.AutoRoles
-	}
-
-	if len(setClauses) == 0 {
+	// No fields to update. Return the current row without issuing an UPDATE so the database trigger does not bump
+	// updated_at. A no-op PATCH should not alter the modification timestamp.
+	if !params.SetWelcomeChannelNull && params.WelcomeChannelID == nil &&
+		params.RequireEmailVerification == nil && params.OpenJoin == nil &&
+		params.MinAccountAgeSeconds == nil && !params.SetAutoRoles {
 		return r.Get(ctx)
 	}
 
-	query := "UPDATE onboarding_config SET " + strings.Join(setClauses, ", ") +
-		" RETURNING " + selectColumns
+	const query = `UPDATE onboarding_config SET
+		welcome_channel_id         = CASE WHEN @clear_welcome_channel THEN NULL
+		                                  ELSE COALESCE(@welcome_channel_id, welcome_channel_id) END,
+		require_email_verification = COALESCE(@require_email_verification, require_email_verification),
+		open_join                  = COALESCE(@open_join, open_join),
+		min_account_age_seconds    = COALESCE(@min_account_age_seconds, min_account_age_seconds),
+		auto_roles                 = CASE WHEN @set_auto_roles THEN @auto_roles ELSE auto_roles END
+		RETURNING ` + selectColumns
 
-	row := r.db.QueryRow(ctx, query, namedArgs)
+	args := pgx.NamedArgs{
+		"clear_welcome_channel":      params.SetWelcomeChannelNull,
+		"welcome_channel_id":         params.WelcomeChannelID,
+		"require_email_verification": params.RequireEmailVerification,
+		"open_join":                  params.OpenJoin,
+		"min_account_age_seconds":    params.MinAccountAgeSeconds,
+		"set_auto_roles":             params.SetAutoRoles,
+		"auto_roles":                 params.AutoRoles,
+	}
+
+	row := r.db.QueryRow(ctx, query, args)
 	cfg, err := scanConfig(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
