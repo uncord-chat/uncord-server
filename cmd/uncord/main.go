@@ -233,25 +233,9 @@ func run() error {
 	}()
 
 	// Load external templates from DATA_DIR (nil means use compiled-in defaults).
-	var verificationTmpl, verifyPageTmpl *template.Template
-	if cfg.DataDir != "" {
-		emailTmplPath := filepath.Join(cfg.DataDir, "templates", "email", "verification.html")
-		if data, err := os.ReadFile(emailTmplPath); err == nil {
-			verificationTmpl, err = template.New("verification").Parse(string(data))
-			if err != nil {
-				return fmt.Errorf("parse email verification template: %w", err)
-			}
-			log.Info().Str("path", emailTmplPath).Msg("Loaded email verification template from data directory")
-		}
-
-		pageTmplPath := filepath.Join(cfg.DataDir, "templates", "pages", "verify.html")
-		if data, err := os.ReadFile(pageTmplPath); err == nil {
-			verifyPageTmpl, err = template.New("verify").Parse(string(data))
-			if err != nil {
-				return fmt.Errorf("parse verify page template: %w", err)
-			}
-			log.Info().Str("path", pageTmplPath).Msg("Loaded verify page template from data directory")
-		}
+	verificationTmpl, verifyPageTmpl, err := loadTemplates(cfg.DataDir)
+	if err != nil {
+		return err
 	}
 
 	// Load onboarding documents from DATA_DIR.
@@ -330,59 +314,7 @@ func run() error {
 		runWithBackoff(subCtx, "gateway-hub", gatewayHub.Run)
 	}()
 
-	// Create Fiber app
-	app := fiber.New(fiber.Config{
-		AppName:   "Uncord",
-		BodyLimit: cfg.BodyLimitBytes(),
-		// ErrorHandler catches errors returned by handlers that are not already mapped to structured API responses
-		// (e.g. Fiber's built-in 404/405). errors.AsType is a generic helper added in Go 1.26.
-		ErrorHandler: func(c fiber.Ctx, err error) error {
-			status := fiber.StatusInternalServerError
-			message := "An internal error occurred"
-			apiCode := apierrors.InternalError
-			if e, ok := errors.AsType[*fiber.Error](err); ok {
-				status = e.Code
-				message = e.Message
-				apiCode = fiberStatusToAPICode(e.Code)
-			} else {
-				log.Error().Err(err).
-					Str("method", c.Method()).
-					Str("path", c.Path()).
-					Msg("Unhandled error")
-			}
-			return c.Status(status).JSON(httputil.ErrorResponse{
-				Error: httputil.ErrorBody{
-					Code:    apiCode,
-					Message: message,
-				},
-			})
-		},
-	})
-
-	// Global middleware
-	app.Use(requestid.New())
-	if cfg.LogHealthRequests {
-		app.Use(httputil.RequestLogger(log.Logger))
-	} else {
-		app.Use(httputil.RequestLogger(log.Logger, "/api/v1/health"))
-	}
-	app.Use(cors.New(cors.Config{
-		AllowOrigins:  strings.Split(cfg.CORSAllowOrigins, ","),
-		AllowMethods:  []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:  []string{"Origin", "Content-Type", "Accept", "Authorization"},
-		ExposeHeaders: []string{"X-Request-ID"},
-	}))
-
-	// Restrict non-upload request bodies to a sensible size for JSON payloads. Multipart (file upload) requests are
-	// exempt because they are protected by the global Fiber body limit and per-handler size checks instead.
-	app.Use(jsonBodyLimit(cfg.BodyLimitJSONBytes()))
-
-	// Global API rate limiter
-	app.Use(limiter.New(limiter.Config{
-		Max:          cfg.RateLimitAPIRequests,
-		Expiration:   time.Duration(cfg.RateLimitAPIWindowSeconds) * time.Second,
-		LimitReached: rateLimitReached,
-	}))
+	app := newFiberApp(cfg)
 
 	// Register routes
 	srv := &server{
@@ -731,6 +663,90 @@ func (s *server) registerRoutes(app *fiber.App) {
 	app.Use(func(_ fiber.Ctx) error {
 		return fiber.ErrNotFound
 	})
+}
+
+// newFiberApp creates the Fiber application with the global error handler and middleware stack.
+func newFiberApp(cfg *config.Config) *fiber.App {
+	app := fiber.New(fiber.Config{
+		AppName:   "Uncord",
+		BodyLimit: cfg.BodyLimitBytes(),
+		// ErrorHandler catches errors returned by handlers that are not already mapped to structured API responses
+		// (e.g. Fiber's built-in 404/405). errors.AsType is a generic helper added in Go 1.26.
+		ErrorHandler: func(c fiber.Ctx, err error) error {
+			status := fiber.StatusInternalServerError
+			message := "An internal error occurred"
+			apiCode := apierrors.InternalError
+			if e, ok := errors.AsType[*fiber.Error](err); ok {
+				status = e.Code
+				message = e.Message
+				apiCode = fiberStatusToAPICode(e.Code)
+			} else {
+				log.Error().Err(err).
+					Str("method", c.Method()).
+					Str("path", c.Path()).
+					Msg("Unhandled error")
+			}
+			return c.Status(status).JSON(httputil.ErrorResponse{
+				Error: httputil.ErrorBody{
+					Code:    apiCode,
+					Message: message,
+				},
+			})
+		},
+	})
+
+	app.Use(requestid.New())
+	if cfg.LogHealthRequests {
+		app.Use(httputil.RequestLogger(log.Logger))
+	} else {
+		app.Use(httputil.RequestLogger(log.Logger, "/api/v1/health"))
+	}
+	app.Use(cors.New(cors.Config{
+		AllowOrigins:  strings.Split(cfg.CORSAllowOrigins, ","),
+		AllowMethods:  []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:  []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		ExposeHeaders: []string{"X-Request-ID"},
+	}))
+
+	// Restrict non-upload request bodies to a sensible size for JSON payloads. Multipart (file upload) requests are
+	// exempt because they are protected by the global Fiber body limit and per-handler size checks instead.
+	app.Use(jsonBodyLimit(cfg.BodyLimitJSONBytes()))
+
+	app.Use(limiter.New(limiter.Config{
+		Max:          cfg.RateLimitAPIRequests,
+		Expiration:   time.Duration(cfg.RateLimitAPIWindowSeconds) * time.Second,
+		LimitReached: rateLimitReached,
+	}))
+
+	return app
+}
+
+// loadTemplates loads optional email and page templates from the data directory. Returns nil templates when dataDir is
+// empty, which causes the application to use compiled-in defaults.
+func loadTemplates(dataDir string) (verification *template.Template, verifyPage *template.Template, err error) {
+	if dataDir == "" {
+		return nil, nil, nil
+	}
+
+	emailTmplPath := filepath.Join(dataDir, "templates", "email", "verification.html")
+	if data, readErr := os.ReadFile(emailTmplPath); readErr == nil {
+		verification, err = template.New("verification").Parse(string(data))
+		if err != nil {
+			return nil, nil, fmt.Errorf("parse email verification template: %w", err)
+		}
+		log.Info().Str("path", emailTmplPath).Msg("Loaded email verification template from data directory")
+	}
+
+	pageTmplPath := filepath.Join(dataDir, "templates", "pages", "verify.html")
+	if data, readErr := os.ReadFile(pageTmplPath); readErr == nil {
+		verifyPage, err = template.New("verify").Parse(string(data))
+		if err != nil {
+			return nil, nil, fmt.Errorf("parse verify page template: %w", err)
+		}
+		log.Info().Str("path", pageTmplPath).Msg("Loaded verify page template from data directory")
+	}
+
+	return verification, verifyPage, nil
 }
 
 // redisPinger adapts *redis.Client to the api.Pinger interface.
