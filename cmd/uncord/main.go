@@ -702,7 +702,7 @@ func (p redisPinger) Ping(ctx context.Context) error { return p.client.Ping(ctx)
 
 // purgeExpiredData deletes stale login attempts, deletion tombstones, and orphaned attachments. Each call logs the
 // outcome so operators can monitor retention enforcement.
-func purgeExpiredData(ctx context.Context, repo *user.PGRepository, attachRepo *attachment.PGRepository, storage media.StorageProvider, cfg *config.Config) {
+func purgeExpiredData(ctx context.Context, repo user.Repository, attachRepo attachment.Repository, storage media.StorageProvider, cfg *config.Config) {
 	deleted, err := repo.PurgeLoginAttempts(ctx, time.Now().Add(-cfg.LoginAttemptRetention))
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to purge expired login attempts")

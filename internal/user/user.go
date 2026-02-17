@@ -197,4 +197,6 @@ type Repository interface {
 	ReplaceRecoveryCodes(ctx context.Context, userID uuid.UUID, codeHashes []string) error
 	DeleteWithTombstones(ctx context.Context, id uuid.UUID, tombstones []Tombstone) error
 	CheckTombstone(ctx context.Context, identifierType TombstoneType, hmacHash string) (bool, error)
+	PurgeLoginAttempts(ctx context.Context, olderThan time.Time) (int64, error)
+	PurgeTombstones(ctx context.Context, olderThan time.Time) (int64, error)
 }
