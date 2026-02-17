@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -171,8 +172,8 @@ func (h *MemberHandler) Leave(c fiber.Ctx) error {
 		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
 	}
 
-	if h.checkNotOwner(c, userID) {
-		return nil
+	if err := h.checkNotOwner(c, userID); err != nil {
+		return h.mapGuardError(c, err)
 	}
 
 	if err := h.members.Delete(c, userID); err != nil {
@@ -219,8 +220,8 @@ func (h *MemberHandler) UpdateMember(c fiber.Ctx) error {
 		return h.mapMemberError(c, err)
 	}
 
-	if h.checkHierarchy(c, userID, targetID) {
-		return nil
+	if err := h.checkHierarchy(c, userID, targetID); err != nil {
+		return h.mapGuardError(c, err)
 	}
 
 	updated, err := h.members.UpdateNickname(c, targetID, body.Nickname)
@@ -245,11 +246,11 @@ func (h *MemberHandler) KickMember(c fiber.Ctx) error {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid user ID format")
 	}
 
-	if h.checkNotOwner(c, targetID) {
-		return nil
+	if err := h.checkNotOwner(c, targetID); err != nil {
+		return h.mapGuardError(c, err)
 	}
-	if h.checkHierarchy(c, userID, targetID) {
-		return nil
+	if err := h.checkHierarchy(c, userID, targetID); err != nil {
+		return h.mapGuardError(c, err)
 	}
 
 	if err := h.members.Delete(c, targetID); err != nil {
@@ -286,11 +287,11 @@ func (h *MemberHandler) SetTimeout(c fiber.Ctx) error {
 		return h.mapMemberError(c, member.ErrTimeoutInPast)
 	}
 
-	if h.checkNotOwner(c, targetID) {
-		return nil
+	if err := h.checkNotOwner(c, targetID); err != nil {
+		return h.mapGuardError(c, err)
 	}
-	if h.checkHierarchy(c, userID, targetID) {
-		return nil
+	if err := h.checkHierarchy(c, userID, targetID); err != nil {
+		return h.mapGuardError(c, err)
 	}
 
 	updated, err := h.members.SetTimeout(c, targetID, until)
@@ -348,11 +349,11 @@ func (h *MemberHandler) BanMember(c fiber.Ctx) error {
 		expiresAt = &t
 	}
 
-	if h.checkNotOwner(c, targetID) {
-		return nil
+	if err := h.checkNotOwner(c, targetID); err != nil {
+		return h.mapGuardError(c, err)
 	}
-	if h.checkHierarchy(c, userID, targetID) {
-		return nil
+	if err := h.checkHierarchy(c, userID, targetID); err != nil {
+		return h.mapGuardError(c, err)
 	}
 
 	if err := h.members.Ban(c, targetID, userID, body.Reason, expiresAt); err != nil {
@@ -506,46 +507,57 @@ func (h *MemberHandler) RemoveRole(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-// checkHierarchy verifies that the caller outranks the target member. Returns true if the handler should stop because
-// an error response was already written.
-func (h *MemberHandler) checkHierarchy(c fiber.Ctx, callerID, targetID uuid.UUID) bool {
+// Sentinel errors for member guard checks. These are mapped to HTTP responses by mapGuardError.
+var (
+	errOutranked     = errors.New("target has equal or higher role")
+	errTargetIsOwner = errors.New("target is server owner")
+)
+
+// checkHierarchy verifies that the caller outranks the target member. Returns errOutranked if the target has an equal
+// or higher role position, or a wrapped error if the database query fails.
+func (h *MemberHandler) checkHierarchy(c fiber.Ctx, callerID, targetID uuid.UUID) error {
 	callerPos, err := h.roles.HighestPosition(c, callerID)
 	if err != nil {
-		h.log.Error().Err(err).Str("handler", "member").Msg("failed to get caller highest position")
-		_ = httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
-		return true
+		return fmt.Errorf("get caller role position: %w", err)
 	}
 
 	targetPos, err := h.roles.HighestPosition(c, targetID)
 	if err != nil {
-		h.log.Error().Err(err).Str("handler", "member").Msg("failed to get target highest position")
-		_ = httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
-		return true
+		return fmt.Errorf("get target role position: %w", err)
 	}
 
 	if targetPos <= callerPos {
-		_ = httputil.Fail(c, fiber.StatusForbidden, apierrors.RoleHierarchy,
-			"Cannot perform this action on a member with an equal or higher role")
-		return true
+		return errOutranked
 	}
-	return false
+	return nil
 }
 
-// checkNotOwner verifies that the target user is not the server owner. Returns true if the handler should stop because
-// an error response was already written.
-func (h *MemberHandler) checkNotOwner(c fiber.Ctx, userID uuid.UUID) bool {
+// checkNotOwner verifies that the target user is not the server owner. Returns errTargetIsOwner if the target is the
+// owner, or a wrapped error if the database query fails.
+func (h *MemberHandler) checkNotOwner(c fiber.Ctx, userID uuid.UUID) error {
 	isOwner, err := h.perms.IsOwner(c, userID)
 	if err != nil {
-		h.log.Error().Err(err).Str("handler", "member").Msg("failed to check ownership")
-		_ = httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
-		return true
+		return fmt.Errorf("check ownership: %w", err)
 	}
 	if isOwner {
-		_ = httputil.Fail(c, fiber.StatusForbidden, apierrors.ServerOwner,
-			"The server owner cannot be targeted by this action")
-		return true
+		return errTargetIsOwner
 	}
-	return false
+	return nil
+}
+
+// mapGuardError translates hierarchy and ownership sentinel errors into structured HTTP responses.
+func (h *MemberHandler) mapGuardError(c fiber.Ctx, err error) error {
+	switch {
+	case errors.Is(err, errOutranked):
+		return httputil.Fail(c, fiber.StatusForbidden, apierrors.RoleHierarchy,
+			"Cannot perform this action on a member with an equal or higher role")
+	case errors.Is(err, errTargetIsOwner):
+		return httputil.Fail(c, fiber.StatusForbidden, apierrors.ServerOwner,
+			"The server owner cannot be targeted by this action")
+	default:
+		h.log.Error().Err(err).Str("handler", "member").Msg("guard check failed")
+		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
+	}
 }
 
 // publishMemberUpdate fires a best-effort MEMBER_UPDATE gateway event. Uses context.Background because Fiber recycles
