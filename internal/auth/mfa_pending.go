@@ -52,18 +52,25 @@ func ConsumePendingMFASecret(ctx context.Context, rdb *redis.Client, userID uuid
 	return val, nil
 }
 
+// incrWithTTL atomically increments a key and sets its TTL on creation. Using a Lua script guarantees that the INCR and
+// EXPIRE happen in a single atomic operation, preventing a key from persisting without a TTL if the process crashes
+// between separate INCR and EXPIRE calls.
+var incrWithTTL = redis.NewScript(`
+local count = redis.call("INCR", KEYS[1])
+if count == 1 then
+    redis.call("EXPIRE", KEYS[1], ARGV[1])
+end
+return count
+`)
+
 // IncrementMFASetupAttempts atomically increments the failed attempt counter for MFA setup confirmation. Returns the
 // new count. The counter shares the same TTL as the pending secret so it expires together with the setup flow.
 func IncrementMFASetupAttempts(ctx context.Context, rdb *redis.Client, userID uuid.UUID) (int64, error) {
 	key := mfaPendingAttemptsKey(userID)
-	count, err := rdb.Incr(ctx, key).Result()
+	ttlSeconds := int(pendingMFATTL / time.Second)
+	count, err := incrWithTTL.Run(ctx, rdb, []string{key}, ttlSeconds).Int64()
 	if err != nil {
 		return 0, fmt.Errorf("increment MFA setup attempts: %w", err)
-	}
-	if count == 1 {
-		if err := rdb.Expire(ctx, key, pendingMFATTL).Err(); err != nil {
-			return count, fmt.Errorf("set MFA attempts TTL: %w", err)
-		}
 	}
 	return count, nil
 }

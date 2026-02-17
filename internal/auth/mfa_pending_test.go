@@ -118,6 +118,27 @@ func TestIncrementMFASetupAttempts(t *testing.T) {
 	}
 }
 
+func TestIncrementMFASetupAttemptsTTL(t *testing.T) {
+	t.Parallel()
+	mr, rdb := setupMiniredis(t)
+	ctx := context.Background()
+	userID := uuid.New()
+
+	_, err := IncrementMFASetupAttempts(ctx, rdb, userID)
+	if err != nil {
+		t.Fatalf("IncrementMFASetupAttempts() error = %v", err)
+	}
+
+	key := mfaPendingAttemptsKey(userID)
+	ttl := mr.TTL(key)
+	if ttl <= 0 {
+		t.Errorf("key TTL = %v, want positive", ttl)
+	}
+	if ttl > pendingMFATTL {
+		t.Errorf("key TTL = %v, want <= %v", ttl, pendingMFATTL)
+	}
+}
+
 func TestResetMFASetupAttempts(t *testing.T) {
 	t.Parallel()
 	_, rdb := setupMiniredis(t)
