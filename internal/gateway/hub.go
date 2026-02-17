@@ -483,8 +483,9 @@ func (h *Hub) handlePubSubEvent(ctx context.Context, payload string) {
 		return
 	}
 
-	// For channel-scoped events, filter by ViewChannels permission.
-	if isChannelScoped {
+	// For channel-scoped events, filter by ViewChannels permission. If the resolver is unavailable, skip filtering
+	// and deliver to all identified clients rather than silently dropping the event.
+	if isChannelScoped && h.resolver != nil {
 		userIDs := make([]uuid.UUID, len(targets))
 		for i, c := range targets {
 			userIDs[i] = c.UserID()
