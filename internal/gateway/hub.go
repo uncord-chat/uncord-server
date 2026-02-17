@@ -14,6 +14,7 @@ import (
 	"github.com/uncord-chat/uncord-protocol/events"
 	"github.com/uncord-chat/uncord-protocol/models"
 	"github.com/uncord-chat/uncord-protocol/permissions"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/uncord-chat/uncord-server/internal/auth"
 	"github.com/uncord-chat/uncord-server/internal/channel"
@@ -533,39 +534,76 @@ func (h *Hub) handlePubSubEvent(ctx context.Context, payload string) {
 	}
 }
 
-// assembleReady queries the database for all state needed by a newly connected client.
+// assembleReady queries the database for all state needed by a newly connected client. Independent queries run
+// concurrently to reduce latency; presence lookup runs afterwards because it depends on the member list.
 func (h *Hub) assembleReady(ctx context.Context, userID uuid.UUID) (*models.ReadyData, error) {
-	u, err := h.users.GetByID(ctx, userID)
-	if err != nil {
-		return nil, fmt.Errorf("get user: %w", err)
+	var (
+		u   *user.User
+		srv *servercfg.Config
+		chs []channel.Channel
+		rs  []role.Role
+		ms  []member.MemberWithProfile
+	)
+
+	g, gCtx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		var err error
+		u, err = h.users.GetByID(gCtx, userID)
+		if err != nil {
+			return fmt.Errorf("get user: %w", err)
+		}
+		return nil
+	})
+
+	g.Go(func() error {
+		var err error
+		srv, err = h.server.Get(gCtx)
+		if err != nil {
+			return fmt.Errorf("get server config: %w", err)
+		}
+		return nil
+	})
+
+	g.Go(func() error {
+		var err error
+		chs, err = h.channels.List(gCtx)
+		if err != nil {
+			return fmt.Errorf("list channels: %w", err)
+		}
+		return nil
+	})
+
+	g.Go(func() error {
+		var err error
+		rs, err = h.roles.List(gCtx)
+		if err != nil {
+			return fmt.Errorf("list roles: %w", err)
+		}
+		return nil
+	})
+
+	g.Go(func() error {
+		var err error
+		ms, err = h.members.List(gCtx, nil, h.cfg.GatewayReadyMemberLimit)
+		if err != nil {
+			return fmt.Errorf("list members: %w", err)
+		}
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
 
-	srv, err := h.server.Get(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get server config: %w", err)
-	}
-
-	chs, err := h.channels.List(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list channels: %w", err)
-	}
-
-	rs, err := h.roles.List(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list roles: %w", err)
-	}
-
-	ms, err := h.members.List(ctx, nil, h.cfg.GatewayReadyMemberLimit)
-	if err != nil {
-		return nil, fmt.Errorf("list members: %w", err)
-	}
-
+	// Presence lookup depends on the member list and must run after the concurrent phase.
 	var presences []models.PresenceState
 	if h.presence != nil {
 		memberIDs := make([]uuid.UUID, len(ms))
 		for i := range ms {
 			memberIDs[i] = ms[i].UserID
 		}
+		var err error
 		presences, err = h.presence.GetMany(ctx, memberIDs)
 		if err != nil {
 			return nil, fmt.Errorf("get presences: %w", err)
