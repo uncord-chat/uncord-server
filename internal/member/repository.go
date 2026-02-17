@@ -132,8 +132,11 @@ func (r *PGRepository) Delete(ctx context.Context, userID uuid.UUID) error {
 	return nil
 }
 
-// SetTimeout applies a timeout to a member and returns the updated profile.
+// SetTimeout applies a timeout to a member and returns the updated profile. The timeout must be in the future.
 func (r *PGRepository) SetTimeout(ctx context.Context, userID uuid.UUID, until time.Time) (*MemberWithProfile, error) {
+	if !until.After(time.Now()) {
+		return nil, ErrTimeoutInPast
+	}
 	tag, err := r.db.Exec(ctx,
 		"UPDATE members SET status = $1, timeout_until = $2 WHERE user_id = $3",
 		models.MemberStatusTimedOut, until, userID)
