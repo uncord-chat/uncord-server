@@ -64,7 +64,8 @@ var (
 	date    = "unknown"
 )
 
-// server holds the shared dependencies used by route handlers and middleware.
+// server holds the shared dependencies used by route handlers and middleware. All fields are injected during startup in
+// run() and remain read-only for the lifetime of the process.
 type server struct {
 	cfg              *config.Config
 	db               *pgxpool.Pool
@@ -397,8 +398,9 @@ func run() error {
 
 	listenErr := app.Listen(addr, fiber.ListenConfig{DisableStartupMessage: true})
 
-	// Ensure all background goroutines have stopped before returning. The context is normally cancelled by the shutdown
-	// handler, but cancel again in case Listen returned due to an error unrelated to the signal handler.
+	// Ensure all background goroutines have stopped before returning. The signal handler above cancels subCtx, but
+	// Listen can also return on its own (e.g. bind failure) without the handler ever firing. Calling cancel twice is
+	// safe; context.WithCancel guarantees the second call is a no-op.
 	subCancel()
 	wg.Wait()
 

@@ -10,6 +10,97 @@ import (
 	"github.com/uncord-chat/uncord-protocol/permissions"
 )
 
+// --- Benchmarks ---
+
+func BenchmarkResolve_CacheHit(b *testing.B) {
+	store := &fakeStore{}
+	cache := newFakeCache()
+	userID := uuid.New()
+	channelID := uuid.New()
+	cache.data[userID.String()+":"+channelID.String()] = permissions.ViewChannels | permissions.SendMessages
+	r := NewResolver(store, cache, zerolog.Nop())
+	ctx := context.Background()
+
+	b.ResetTimer()
+	for b.Loop() {
+		_, _ = r.Resolve(ctx, userID, channelID)
+	}
+}
+
+func BenchmarkResolve_CacheMiss(b *testing.B) {
+	roleID := uuid.New()
+	channelID := uuid.New()
+	categoryID := uuid.New()
+	store := &fakeStore{
+		roleEntries: []RolePermEntry{
+			{RoleID: roleID, Permissions: permissions.ViewChannels | permissions.SendMessages},
+		},
+		chanInfo: ChannelInfo{ID: channelID, CategoryID: &categoryID},
+		overrides: map[string][]Override{
+			"category:" + categoryID.String(): {
+				{PrincipalType: PrincipalRole, PrincipalID: roleID, Deny: permissions.SendMessages},
+			},
+			"channel:" + channelID.String(): {
+				{PrincipalType: PrincipalRole, PrincipalID: roleID, Allow: permissions.SendMessages},
+			},
+		},
+	}
+	r := NewResolver(store, &noopCache{}, zerolog.Nop())
+	ctx := context.Background()
+	userID := uuid.New()
+
+	b.ResetTimer()
+	for b.Loop() {
+		_, _ = r.Resolve(ctx, userID, channelID)
+	}
+}
+
+func BenchmarkFilterPermitted_10Channels(b *testing.B) {
+	roleID := uuid.New()
+	userID := uuid.New()
+	channels := make([]uuid.UUID, 10)
+	for i := range channels {
+		channels[i] = uuid.New()
+	}
+
+	store := &fakeStore{
+		roleEntries: []RolePermEntry{
+			{RoleID: roleID, Permissions: permissions.ViewChannels | permissions.SendMessages},
+		},
+		chanInfo: ChannelInfo{ID: channels[0]},
+	}
+	r := NewResolver(store, &noopCache{}, zerolog.Nop())
+	ctx := context.Background()
+
+	b.ResetTimer()
+	for b.Loop() {
+		_, _ = r.FilterPermitted(ctx, userID, channels, permissions.ViewChannels)
+	}
+}
+
+// noopCache is a Cache implementation that always reports a miss and discards writes. Used in benchmarks to measure
+// the compute path without cache overhead.
+type noopCache struct{}
+
+func (c *noopCache) Get(context.Context, uuid.UUID, uuid.UUID) (permissions.Permission, bool, error) {
+	return 0, false, nil
+}
+func (c *noopCache) Set(context.Context, uuid.UUID, uuid.UUID, permissions.Permission) error {
+	return nil
+}
+func (c *noopCache) GetMany(_ context.Context, _ uuid.UUID, _ []uuid.UUID) (map[uuid.UUID]permissions.Permission, error) {
+	return nil, nil
+}
+func (c *noopCache) SetMany(context.Context, uuid.UUID, map[uuid.UUID]permissions.Permission) error {
+	return nil
+}
+func (c *noopCache) DeleteByUser(context.Context, uuid.UUID) error    { return nil }
+func (c *noopCache) DeleteByChannel(context.Context, uuid.UUID) error { return nil }
+func (c *noopCache) DeleteExact(context.Context, uuid.UUID, uuid.UUID) error {
+	return nil
+}
+func (c *noopCache) DeleteAll(context.Context) error { return nil }
+
 // --- Fake Store ---
 
 type fakeStore struct {

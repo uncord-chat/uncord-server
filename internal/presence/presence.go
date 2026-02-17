@@ -89,6 +89,8 @@ func (s *Store) GetMany(ctx context.Context, userIDs []uuid.UUID) ([]models.Pres
 		if v == nil {
 			continue
 		}
+		// MGet returns []interface{} where each element is nil or a string. The comma-ok assertion guards against
+		// unexpected types from future Redis driver changes or pipeline corruption.
 		status, ok := v.(string)
 		if !ok || status == StatusInvisible {
 			continue

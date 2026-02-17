@@ -9,7 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 	"github.com/uncord-chat/uncord-protocol/events"
 	"github.com/uncord-chat/uncord-protocol/models"
@@ -811,6 +813,72 @@ func TestHubConcurrentDisplacement(t *testing.T) {
 	if remaining != 1 {
 		t.Errorf("hub.clients has %d entries after displacement, want 1", remaining)
 	}
+}
+
+// --- Benchmarks ---
+
+func BenchmarkHandlePubSubEvent_10Clients(b *testing.B) {
+	benchmarkDispatch(b, 10)
+}
+
+func BenchmarkHandlePubSubEvent_100Clients(b *testing.B) {
+	benchmarkDispatch(b, 100)
+}
+
+func benchmarkDispatch(b *testing.B, clientCount int) {
+	b.Helper()
+	_, rdb := newBenchRedis(b)
+	cfg := testConfig()
+	cfg.GatewayMaxConnections = clientCount + 10
+	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
+
+	hub := NewHub(HubDeps{RDB: rdb, Cfg: cfg, Sessions: sessions, Logger: zerolog.Nop()})
+
+	for range clientCount {
+		userID := uuid.New()
+		client := &Client{
+			hub:  hub,
+			send: make(chan []byte, 256),
+			done: make(chan struct{}),
+			log:  zerolog.Nop(),
+		}
+		client.mu.Lock()
+		client.userID = userID
+		client.sessionID = uuid.New().String()[:8]
+		client.identified = true
+		client.mu.Unlock()
+
+		hub.mu.Lock()
+		hub.clients[userID] = client
+		hub.mu.Unlock()
+	}
+
+	env := envelope{Type: string(events.ServerUpdate), Data: map[string]string{"name": "bench"}}
+	payload, _ := json.Marshal(env)
+	ctx := context.Background()
+
+	b.ResetTimer()
+	for b.Loop() {
+		hub.handlePubSubEvent(ctx, string(payload))
+
+		// Drain all client send buffers to prevent back-pressure from stalling the next iteration.
+		hub.mu.RLock()
+		for _, c := range hub.clients {
+			select {
+			case <-c.send:
+			default:
+			}
+		}
+		hub.mu.RUnlock()
+	}
+}
+
+func newBenchRedis(b *testing.B) (*miniredis.Miniredis, *redis.Client) {
+	b.Helper()
+	mr := miniredis.RunT(b)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	b.Cleanup(func() { _ = rdb.Close() })
+	return mr, rdb
 }
 
 func TestAssembleReadyNilOnboardingDeps(t *testing.T) {
