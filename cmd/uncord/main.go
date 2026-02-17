@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -189,16 +190,24 @@ func run() error {
 	// Initialise user repository early because the background purge goroutine needs it.
 	userRepo := user.NewPGRepository(db, log.Logger)
 
-	// Start background services with a shared cancellable context.
+	// Start background services with a shared cancellable context. The WaitGroup ensures all goroutines have returned
+	// before the process exits.
 	subCtx, subCancel := context.WithCancel(ctx)
 	defer subCancel()
+	var wg sync.WaitGroup
 
-	go blocklist.Run(subCtx, cfg.DisposableEmailBlocklistRefreshInterval)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		blocklist.Run(subCtx, cfg.DisposableEmailBlocklistRefreshInterval)
+	}()
 
 	// The purge goroutine is started below after the attachment repository is initialised, because orphan attachment
 	// cleanup needs access to the repo and storage provider.
 	startPurgeGoroutine := func(attachRepo *attachment.PGRepository, storage media.StorageProvider) {
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			purgeExpiredData(subCtx, userRepo, attachRepo, storage, cfg)
 
 			ticker := time.NewTicker(cfg.DataCleanupInterval)
@@ -216,7 +225,11 @@ func run() error {
 
 	// Start permission cache invalidation subscriber with reconnection.
 	permSub := permission.NewSubscriber(permCache, rdb, log.Logger)
-	go runWithBackoff(subCtx, "permission-cache-subscriber", permSub.Run)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		runWithBackoff(subCtx, "permission-cache-subscriber", permSub.Run)
+	}()
 
 	// Load external templates from DATA_DIR (nil means use compiled-in defaults).
 	var verificationTmpl, verifyPageTmpl *template.Template
@@ -297,7 +310,11 @@ func run() error {
 	// Start thumbnail worker with reconnection.
 	thumbWorker := media.NewThumbnailWorker(rdb, storage, attachmentRepo, log.Logger)
 	thumbWorker.EnsureStream(subCtx)
-	go runWithBackoff(subCtx, "thumbnail-worker", thumbWorker.Run)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		runWithBackoff(subCtx, "thumbnail-worker", thumbWorker.Run)
+	}()
 	authService, err := auth.NewService(userRepo, rdb, cfg, blocklist, emailSender, serverRepo, permPublisher, log.Logger)
 	if err != nil {
 		return fmt.Errorf("create auth service: %w", err)
@@ -306,7 +323,11 @@ func run() error {
 	// Initialise gateway WebSocket hub and start the pub/sub subscriber with reconnection.
 	sessionStore := gateway.NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 	gatewayHub := gateway.NewHub(rdb, cfg, sessionStore, permResolver, userRepo, serverRepo, channelRepo, roleRepo, memberRepo, presenceStore, gatewayPub, onboardingRepo, documentStore, log.Logger)
-	go runWithBackoff(subCtx, "gateway-hub", gatewayHub.Run)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		runWithBackoff(subCtx, "gateway-hub", gatewayHub.Run)
+	}()
 
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
@@ -418,8 +439,15 @@ func run() error {
 		Uint32("num_gc", mem.NumGC).
 		Msg("Runtime memory stats")
 
-	if err := app.Listen(addr, fiber.ListenConfig{DisableStartupMessage: true}); err != nil {
-		return fmt.Errorf("server error: %w", err)
+	listenErr := app.Listen(addr, fiber.ListenConfig{DisableStartupMessage: true})
+
+	// Ensure all background goroutines have stopped before returning. The context is normally cancelled by the shutdown
+	// handler, but cancel again in case Listen returned due to an error unrelated to the signal handler.
+	subCancel()
+	wg.Wait()
+
+	if listenErr != nil {
+		return fmt.Errorf("server error: %w", listenErr)
 	}
 
 	return nil
