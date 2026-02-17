@@ -17,7 +17,7 @@ func Connect(ctx context.Context, rawURL string, dialTimeout time.Duration) (*re
 	// go-redis only understands the redis:// scheme, so replace valkey:// (case-insensitive) before parsing.
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
-		return nil, fmt.Errorf("parse valkey URL: %w", err)
+		return nil, fmt.Errorf("connect to valkey: parse URL: %w", err)
 	}
 	if strings.EqualFold(parsed.Scheme, "valkey") {
 		parsed.Scheme = "redis"
@@ -25,7 +25,7 @@ func Connect(ctx context.Context, rawURL string, dialTimeout time.Duration) (*re
 
 	opts, err := redis.ParseURL(parsed.String())
 	if err != nil {
-		return nil, fmt.Errorf("parse valkey URL: %w", err)
+		return nil, fmt.Errorf("connect to valkey: parse URL: %w", err)
 	}
 	opts.DialTimeout = dialTimeout
 
@@ -33,7 +33,7 @@ func Connect(ctx context.Context, rawURL string, dialTimeout time.Duration) (*re
 
 	if err := client.Ping(ctx).Err(); err != nil {
 		_ = client.Close()
-		return nil, fmt.Errorf("ping valkey: %w", err)
+		return nil, fmt.Errorf("connect to valkey: ping: %w", err)
 	}
 
 	return client, nil
