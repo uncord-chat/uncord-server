@@ -235,7 +235,11 @@ func testMessageAppWithAttachments(
 	userID uuid.UUID,
 ) *fiber.App {
 	t.Helper()
-	storage := media.NewLocalStorage(t.TempDir(), "http://localhost:8080")
+	storage, err := media.NewLocalStorage(t.TempDir(), "http://localhost:8080")
+	if err != nil {
+		t.Fatalf("NewLocalStorage() error: %v", err)
+	}
+	t.Cleanup(func() { _ = storage.Close() })
 	handler := NewMessageHandler(repo, attachRepo, storage, resolver, nil, nil, nil, testMaxContent, 10, zerolog.Nop())
 	app := fiber.New()
 

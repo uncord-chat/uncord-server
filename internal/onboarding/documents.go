@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -91,8 +92,7 @@ func LoadDocuments(dir string) (*DocumentStore, error) {
 		}
 		seen[entry.Slug] = struct{}{}
 
-		htmlPath := filepath.Join(docsDir, entry.File)
-		raw, err := os.ReadFile(htmlPath)
+		raw, err := readFileInRoot(docsDir, entry.File)
 		if err != nil {
 			if os.IsNotExist(err) {
 				return nil, fmt.Errorf("%w: %s", ErrDocumentNotFound, entry.File)
@@ -151,6 +151,18 @@ func (s *DocumentStore) ToModels() []models.OnboardingDocument {
 	return result
 }
 
+// readFileInRoot opens a file within dir using os.OpenInRoot, which guarantees the resolved path cannot escape dir even
+// via symbolic links or OS-specific tricks. This is the Go 1.24+ standard library approach to traversal-resistant file
+// access.
+func readFileInRoot(dir, name string) ([]byte, error) {
+	f, err := os.OpenInRoot(dir, name)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	return io.ReadAll(f)
+}
+
 // validateManifestEntry checks a single manifest entry for validity.
 func validateManifestEntry(entry manifestEntry, seen map[string]struct{}) error {
 	if !slugPattern.MatchString(entry.Slug) {
@@ -162,7 +174,7 @@ func validateManifestEntry(entry manifestEntry, seen map[string]struct{}) error 
 	if strings.TrimSpace(entry.Title) == "" {
 		return fmt.Errorf("document %q has an empty title", entry.Slug)
 	}
-	if strings.ContainsAny(entry.File, `/\`) || strings.Contains(entry.File, "..") {
+	if !filepath.IsLocal(entry.File) {
 		return fmt.Errorf("document %q file path %q contains directory traversal", entry.Slug, entry.File)
 	}
 	return nil

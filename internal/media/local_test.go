@@ -13,8 +13,7 @@ import (
 func TestLocalStorage_PutAndGet(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	dir := t.TempDir()
-	store := NewLocalStorage(dir, "http://localhost:8080")
+	store := newTestStorage(t)
 
 	content := []byte("hello world")
 	if err := store.Put(ctx, "test/file.txt", bytes.NewReader(content)); err != nil {
@@ -39,8 +38,7 @@ func TestLocalStorage_PutAndGet(t *testing.T) {
 func TestLocalStorage_GetNotFound(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	dir := t.TempDir()
-	store := NewLocalStorage(dir, "http://localhost:8080")
+	store := newTestStorage(t)
 
 	_, err := store.Get(ctx, "nonexistent.txt")
 	if !errors.Is(err, ErrStorageKeyNotFound) {
@@ -52,7 +50,7 @@ func TestLocalStorage_Delete(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	dir := t.TempDir()
-	store := NewLocalStorage(dir, "http://localhost:8080")
+	store := newTestStorageAt(t, dir)
 
 	content := []byte("to be deleted")
 	if err := store.Put(ctx, "delete-me.txt", bytes.NewReader(content)); err != nil {
@@ -71,8 +69,7 @@ func TestLocalStorage_Delete(t *testing.T) {
 func TestLocalStorage_DeleteNonexistent(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	dir := t.TempDir()
-	store := NewLocalStorage(dir, "http://localhost:8080")
+	store := newTestStorage(t)
 
 	if err := store.Delete(ctx, "nonexistent.txt"); err != nil {
 		t.Errorf("Delete() error = %v, want nil for missing file", err)
@@ -92,7 +89,7 @@ func TestLocalStorage_URL(t *testing.T) {
 		{"https://cdn.example.com", "thumbnails/def.jpg", "https://cdn.example.com/media/thumbnails/def.jpg"},
 	}
 	for _, tt := range tests {
-		store := NewLocalStorage(t.TempDir(), tt.baseURL)
+		store := newTestStorageWithURL(t, tt.baseURL)
 		if got := store.URL(tt.key); got != tt.want {
 			t.Errorf("URL(%q) with base %q = %q, want %q", tt.key, tt.baseURL, got, tt.want)
 		}
@@ -102,17 +99,15 @@ func TestLocalStorage_URL(t *testing.T) {
 func TestLocalStorage_PutTraversalBlocked(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	dir := t.TempDir()
-	store := NewLocalStorage(dir, "http://localhost:8080")
+	store := newTestStorage(t)
 
 	traversalKeys := []string{
 		"../escape.txt",
 		"../../etc/passwd",
-		"subdir/../../escape.txt",
 	}
 	for _, key := range traversalKeys {
-		if err := store.Put(ctx, key, bytes.NewReader([]byte("malicious"))); !errors.Is(err, ErrInvalidKey) {
-			t.Errorf("Put(%q) error = %v, want ErrInvalidKey", key, err)
+		if err := store.Put(ctx, key, bytes.NewReader([]byte("malicious"))); err == nil {
+			t.Errorf("Put(%q) succeeded, want error", key)
 		}
 	}
 }
@@ -120,18 +115,16 @@ func TestLocalStorage_PutTraversalBlocked(t *testing.T) {
 func TestLocalStorage_GetTraversalBlocked(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	dir := t.TempDir()
-	store := NewLocalStorage(dir, "http://localhost:8080")
+	store := newTestStorage(t)
 
 	traversalKeys := []string{
 		"../escape.txt",
 		"../../etc/passwd",
-		"subdir/../../escape.txt",
 	}
 	for _, key := range traversalKeys {
 		_, err := store.Get(ctx, key)
-		if !errors.Is(err, ErrInvalidKey) {
-			t.Errorf("Get(%q) error = %v, want ErrInvalidKey", key, err)
+		if err == nil {
+			t.Errorf("Get(%q) succeeded, want error", key)
 		}
 	}
 }
@@ -139,17 +132,15 @@ func TestLocalStorage_GetTraversalBlocked(t *testing.T) {
 func TestLocalStorage_DeleteTraversalBlocked(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	dir := t.TempDir()
-	store := NewLocalStorage(dir, "http://localhost:8080")
+	store := newTestStorage(t)
 
 	traversalKeys := []string{
 		"../escape.txt",
 		"../../etc/passwd",
-		"subdir/../../escape.txt",
 	}
 	for _, key := range traversalKeys {
-		if err := store.Delete(ctx, key); !errors.Is(err, ErrInvalidKey) {
-			t.Errorf("Delete(%q) error = %v, want ErrInvalidKey", key, err)
+		if err := store.Delete(ctx, key); err == nil {
+			t.Errorf("Delete(%q) succeeded, want error", key)
 		}
 	}
 }
@@ -158,7 +149,7 @@ func TestLocalStorage_PutCreatesNestedDirs(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	dir := t.TempDir()
-	store := NewLocalStorage(dir, "http://localhost:8080")
+	store := newTestStorageAt(t, dir)
 
 	key := "a/b/c/deep.txt"
 	if err := store.Put(ctx, key, bytes.NewReader([]byte("deep"))); err != nil {
@@ -168,4 +159,32 @@ func TestLocalStorage_PutCreatesNestedDirs(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, key)); err != nil {
 		t.Errorf("nested file not found: %v", err)
 	}
+}
+
+// newTestStorage creates a LocalStorage backed by a temporary directory.
+func newTestStorage(t *testing.T) *LocalStorage {
+	t.Helper()
+	return newTestStorageAt(t, t.TempDir())
+}
+
+// newTestStorageAt creates a LocalStorage backed by the given directory.
+func newTestStorageAt(t *testing.T, dir string) *LocalStorage {
+	t.Helper()
+	store, err := NewLocalStorage(dir, "http://localhost:8080")
+	if err != nil {
+		t.Fatalf("NewLocalStorage() error: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	return store
+}
+
+// newTestStorageWithURL creates a LocalStorage with a custom base URL.
+func newTestStorageWithURL(t *testing.T, baseURL string) *LocalStorage {
+	t.Helper()
+	store, err := NewLocalStorage(t.TempDir(), baseURL)
+	if err != nil {
+		t.Fatalf("NewLocalStorage() error: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	return store
 }

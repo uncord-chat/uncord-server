@@ -80,7 +80,11 @@ func TestThumbnailWorker_GenerateThumbnail(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	store := NewLocalStorage(dir, "http://localhost:8080")
+	store, err := NewLocalStorage(dir, "http://localhost:8080")
+	if err != nil {
+		t.Fatalf("NewLocalStorage() error: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
 
 	storageKey := "attachments/test.png"
 	if err := store.Put(ctx, storageKey, bytes.NewReader(imgBuf.Bytes())); err != nil {

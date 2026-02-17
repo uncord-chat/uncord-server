@@ -7,7 +7,6 @@ import (
 	"html/template"
 	"os"
 	"os/signal"
-	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -271,7 +270,12 @@ func run() error {
 	var storage media.StorageProvider
 	switch cfg.StorageBackend {
 	case "local":
-		storage = media.NewLocalStorage(cfg.StorageLocalPath, cfg.ServerURL)
+		localStorage, storageErr := media.NewLocalStorage(cfg.StorageLocalPath, cfg.ServerURL)
+		if storageErr != nil {
+			return fmt.Errorf("initialise local storage: %w", storageErr)
+		}
+		defer func() { _ = localStorage.Close() }()
+		storage = localStorage
 		log.Info().Str("path", cfg.StorageLocalPath).Msg("Local file storage initialised")
 	default:
 		return fmt.Errorf("unsupported storage backend: %q", cfg.StorageBackend)
@@ -644,16 +648,12 @@ func (s *server) registerRoutes(app *fiber.App) {
 	banGroup.Delete("/:userID", memberHandler.UnbanMember)
 
 	// Public media file serving (outside /api/v1/, no auth required). The UUID component of each storage key provides
-	// sufficient entropy to prevent guessing. The key is validated against traversal by cleaning the path and rejecting
-	// anything that normalises differently, contains parent references, uses absolute paths, or includes null bytes or
-	// backslashes.
+	// sufficient entropy to prevent guessing. Path traversal is handled by os.Root inside LocalStorage, which rejects
+	// any key that would escape the storage directory (including via symbolic links).
 	if _, ok := s.storage.(*media.LocalStorage); ok {
 		app.Get("/media/*", func(c fiber.Ctx) error {
 			key := c.Params("*")
-			if key == "" || strings.ContainsAny(key, "\x00\\") {
-				return fiber.ErrNotFound
-			}
-			if cleaned := path.Clean(key); cleaned != key || strings.HasPrefix(cleaned, "..") || path.IsAbs(cleaned) {
+			if key == "" {
 				return fiber.ErrNotFound
 			}
 			rc, err := s.storage.Get(c.Context(), key)
