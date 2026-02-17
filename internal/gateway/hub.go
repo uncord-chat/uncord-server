@@ -253,6 +253,7 @@ func (h *Hub) handleIdentify(client *Client, token string) {
 	readyPayload, err := json.Marshal(readyData)
 	if err != nil {
 		h.log.Error().Err(err).Msg("Failed to marshal READY payload")
+		client.closeWithCode(CloseUnknownError, "internal error")
 		return
 	}
 
@@ -260,6 +261,7 @@ func (h *Hub) handleIdentify(client *Client, token string) {
 	frame, err := NewDispatchFrame(seq, events.Ready, readyPayload)
 	if err != nil {
 		h.log.Error().Err(err).Msg("Failed to build READY frame")
+		client.closeWithCode(CloseUnknownError, "internal error")
 		return
 	}
 	client.enqueue(frame)
@@ -358,6 +360,7 @@ func (h *Hub) handleResume(client *Client, data models.ResumeData) {
 	frame, err := NewDispatchFrame(seq, events.Resumed, resumedData)
 	if err != nil {
 		h.log.Error().Err(err).Msg("Failed to build RESUMED frame")
+		client.closeWithCode(CloseUnknownError, "internal error")
 		return
 	}
 	client.enqueue(frame)
