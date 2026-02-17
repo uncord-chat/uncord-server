@@ -10,6 +10,9 @@ import (
 	"time"
 )
 
+// minJWTSecretLength is the minimum number of characters required for the JWT signing secret.
+const minJWTSecretLength = 32
+
 // Config holds application configuration populated from environment variables.
 type Config struct {
 	// Core
@@ -291,8 +294,8 @@ func (c *Config) validate() error {
 
 	if c.JWTSecret == "" {
 		errs = append(errs, fmt.Errorf("JWT_SECRET is required"))
-	} else if len(c.JWTSecret) < 32 {
-		errs = append(errs, fmt.Errorf("JWT_SECRET must be at least 32 characters"))
+	} else if len(c.JWTSecret) < minJWTSecretLength {
+		errs = append(errs, fmt.Errorf("JWT_SECRET must be at least %d characters", minJWTSecretLength))
 	}
 
 	if c.ServerPort < 1 || c.ServerPort > 65535 {
