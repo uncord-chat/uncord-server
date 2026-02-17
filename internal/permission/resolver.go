@@ -143,6 +143,45 @@ func (r *Resolver) FilterPermitted(ctx context.Context, userID uuid.UUID, channe
 	return result, nil
 }
 
+// FilterUsersPermitted returns a boolean slice indicating which of the given users have the requested permission in a
+// single channel. Each element corresponds to the user at the same index in the input slice. Cache entries are read and
+// written in bulk to minimise Redis round trips.
+func (r *Resolver) FilterUsersPermitted(ctx context.Context, userIDs []uuid.UUID, channelID uuid.UUID, perm permissions.Permission) ([]bool, error) {
+	result := make([]bool, len(userIDs))
+
+	// Bulk cache lookup: single MGET round trip instead of N individual GETs.
+	cached, cacheErr := r.cache.GetManyUsers(ctx, userIDs, channelID)
+	if cacheErr != nil {
+		r.log.Warn().Err(cacheErr).Msg("Permission cache batch user get failed, falling through to compute")
+		cached = nil
+	}
+
+	// Compute permissions for cache misses and collect them for a bulk SET.
+	toCache := make(map[uuid.UUID]permissions.Permission)
+	for i, uid := range userIDs {
+		if effective, ok := cached[uid]; ok {
+			result[i] = effective.Has(perm)
+			continue
+		}
+
+		effective, computeErr := r.compute(ctx, uid, channelID)
+		if computeErr != nil {
+			return nil, computeErr
+		}
+		result[i] = effective.Has(perm)
+		toCache[uid] = effective
+	}
+
+	// Bulk cache write: single pipelined round trip for all misses.
+	if len(toCache) > 0 {
+		if setErr := r.cache.SetManyUsers(ctx, channelID, toCache); setErr != nil {
+			r.log.Warn().Err(setErr).Msg("Permission cache batch user set failed")
+		}
+	}
+
+	return result, nil
+}
+
 // basePermissions performs steps 1 (owner bypass) and 2 (role union) of the permission algorithm. If the user is an
 // owner or has ManageServer, it returns AllPermissions with a nil roleIDs map as a signal that no further override
 // checks are needed.

@@ -284,3 +284,119 @@ func TestSetManyTTLApplied(t *testing.T) {
 		t.Errorf("SetMany key TTL = %v, want <= %v", ttl, CacheTTL)
 	}
 }
+
+func TestGetManyUsersAllHits(t *testing.T) {
+	t.Parallel()
+	_, cache := setupMiniRedis(t)
+	ctx := context.Background()
+	channelID := uuid.New()
+	u1, u2 := uuid.New(), uuid.New()
+	perm1 := permissions.ViewChannels
+	perm2 := permissions.SendMessages
+
+	_ = cache.Set(ctx, u1, channelID, perm1)
+	_ = cache.Set(ctx, u2, channelID, perm2)
+
+	got, err := cache.GetManyUsers(ctx, []uuid.UUID{u1, u2}, channelID)
+	if err != nil {
+		t.Fatalf("GetManyUsers() error = %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("GetManyUsers() returned %d entries, want 2", len(got))
+	}
+	if got[u1] != perm1 {
+		t.Errorf("GetManyUsers()[u1] = %d, want %d", got[u1], perm1)
+	}
+	if got[u2] != perm2 {
+		t.Errorf("GetManyUsers()[u2] = %d, want %d", got[u2], perm2)
+	}
+}
+
+func TestGetManyUsersPartialHits(t *testing.T) {
+	t.Parallel()
+	_, cache := setupMiniRedis(t)
+	ctx := context.Background()
+	channelID := uuid.New()
+	u1, u2 := uuid.New(), uuid.New()
+
+	_ = cache.Set(ctx, u1, channelID, permissions.ViewChannels)
+
+	got, err := cache.GetManyUsers(ctx, []uuid.UUID{u1, u2}, channelID)
+	if err != nil {
+		t.Fatalf("GetManyUsers() error = %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("GetManyUsers() returned %d entries, want 1", len(got))
+	}
+	if _, ok := got[u2]; ok {
+		t.Error("GetManyUsers() should not contain missing user")
+	}
+}
+
+func TestGetManyUsersEmpty(t *testing.T) {
+	t.Parallel()
+	_, cache := setupMiniRedis(t)
+	ctx := context.Background()
+
+	got, err := cache.GetManyUsers(ctx, nil, uuid.New())
+	if err != nil {
+		t.Fatalf("GetManyUsers() error = %v", err)
+	}
+	if got != nil {
+		t.Errorf("GetManyUsers(nil) = %v, want nil", got)
+	}
+}
+
+func TestSetManyUsersWritesAll(t *testing.T) {
+	t.Parallel()
+	_, cache := setupMiniRedis(t)
+	ctx := context.Background()
+	channelID := uuid.New()
+	u1, u2 := uuid.New(), uuid.New()
+	perm1 := permissions.ViewChannels
+	perm2 := permissions.SendMessages | permissions.EmbedLinks
+
+	err := cache.SetManyUsers(ctx, channelID, map[uuid.UUID]permissions.Permission{u1: perm1, u2: perm2})
+	if err != nil {
+		t.Fatalf("SetManyUsers() error = %v", err)
+	}
+
+	got1, ok1, _ := cache.Get(ctx, u1, channelID)
+	got2, ok2, _ := cache.Get(ctx, u2, channelID)
+	if !ok1 || got1 != perm1 {
+		t.Errorf("after SetManyUsers: u1 = %d (ok=%v), want %d", got1, ok1, perm1)
+	}
+	if !ok2 || got2 != perm2 {
+		t.Errorf("after SetManyUsers: u2 = %d (ok=%v), want %d", got2, ok2, perm2)
+	}
+}
+
+func TestSetManyUsersEmpty(t *testing.T) {
+	t.Parallel()
+	_, cache := setupMiniRedis(t)
+	ctx := context.Background()
+
+	err := cache.SetManyUsers(ctx, uuid.New(), nil)
+	if err != nil {
+		t.Fatalf("SetManyUsers(nil) error = %v", err)
+	}
+}
+
+func TestSetManyUsersTTLApplied(t *testing.T) {
+	t.Parallel()
+	mr, cache := setupMiniRedis(t)
+	ctx := context.Background()
+	channelID := uuid.New()
+	u := uuid.New()
+
+	_ = cache.SetManyUsers(ctx, channelID, map[uuid.UUID]permissions.Permission{u: permissions.ViewChannels})
+
+	key := cacheKey(u, channelID)
+	ttl := mr.TTL(key)
+	if ttl <= 0 {
+		t.Errorf("SetManyUsers key TTL = %v, want positive", ttl)
+	}
+	if ttl > CacheTTL {
+		t.Errorf("SetManyUsers key TTL = %v, want <= %v", ttl, CacheTTL)
+	}
+}

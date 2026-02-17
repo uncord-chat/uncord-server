@@ -87,7 +87,8 @@ func (h *MemberHandler) ListChannelMembers(c fiber.Ctx) error {
 	limit := member.ClampLimit(rawLimit)
 
 	// Fetch members in batches and filter by ViewChannels permission. The batch size is double the requested limit to
-	// minimise round trips when most members have the permission.
+	// minimise round trips when most members have the permission. Permission checks are batched per iteration via
+	// FilterUsersPermitted to avoid N+1 individual cache lookups.
 	const batchMultiplier = 2
 	batchSize := limit * batchMultiplier
 
@@ -101,13 +102,19 @@ func (h *MemberHandler) ListChannelMembers(c fiber.Ctx) error {
 			return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
 		}
 
+		userIDs := make([]uuid.UUID, len(batch))
 		for i := range batch {
-			allowed, err := h.resolver.HasPermission(c, batch[i].UserID, channelID, permissions.ViewChannels)
-			if err != nil {
-				h.log.Error().Err(err).Str("handler", "member").Msg("permission check failed")
-				return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
-			}
-			if allowed {
+			userIDs[i] = batch[i].UserID
+		}
+
+		permitted, err := h.resolver.FilterUsersPermitted(c, userIDs, channelID, permissions.ViewChannels)
+		if err != nil {
+			h.log.Error().Err(err).Str("handler", "member").Msg("permission check failed")
+			return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
+		}
+
+		for i := range batch {
+			if permitted[i] {
 				result = append(result, batch[i].ToModel())
 				if len(result) >= limit {
 					break

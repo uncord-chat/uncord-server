@@ -156,6 +156,14 @@ func (c *fakePermCache) SetMany(_ context.Context, _ uuid.UUID, _ map[uuid.UUID]
 	return nil
 }
 
+func (c *fakePermCache) GetManyUsers(_ context.Context, _ []uuid.UUID, _ uuid.UUID) (map[uuid.UUID]permissions.Permission, error) {
+	return nil, nil
+}
+
+func (c *fakePermCache) SetManyUsers(_ context.Context, _ uuid.UUID, _ map[uuid.UUID]permissions.Permission) error {
+	return nil
+}
+
 func (c *fakePermCache) DeleteByUser(_ context.Context, _ uuid.UUID) error    { return nil }
 func (c *fakePermCache) DeleteByChannel(_ context.Context, _ uuid.UUID) error { return nil }
 func (c *fakePermCache) DeleteExact(_ context.Context, _, _ uuid.UUID) error  { return nil }

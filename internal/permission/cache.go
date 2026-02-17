@@ -36,6 +36,8 @@ type Cache interface {
 	Set(ctx context.Context, userID, channelID uuid.UUID, perm permissions.Permission) error
 	GetMany(ctx context.Context, userID uuid.UUID, channelIDs []uuid.UUID) (map[uuid.UUID]permissions.Permission, error)
 	SetMany(ctx context.Context, userID uuid.UUID, perms map[uuid.UUID]permissions.Permission) error
+	GetManyUsers(ctx context.Context, userIDs []uuid.UUID, channelID uuid.UUID) (map[uuid.UUID]permissions.Permission, error)
+	SetManyUsers(ctx context.Context, channelID uuid.UUID, perms map[uuid.UUID]permissions.Permission) error
 	DeleteByUser(ctx context.Context, userID uuid.UUID) error
 	DeleteByChannel(ctx context.Context, channelID uuid.UUID) error
 	DeleteExact(ctx context.Context, userID, channelID uuid.UUID) error
@@ -126,6 +128,59 @@ func (c *ValkeyCache) SetMany(ctx context.Context, userID uuid.UUID, perms map[u
 	_, err := pipe.Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("cache pipeline set: %w", err)
+	}
+	return nil
+}
+
+// GetManyUsers retrieves cached permissions for multiple users in a single channel via a batched MGET round trip. The
+// returned map contains only the users that were found in the cache; missing users are omitted.
+func (c *ValkeyCache) GetManyUsers(ctx context.Context, userIDs []uuid.UUID, channelID uuid.UUID) (map[uuid.UUID]permissions.Permission, error) {
+	if len(userIDs) == 0 {
+		return nil, nil
+	}
+
+	keys := make([]string, len(userIDs))
+	for i, uid := range userIDs {
+		keys[i] = cacheKey(uid, channelID)
+	}
+
+	vals, err := c.client.MGet(ctx, keys...).Result()
+	if err != nil {
+		return nil, fmt.Errorf("cache mget users: %w", err)
+	}
+
+	result := make(map[uuid.UUID]permissions.Permission, len(userIDs))
+	for i, val := range vals {
+		if val == nil {
+			continue
+		}
+		s, ok := val.(string)
+		if !ok {
+			continue
+		}
+		n, parseErr := strconv.ParseInt(s, 10, 64)
+		if parseErr != nil {
+			continue
+		}
+		result[userIDs[i]] = permissions.Permission(n)
+	}
+
+	return result, nil
+}
+
+// SetManyUsers writes permission entries for multiple users in a single channel via a pipelined round trip.
+func (c *ValkeyCache) SetManyUsers(ctx context.Context, channelID uuid.UUID, perms map[uuid.UUID]permissions.Permission) error {
+	if len(perms) == 0 {
+		return nil
+	}
+
+	pipe := c.client.Pipeline()
+	for uid, perm := range perms {
+		pipe.Set(ctx, cacheKey(uid, channelID), strconv.FormatInt(int64(perm), 10), CacheTTL)
+	}
+	_, err := pipe.Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("cache pipeline set users: %w", err)
 	}
 	return nil
 }

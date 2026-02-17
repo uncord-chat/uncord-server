@@ -2,6 +2,7 @@ package permission
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -92,6 +93,12 @@ func (c *noopCache) GetMany(_ context.Context, _ uuid.UUID, _ []uuid.UUID) (map[
 	return nil, nil
 }
 func (c *noopCache) SetMany(context.Context, uuid.UUID, map[uuid.UUID]permissions.Permission) error {
+	return nil
+}
+func (c *noopCache) GetManyUsers(_ context.Context, _ []uuid.UUID, _ uuid.UUID) (map[uuid.UUID]permissions.Permission, error) {
+	return nil, nil
+}
+func (c *noopCache) SetManyUsers(context.Context, uuid.UUID, map[uuid.UUID]permissions.Permission) error {
 	return nil
 }
 func (c *noopCache) DeleteByUser(context.Context, uuid.UUID) error    { return nil }
@@ -195,6 +202,32 @@ func (c *fakeCache) SetMany(_ context.Context, userID uuid.UUID, perms map[uuid.
 	}
 	for chID, perm := range perms {
 		key := userID.String() + ":" + chID.String()
+		c.data[key] = perm
+	}
+	return nil
+}
+
+func (c *fakeCache) GetManyUsers(_ context.Context, userIDs []uuid.UUID, channelID uuid.UUID) (map[uuid.UUID]permissions.Permission, error) {
+	if c.getErr != nil {
+		return nil, c.getErr
+	}
+	result := make(map[uuid.UUID]permissions.Permission, len(userIDs))
+	for _, uid := range userIDs {
+		key := uid.String() + ":" + channelID.String()
+		if perm, ok := c.data[key]; ok {
+			result[uid] = perm
+		}
+	}
+	return result, nil
+}
+
+func (c *fakeCache) SetManyUsers(_ context.Context, channelID uuid.UUID, perms map[uuid.UUID]permissions.Permission) error {
+	c.setCalled = true
+	if c.setErr != nil {
+		return c.setErr
+	}
+	for uid, perm := range perms {
+		key := uid.String() + ":" + channelID.String()
 		c.data[key] = perm
 	}
 	return nil
@@ -1081,5 +1114,108 @@ func TestFilterPermitted_EmptyChannelList(t *testing.T) {
 	}
 	if len(result) != 0 {
 		t.Errorf("FilterPermitted(nil) = %v, want empty", result)
+	}
+}
+
+// --- FilterUsersPermitted tests ---
+
+func TestFilterUsersPermitted_AllCacheHits(t *testing.T) {
+	t.Parallel()
+	channelID := uuid.New()
+	u1, u2 := uuid.New(), uuid.New()
+
+	cache := newFakeCache()
+	perm := permissions.ViewChannels | permissions.SendMessages
+	cache.data[u1.String()+":"+channelID.String()] = perm
+	cache.data[u2.String()+":"+channelID.String()] = permissions.SendMessages // no ViewChannels
+
+	store := &fakeStore{}
+	r := NewResolver(store, cache, zerolog.Nop())
+
+	result, err := r.FilterUsersPermitted(context.Background(), []uuid.UUID{u1, u2}, channelID, permissions.ViewChannels)
+	if err != nil {
+		t.Fatalf("FilterUsersPermitted() error = %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("FilterUsersPermitted() returned %d results, want 2", len(result))
+	}
+	if !result[0] {
+		t.Error("user 1 should be permitted (has ViewChannels)")
+	}
+	if result[1] {
+		t.Error("user 2 should not be permitted (missing ViewChannels)")
+	}
+	// Store should not have been called since everything was cached.
+	if store.isOwnerCalled {
+		t.Error("store.IsOwner should not be called when all entries are cached")
+	}
+}
+
+func TestFilterUsersPermitted_MissesComputedAndCached(t *testing.T) {
+	t.Parallel()
+	roleID := uuid.New()
+	channelID := uuid.New()
+	u1 := uuid.New()
+
+	store := &fakeStore{
+		roleEntries: []RolePermEntry{
+			{RoleID: roleID, Permissions: permissions.ViewChannels | permissions.SendMessages},
+		},
+		chanInfo: ChannelInfo{ID: channelID},
+	}
+	cache := newFakeCache()
+	r := NewResolver(store, cache, zerolog.Nop())
+
+	result, err := r.FilterUsersPermitted(context.Background(), []uuid.UUID{u1}, channelID, permissions.ViewChannels)
+	if err != nil {
+		t.Fatalf("FilterUsersPermitted() error = %v", err)
+	}
+	if !result[0] {
+		t.Error("user should be permitted after compute")
+	}
+	// Verify the result was cached.
+	key := u1.String() + ":" + channelID.String()
+	if _, ok := cache.data[key]; !ok {
+		t.Error("computed permission should have been written to cache")
+	}
+}
+
+func TestFilterUsersPermitted_EmptyUserList(t *testing.T) {
+	t.Parallel()
+	store := &fakeStore{}
+	cache := newFakeCache()
+	r := NewResolver(store, cache, zerolog.Nop())
+
+	result, err := r.FilterUsersPermitted(context.Background(), nil, uuid.New(), permissions.ViewChannels)
+	if err != nil {
+		t.Fatalf("FilterUsersPermitted() error = %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("FilterUsersPermitted(nil) = %v, want empty", result)
+	}
+}
+
+func TestFilterUsersPermitted_CacheGetErrorFallsThrough(t *testing.T) {
+	t.Parallel()
+	roleID := uuid.New()
+	channelID := uuid.New()
+	u1 := uuid.New()
+
+	store := &fakeStore{
+		roleEntries: []RolePermEntry{
+			{RoleID: roleID, Permissions: permissions.ViewChannels},
+		},
+		chanInfo: ChannelInfo{ID: channelID},
+	}
+	cache := newFakeCache()
+	cache.getErr = errors.New("redis down")
+	r := NewResolver(store, cache, zerolog.Nop())
+
+	result, err := r.FilterUsersPermitted(context.Background(), []uuid.UUID{u1}, channelID, permissions.ViewChannels)
+	if err != nil {
+		t.Fatalf("FilterUsersPermitted() should not fail on cache error, got %v", err)
+	}
+	if !result[0] {
+		t.Error("user should be permitted after fallback compute")
 	}
 }
