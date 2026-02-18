@@ -166,10 +166,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*AuthResul
 		return nil, fmt.Errorf("hash password: %w", err)
 	}
 
-	verifyToken, err := generateSecureToken(verifyTokenBytes)
-	if err != nil {
-		return nil, fmt.Errorf("generate verification token: %w", err)
-	}
+	verifyToken := generateSecureToken(verifyTokenBytes)
 
 	userID, err := s.users.Create(ctx, user.CreateParams{
 		Email:        email,
@@ -330,10 +327,7 @@ func (s *Service) ResendVerification(ctx context.Context, userID uuid.UUID) erro
 		return ErrEmailAlreadyVerified
 	}
 
-	verifyToken, err := generateSecureToken(verifyTokenBytes)
-	if err != nil {
-		return fmt.Errorf("generate verification token: %w", err)
-	}
+	verifyToken := generateSecureToken(verifyTokenBytes)
 
 	err = s.users.ReplaceVerificationToken(ctx, userID, verifyToken, time.Now().Add(24*time.Hour), 60*time.Second)
 	if err != nil {
@@ -487,10 +481,7 @@ func (s *Service) ConfirmMFASetup(ctx context.Context, userID uuid.UUID, code st
 		return nil, ErrInvalidMFACode
 	}
 
-	codes, err := GenerateRecoveryCodes()
-	if err != nil {
-		return nil, fmt.Errorf("generate recovery codes: %w", err)
-	}
+	codes := GenerateRecoveryCodes()
 
 	hashes := make([]string, len(codes))
 	for i, c := range codes {
@@ -580,10 +571,7 @@ func (s *Service) RegenerateRecoveryCodes(ctx context.Context, userID uuid.UUID,
 		return nil, ErrMFANotEnabled
 	}
 
-	codes, err := GenerateRecoveryCodes()
-	if err != nil {
-		return nil, fmt.Errorf("generate recovery codes: %w", err)
-	}
+	codes := GenerateRecoveryCodes()
 
 	hashes := make([]string, len(codes))
 	for i, c := range codes {
@@ -753,10 +741,8 @@ func (s *Service) recordLoginAttempt(ctx context.Context, email, ip string, succ
 	}
 }
 
-func generateSecureToken(n int) (string, error) {
+func generateSecureToken(n int) string {
 	b := make([]byte, n)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(b), nil
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }

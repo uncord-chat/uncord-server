@@ -88,7 +88,7 @@ func TestBlocklistLazyCaching(t *testing.T) {
 	bl := NewBlocklist(srv.URL, true, 10*time.Second, zerolog.Nop())
 
 	// Call multiple times; should only fetch once
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		_, err := bl.IsBlocked(context.Background(), "mailinator.com")
 		if err != nil {
 			t.Fatalf("IsBlocked() call %d error = %v", i, err)

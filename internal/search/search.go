@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -238,13 +239,7 @@ func (s *Service) Search(ctx context.Context, userID uuid.UUID, query string, op
 
 	// If the caller specified a channel filter, intersect with the permitted set.
 	if opts.ChannelID != "" {
-		found := false
-		for _, id := range allowedIDs {
-			if id == opts.ChannelID {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(allowedIDs, opts.ChannelID)
 		if !found {
 			return emptyResponse(opts.Page, opts.PerPage), nil
 		}

@@ -88,13 +88,13 @@ func TestValidateName(t *testing.T) {
 		wantErr bool
 	}{
 		{"nil is valid", nil, "", false},
-		{"valid name", ptr("Moderator"), "Moderator", false},
-		{"trims whitespace", ptr("  Admin  "), "Admin", false},
-		{"single char", ptr("X"), "X", false},
-		{"100 chars", ptr(strings.Repeat("a", 100)), strings.Repeat("a", 100), false},
-		{"101 chars", ptr(strings.Repeat("a", 101)), "", true},
-		{"empty string", ptr(""), "", true},
-		{"whitespace only", ptr("   "), "", true},
+		{"valid name", new("Moderator"), "Moderator", false},
+		{"trims whitespace", new("  Admin  "), "Admin", false},
+		{"single char", new("X"), "X", false},
+		{"100 chars", new(strings.Repeat("a", 100)), strings.Repeat("a", 100), false},
+		{"101 chars", new(strings.Repeat("a", 101)), "", true},
+		{"empty string", new(""), "", true},
+		{"whitespace only", new("   "), "", true},
 	}
 
 	for _, tt := range tests {
@@ -129,11 +129,11 @@ func TestValidatePosition(t *testing.T) {
 		wantErr bool
 	}{
 		{"nil is valid", nil, false},
-		{"zero", intPtr(0), false},
-		{"positive", intPtr(42), false},
-		{"large positive", intPtr(999999), false},
-		{"negative one", intPtr(-1), true},
-		{"large negative", intPtr(-100), true},
+		{"zero", new(0), false},
+		{"positive", new(42), false},
+		{"large positive", new(999999), false},
+		{"negative one", new(-1), true},
+		{"large negative", new(-100), true},
 	}
 
 	for _, tt := range tests {
@@ -161,13 +161,13 @@ func TestValidatePermissions(t *testing.T) {
 		wantErr bool
 	}{
 		{"nil is valid", nil, false},
-		{"zero", int64Ptr(0), false},
-		{"all permissions", int64Ptr(all), false},
-		{"single valid bit", int64Ptr(int64(permissions.ViewChannels)), false},
-		{"combined valid bits", int64Ptr(int64(permissions.ViewChannels | permissions.SendMessages)), false},
-		{"bit above all permissions", int64Ptr(all + 1), true},
-		{"high invalid bit", int64Ptr(1 << 50), true},
-		{"negative", int64Ptr(-1), true},
+		{"zero", new(int64(0)), false},
+		{"all permissions", new(all), false},
+		{"single valid bit", new(int64(permissions.ViewChannels)), false},
+		{"combined valid bits", new(int64(permissions.ViewChannels | permissions.SendMessages)), false},
+		{"bit above all permissions", new(all + 1), true},
+		{"high invalid bit", new(int64(1 << 50)), true},
+		{"negative", new(int64(-1)), true},
 	}
 
 	for _, tt := range tests {
@@ -193,12 +193,12 @@ func TestValidateColour(t *testing.T) {
 		wantErr bool
 	}{
 		{"nil is valid", nil, false},
-		{"zero", intPtr(0), false},
-		{"max RGB", intPtr(0xFFFFFF), false},
-		{"mid range", intPtr(0x7F7F7F), false},
-		{"one over max", intPtr(0xFFFFFF + 1), true},
-		{"negative", intPtr(-1), true},
-		{"large negative", intPtr(-999999), true},
+		{"zero", new(0), false},
+		{"max RGB", new(0xFFFFFF), false},
+		{"mid range", new(0x7F7F7F), false},
+		{"one over max", new(0xFFFFFF + 1), true},
+		{"negative", new(-1), true},
+		{"large negative", new(-999999), true},
 	}
 
 	for _, tt := range tests {
@@ -214,7 +214,3 @@ func TestValidateColour(t *testing.T) {
 		})
 	}
 }
-
-func ptr(s string) *string    { return &s }
-func intPtr(i int) *int       { return &i }
-func int64Ptr(i int64) *int64 { return &i }

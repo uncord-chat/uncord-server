@@ -14,12 +14,12 @@ const (
 
 // IsUniqueViolation reports whether err represents a PostgreSQL unique constraint violation (SQLSTATE 23505).
 func IsUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == codeUniqueViolation
+	pgErr, ok := errors.AsType[*pgconn.PgError](err)
+	return ok && pgErr.Code == codeUniqueViolation
 }
 
 // IsForeignKeyViolation reports whether err represents a PostgreSQL foreign key constraint violation (SQLSTATE 23503).
 func IsForeignKeyViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == codeForeignKeyViolation
+	pgErr, ok := errors.AsType[*pgconn.PgError](err)
+	return ok && pgErr.Code == codeForeignKeyViolation
 }

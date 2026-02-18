@@ -883,19 +883,20 @@ func TestCreateMessage_TooManyAttachments(t *testing.T) {
 	userID := uuid.New()
 
 	// Create 11 IDs to exceed the limit of 10.
-	ids := "["
+	var ids strings.Builder
+	ids.WriteString("[")
 	for i := range 11 {
 		if i > 0 {
-			ids += ","
+			ids.WriteString(",")
 		}
-		ids += `"` + uuid.New().String() + `"`
+		ids.WriteString(`"` + uuid.New().String() + `"`)
 	}
-	ids += "]"
+	ids.WriteString("]")
 
 	app := testMessageAppWithAttachments(t, msgRepo, attRepo, allowAllResolver(), userID)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/channels/"+channelID.String()+"/messages",
-		`{"content":"hello","attachment_ids":`+ids+`}`))
+		`{"content":"hello","attachment_ids":`+ids.String()+`}`))
 	body := readBody(t, resp)
 
 	if resp.StatusCode != fiber.StatusBadRequest {

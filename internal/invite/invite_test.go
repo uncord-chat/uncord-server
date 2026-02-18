@@ -5,18 +5,16 @@ import "testing"
 func TestValidateMaxUses(t *testing.T) {
 	t.Parallel()
 
-	ptr := func(v int) *int { return &v }
-
 	tests := []struct {
 		name    string
 		input   *int
 		wantErr bool
 	}{
 		{"nil is valid", nil, false},
-		{"zero is valid", ptr(0), false},
-		{"positive is valid", ptr(10), false},
-		{"negative is invalid", ptr(-1), true},
-		{"large negative is invalid", ptr(-100), true},
+		{"zero is valid", new(0), false},
+		{"positive is valid", new(10), false},
+		{"negative is invalid", new(-1), true},
+		{"large negative is invalid", new(-100), true},
 	}
 
 	for _, tt := range tests {
@@ -33,18 +31,16 @@ func TestValidateMaxUses(t *testing.T) {
 func TestValidateMaxAge(t *testing.T) {
 	t.Parallel()
 
-	ptr := func(v int) *int { return &v }
-
 	tests := []struct {
 		name    string
 		input   *int
 		wantErr bool
 	}{
 		{"nil is valid", nil, false},
-		{"zero is valid", ptr(0), false},
-		{"positive is valid", ptr(3600), false},
-		{"negative is invalid", ptr(-1), true},
-		{"large negative is invalid", ptr(-86400), true},
+		{"zero is valid", new(0), false},
+		{"positive is valid", new(3600), false},
+		{"negative is invalid", new(-1), true},
+		{"large negative is invalid", new(-86400), true},
 	}
 
 	for _, tt := range tests {

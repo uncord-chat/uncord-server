@@ -15,11 +15,11 @@ func TestValidateName(t *testing.T) {
 		wantErr bool
 	}{
 		{"nil", nil, false},
-		{"empty after trim", ptr("   "), true},
-		{"one char", ptr("A"), false},
-		{"100 chars", ptr(strings.Repeat("a", 100)), false},
-		{"101 chars", ptr(strings.Repeat("a", 101)), true},
-		{"whitespace padded valid", ptr("  hello  "), false},
+		{"empty after trim", new("   "), true},
+		{"one char", new("A"), false},
+		{"100 chars", new(strings.Repeat("a", 100)), false},
+		{"101 chars", new(strings.Repeat("a", 101)), true},
+		{"whitespace padded valid", new("  hello  "), false},
 	}
 
 	for _, tt := range tests {
@@ -37,7 +37,7 @@ func TestValidateName(t *testing.T) {
 
 	t.Run("trims whitespace in place", func(t *testing.T) {
 		t.Parallel()
-		name := ptr("  hello  ")
+		name := new("  hello  ")
 		if err := ValidateName(name); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -87,9 +87,9 @@ func TestValidatePosition(t *testing.T) {
 		wantErr bool
 	}{
 		{"nil", nil, false},
-		{"zero", intPtr(0), false},
-		{"positive", intPtr(5), false},
-		{"negative", intPtr(-1), true},
+		{"zero", new(0), false},
+		{"positive", new(5), false},
+		{"negative", new(-1), true},
 	}
 
 	for _, tt := range tests {
@@ -105,6 +105,3 @@ func TestValidatePosition(t *testing.T) {
 		})
 	}
 }
-
-func ptr(s string) *string { return &s }
-func intPtr(n int) *int    { return &n }

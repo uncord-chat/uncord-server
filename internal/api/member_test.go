@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -44,10 +45,7 @@ func (r *fakeMemberRepo) List(_ context.Context, after *uuid.UUID, limit int) ([
 	if start >= len(r.members) {
 		return nil, nil
 	}
-	end := start + limit
-	if end > len(r.members) {
-		end = len(r.members)
-	}
+	end := min(start+limit, len(r.members))
 	return r.members[start:end], nil
 }
 
@@ -146,10 +144,7 @@ func (r *fakeMemberRepo) ListBans(_ context.Context, after *uuid.UUID, limit int
 	if start >= len(r.bans) {
 		return nil, nil
 	}
-	end := start + limit
-	if end > len(r.bans) {
-		end = len(r.bans)
-	}
+	end := min(start+limit, len(r.bans))
 	return r.bans[start:end], nil
 }
 
@@ -163,10 +158,8 @@ func (r *fakeMemberRepo) IsBanned(_ context.Context, userID uuid.UUID) (bool, er
 }
 
 func (r *fakeMemberRepo) AssignRole(_ context.Context, userID, roleID uuid.UUID) error {
-	for _, id := range r.roles[userID] {
-		if id == roleID {
-			return member.ErrAlreadyMember
-		}
+	if slices.Contains(r.roles[userID], roleID) {
+		return member.ErrAlreadyMember
 	}
 	r.roles[userID] = append(r.roles[userID], roleID)
 	// Update the member's RoleIDs so the re-fetched profile reflects the change.

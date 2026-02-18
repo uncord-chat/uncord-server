@@ -65,10 +65,7 @@ func TestEncryptTOTPSecretInvalidKey(t *testing.T) {
 func TestGenerateRecoveryCodes(t *testing.T) {
 	t.Parallel()
 
-	codes, err := GenerateRecoveryCodes()
-	if err != nil {
-		t.Fatalf("GenerateRecoveryCodes() error = %v", err)
-	}
+	codes := GenerateRecoveryCodes()
 	if len(codes) != recoveryCodeCount {
 		t.Fatalf("GenerateRecoveryCodes() returned %d codes, want %d", len(codes), recoveryCodeCount)
 	}

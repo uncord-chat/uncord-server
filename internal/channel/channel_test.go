@@ -15,11 +15,11 @@ func TestValidateName(t *testing.T) {
 		wantErr bool
 	}{
 		{"nil", nil, false},
-		{"empty after trim", ptr("   "), true},
-		{"one char", ptr("A"), false},
-		{"100 chars", ptr(strings.Repeat("a", 100)), false},
-		{"101 chars", ptr(strings.Repeat("a", 101)), true},
-		{"whitespace padded valid", ptr("  general  "), false},
+		{"empty after trim", new("   "), true},
+		{"one char", new("A"), false},
+		{"100 chars", new(strings.Repeat("a", 100)), false},
+		{"101 chars", new(strings.Repeat("a", 101)), true},
+		{"whitespace padded valid", new("  general  "), false},
 	}
 
 	for _, tt := range tests {
@@ -37,7 +37,7 @@ func TestValidateName(t *testing.T) {
 
 	t.Run("trims whitespace in place", func(t *testing.T) {
 		t.Parallel()
-		name := ptr("  general  ")
+		name := new("  general  ")
 		if err := ValidateName(name); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -118,9 +118,9 @@ func TestValidateTopic(t *testing.T) {
 		wantErr bool
 	}{
 		{"nil", nil, false},
-		{"empty", ptr(""), false},
-		{"1024 chars", ptr(strings.Repeat("a", 1024)), false},
-		{"1025 chars", ptr(strings.Repeat("a", 1025)), true},
+		{"empty", new(""), false},
+		{"1024 chars", new(strings.Repeat("a", 1024)), false},
+		{"1025 chars", new(strings.Repeat("a", 1025)), true},
 	}
 
 	for _, tt := range tests {
@@ -146,10 +146,10 @@ func TestValidateSlowmode(t *testing.T) {
 		wantErr bool
 	}{
 		{"nil", nil, false},
-		{"zero", intPtr(0), false},
-		{"max", intPtr(21600), false},
-		{"over max", intPtr(21601), true},
-		{"negative", intPtr(-1), true},
+		{"zero", new(0), false},
+		{"max", new(21600), false},
+		{"over max", new(21601), true},
+		{"negative", new(-1), true},
 	}
 
 	for _, tt := range tests {
@@ -175,9 +175,9 @@ func TestValidatePosition(t *testing.T) {
 		wantErr bool
 	}{
 		{"nil", nil, false},
-		{"zero", intPtr(0), false},
-		{"positive", intPtr(5), false},
-		{"negative", intPtr(-1), true},
+		{"zero", new(0), false},
+		{"positive", new(5), false},
+		{"negative", new(-1), true},
 	}
 
 	for _, tt := range tests {
@@ -193,6 +193,3 @@ func TestValidatePosition(t *testing.T) {
 		})
 	}
 }
-
-func ptr(s string) *string { return &s }
-func intPtr(n int) *int    { return &n }

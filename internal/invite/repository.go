@@ -206,7 +206,7 @@ func generateCode() (string, error) {
 	alphabetLen := big.NewInt(int64(len(codeAlphabet)))
 	buf := make([]byte, codeLength)
 	for i := range buf {
-		n, err := rand.Int(rand.Reader, alphabetLen)
+		n, err := rand.Int(nil, alphabetLen)
 		if err != nil {
 			return "", fmt.Errorf("crypto/rand: %w", err)
 		}

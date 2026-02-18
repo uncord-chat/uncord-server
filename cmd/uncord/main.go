@@ -198,18 +198,14 @@ func run() error {
 	defer subCancel()
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		blocklist.Run(subCtx, cfg.DisposableEmailBlocklistRefreshInterval)
-	}()
+	})
 
 	// The purge goroutine is started below after the attachment repository is initialised, because orphan attachment
 	// cleanup needs access to the repo and storage provider.
 	startPurgeGoroutine := func(attachRepo *attachment.PGRepository, storage media.StorageProvider) {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			purgeExpiredData(subCtx, userRepo, attachRepo, storage, cfg)
 
 			ticker := time.NewTicker(cfg.DataCleanupInterval)
@@ -222,16 +218,14 @@ func run() error {
 					purgeExpiredData(subCtx, userRepo, attachRepo, storage, cfg)
 				}
 			}
-		}()
+		})
 	}
 
 	// Start permission cache invalidation subscriber with reconnection.
 	permSub := permission.NewSubscriber(permCache, rdb, log.Logger)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		runWithBackoff(subCtx, "permission-cache-subscriber", permSub.Run)
-	}()
+	})
 
 	// Load external templates from DATA_DIR (nil means use compiled-in defaults).
 	verificationTmpl, verifyPageTmpl, err := loadTemplates(cfg.DataDir)
@@ -301,11 +295,9 @@ func run() error {
 	// Start thumbnail worker with reconnection.
 	thumbWorker := media.NewThumbnailWorker(rdb, storage, attachmentRepo, log.Logger)
 	thumbWorker.EnsureStream(subCtx)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		runWithBackoff(subCtx, "thumbnail-worker", thumbWorker.Run)
-	}()
+	})
 	authService, err := auth.NewService(userRepo, rdb, cfg, blocklist, emailSender, serverRepo, permPublisher, log.Logger)
 	if err != nil {
 		return fmt.Errorf("create auth service: %w", err)
@@ -329,11 +321,9 @@ func run() error {
 		DocumentStore:  documentStore,
 		Logger:         log.Logger,
 	})
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		runWithBackoff(subCtx, "gateway-hub", gatewayHub.Run)
-	}()
+	})
 
 	app := newFiberApp(cfg)
 
@@ -704,11 +694,11 @@ func newFiberApp(cfg *config.Config) *fiber.App {
 		// (e.g. Fiber's built-in 404/405). errors.AsType is a generic helper added in Go 1.26.
 		ErrorHandler: func(c fiber.Ctx, err error) error {
 			status := fiber.StatusInternalServerError
-			message := "An internal error occurred"
+			msg := "An internal error occurred"
 			apiCode := apierrors.InternalError
 			if e, ok := errors.AsType[*fiber.Error](err); ok {
 				status = e.Code
-				message = e.Message
+				msg = e.Message
 				apiCode = fiberStatusToAPICode(e.Code)
 			} else {
 				log.Error().Err(err).
@@ -719,7 +709,7 @@ func newFiberApp(cfg *config.Config) *fiber.App {
 			return c.Status(status).JSON(httputil.ErrorResponse{
 				Error: httputil.ErrorBody{
 					Code:    apiCode,
-					Message: message,
+					Message: msg,
 				},
 			})
 		},

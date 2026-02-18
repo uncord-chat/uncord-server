@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"slices"
 	"testing"
 	"time"
 
@@ -71,10 +72,7 @@ func (r *fakeInviteRepo) List(_ context.Context, after *uuid.UUID, limit int) ([
 	if start >= len(r.invites) {
 		return nil, nil
 	}
-	end := start + limit
-	if end > len(r.invites) {
-		end = len(r.invites)
-	}
+	end := min(start+limit, len(r.invites))
 	return r.invites[start:end], nil
 }
 
@@ -198,10 +196,8 @@ func newFakeInviteMemberRepo() *fakeInviteMemberRepo {
 }
 
 func (r *fakeInviteMemberRepo) IsBanned(_ context.Context, userID uuid.UUID) (bool, error) {
-	for _, id := range r.bans {
-		if id == userID {
-			return true, nil
-		}
+	if slices.Contains(r.bans, userID) {
+		return true, nil
 	}
 	return false, nil
 }

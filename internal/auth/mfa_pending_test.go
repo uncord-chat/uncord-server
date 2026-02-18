@@ -145,7 +145,7 @@ func TestResetMFASetupAttempts(t *testing.T) {
 	ctx := context.Background()
 	userID := uuid.New()
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		if _, err := IncrementMFASetupAttempts(ctx, rdb, userID); err != nil {
 			t.Fatalf("IncrementMFASetupAttempts() error = %v", err)
 		}

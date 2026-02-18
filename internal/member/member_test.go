@@ -8,8 +8,6 @@ import (
 func TestValidateNickname(t *testing.T) {
 	t.Parallel()
 
-	ptr := func(s string) *string { return &s }
-
 	tests := []struct {
 		name    string
 		input   *string
@@ -17,15 +15,15 @@ func TestValidateNickname(t *testing.T) {
 		want    string
 	}{
 		{"nil clears nickname", nil, false, ""},
-		{"valid nickname", ptr("alice"), false, "alice"},
-		{"single character", ptr("a"), false, "a"},
-		{"max 32 characters", ptr(strings.Repeat("a", 32)), false, strings.Repeat("a", 32)},
-		{"exceeds 32 characters", ptr(strings.Repeat("a", 33)), true, ""},
-		{"empty string", ptr(""), true, ""},
-		{"whitespace only", ptr("   "), true, ""},
-		{"trims whitespace", ptr("  bob  "), false, "bob"},
-		{"multibyte runes within limit", ptr(strings.Repeat("\u00e9", 32)), false, strings.Repeat("\u00e9", 32)},
-		{"multibyte runes exceeding limit", ptr(strings.Repeat("\u00e9", 33)), true, ""},
+		{"valid nickname", new("alice"), false, "alice"},
+		{"single character", new("a"), false, "a"},
+		{"max 32 characters", new(strings.Repeat("a", 32)), false, strings.Repeat("a", 32)},
+		{"exceeds 32 characters", new(strings.Repeat("a", 33)), true, ""},
+		{"empty string", new(""), true, ""},
+		{"whitespace only", new("   "), true, ""},
+		{"trims whitespace", new("  bob  "), false, "bob"},
+		{"multibyte runes within limit", new(strings.Repeat("\u00e9", 32)), false, strings.Repeat("\u00e9", 32)},
+		{"multibyte runes exceeding limit", new(strings.Repeat("\u00e9", 33)), true, ""},
 	}
 
 	for _, tt := range tests {

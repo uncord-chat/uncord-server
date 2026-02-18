@@ -29,9 +29,7 @@ func EncryptTOTPSecret(secret, hexKey string) (string, error) {
 	}
 
 	nonce := make([]byte, gcm.NonceSize())
-	if _, err := rand.Read(nonce); err != nil {
-		return "", fmt.Errorf("generate nonce: %w", err)
-	}
+	_, _ = rand.Read(nonce)
 
 	ciphertext := gcm.Seal(nonce, nonce, []byte(secret), nil)
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
@@ -77,17 +75,15 @@ const recoveryCodeCount = 10
 
 // GenerateRecoveryCodes generates a set of recovery codes in the format "xxxx-xxxx-xxxx-xxxx-xxxx" where each group is
 // 4 hex characters. Each code represents 10 random bytes (80 bits of entropy).
-func GenerateRecoveryCodes() ([]string, error) {
+func GenerateRecoveryCodes() []string {
 	codes := make([]string, recoveryCodeCount)
 	for i := range codes {
 		b := make([]byte, 10)
-		if _, err := rand.Read(b); err != nil {
-			return nil, fmt.Errorf("generate recovery code: %w", err)
-		}
+		_, _ = rand.Read(b)
 		h := hex.EncodeToString(b)
 		codes[i] = h[:4] + "-" + h[4:8] + "-" + h[8:12] + "-" + h[12:16] + "-" + h[16:]
 	}
-	return codes, nil
+	return codes
 }
 
 // HashRecoveryCode hashes a recovery code using the same Argon2id parameters as passwords. The hyphen is stripped
