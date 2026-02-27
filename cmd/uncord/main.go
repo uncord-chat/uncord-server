@@ -128,7 +128,7 @@ func run() error {
 	ctx := context.Background()
 
 	// Connect PostgreSQL
-	db, err := postgres.Connect(ctx, cfg.DatabaseURL, cfg.DatabaseMaxConn, cfg.DatabaseMinConn)
+	db, err := postgres.Connect(ctx, cfg.DatabaseURL.Expose(), cfg.DatabaseMaxConn, cfg.DatabaseMinConn)
 	if err != nil {
 		return fmt.Errorf("connect postgres: %w", err)
 	}
@@ -136,13 +136,13 @@ func run() error {
 	log.Info().Msg("PostgreSQL connected")
 
 	// Run migrations
-	if err := postgres.Migrate(cfg.DatabaseURL, log.Logger); err != nil {
+	if err := postgres.Migrate(cfg.DatabaseURL.Expose(), log.Logger); err != nil {
 		return fmt.Errorf("run migrations: %w", err)
 	}
 	log.Info().Msg("Database migrations complete")
 
 	// Connect Valkey
-	rdb, err := valkey.Connect(ctx, cfg.ValkeyURL, cfg.ValkeyDialTimeout)
+	rdb, err := valkey.Connect(ctx, cfg.ValkeyURL.Expose(), cfg.ValkeyDialTimeout)
 	if err != nil {
 		return fmt.Errorf("connect valkey: %w", err)
 	}
@@ -163,7 +163,7 @@ func run() error {
 	}
 
 	// Typesense collection (best-effort)
-	result, err := typesense.EnsureMessagesCollection(ctx, cfg.TypesenseURL, cfg.TypesenseAPIKey, cfg.TypesenseTimeout)
+	result, err := typesense.EnsureMessagesCollection(ctx, cfg.TypesenseURL, cfg.TypesenseAPIKey.Expose(), cfg.TypesenseTimeout)
 	if err != nil {
 		log.Warn().Err(err).Msg("Typesense collection setup failed")
 	} else {
@@ -248,7 +248,7 @@ func run() error {
 	// SMTP client for transactional email (verification, password reset, etc.)
 	var emailSender auth.Sender
 	if cfg.SMTPConfigured() {
-		emailClient := email.NewClient(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom, verificationTmpl)
+		emailClient := email.NewClient(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword.Expose(), cfg.SMTPFrom, verificationTmpl)
 		if err := emailClient.Ping(ctx); err != nil {
 			log.Warn().Err(err).Msg("SMTP connection test failed. Verification emails may not be delivered.")
 		} else {
@@ -287,7 +287,7 @@ func run() error {
 	onboardingRepo := onboarding.NewPGRepository(db, log.Logger)
 	messageRepo := message.NewPGRepository(db, log.Logger)
 	attachmentRepo := attachment.NewPGRepository(db, log.Logger)
-	typesenseIndexer := typesense.NewIndexer(cfg.TypesenseURL, cfg.TypesenseAPIKey, cfg.TypesenseTimeout)
+	typesenseIndexer := typesense.NewIndexer(cfg.TypesenseURL, cfg.TypesenseAPIKey.Expose(), cfg.TypesenseTimeout)
 	gatewayPub := gateway.NewPublisher(rdb, log.Logger)
 	presenceStore := presence.NewStore(rdb)
 	startPurgeGoroutine(attachmentRepo, storage)
@@ -403,7 +403,7 @@ func run() error {
 }
 
 func (s *server) registerRoutes(app *fiber.App) {
-	requireAuth := auth.RequireAuth(s.cfg.JWTSecret, s.cfg.ServerURL)
+	requireAuth := auth.RequireAuth(s.cfg.JWTSecret.Expose(), s.cfg.ServerURL)
 	requireVerified := auth.RequireVerifiedEmail(s.userRepo)
 	requireActive := member.RequireActiveMember(s.memberRepo)
 
@@ -539,7 +539,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 	messageGroup.Delete("/:messageID", messageHandler.DeleteMessage)
 
 	// Search routes (require active membership)
-	searchSearcher := search.NewTypesenseSearcher(s.cfg.TypesenseURL, s.cfg.TypesenseAPIKey, s.cfg.TypesenseTimeout)
+	searchSearcher := search.NewTypesenseSearcher(s.cfg.TypesenseURL, s.cfg.TypesenseAPIKey.Expose(), s.cfg.TypesenseTimeout)
 	searchService := search.NewService(s.channelRepo, s.permResolver, searchSearcher, log.Logger)
 	searchHandler := api.NewSearchHandler(searchService, log.Logger)
 	app.Get("/api/v1/search/messages", requireAuth, requireVerified, requireActive,

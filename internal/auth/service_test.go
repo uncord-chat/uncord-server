@@ -262,7 +262,7 @@ func testConfig() *config.Config {
 		ServerName:                 "Test Server",
 		ServerURL:                  "https://test.example.com",
 		ServerEnv:                  "production",
-		JWTSecret:                  "test-secret-at-least-32-chars-long!!",
+		JWTSecret:                  config.NewSecret("test-secret-at-least-32-chars-long!!"),
 		JWTAccessTTL:               15 * time.Minute,
 		JWTRefreshTTL:              7 * 24 * time.Hour,
 		Argon2Memory:               64 * 1024,
@@ -270,9 +270,9 @@ func testConfig() *config.Config {
 		Argon2Parallelism:          1,
 		Argon2SaltLength:           16,
 		Argon2KeyLength:            32,
-		MFAEncryptionKey:           testEncryptionKey,
+		MFAEncryptionKey:           config.NewSecret(testEncryptionKey),
 		MFATicketTTL:               5 * time.Minute,
-		ServerSecret:               testEncryptionKey, // reuse same hex key for test convenience
+		ServerSecret:               config.NewSecret(testEncryptionKey), // reuse same hex key for test convenience
 		DeletionTombstoneUsernames: true,
 	}
 }
@@ -762,7 +762,7 @@ func TestServiceRegisterTokensAreValid(t *testing.T) {
 	}
 
 	// Access token should be valid
-	claims, err := ValidateAccessToken(result.AccessToken, svc.config.JWTSecret, svc.config.ServerURL)
+	claims, err := ValidateAccessToken(result.AccessToken, svc.config.JWTSecret.Expose(), svc.config.ServerURL)
 	if err != nil {
 		t.Fatalf("ValidateAccessToken() error = %v", err)
 	}
@@ -855,7 +855,7 @@ func TestServiceRefreshIssuesNewAccessToken(t *testing.T) {
 	}
 
 	// New access token should be valid
-	claims, err := ValidateAccessToken(tokens.AccessToken, svc.config.JWTSecret, svc.config.ServerURL)
+	claims, err := ValidateAccessToken(tokens.AccessToken, svc.config.JWTSecret.Expose(), svc.config.ServerURL)
 	if err != nil {
 		t.Fatalf("ValidateAccessToken() on refreshed token error = %v", err)
 	}
@@ -1397,7 +1397,7 @@ func TestServiceBeginMFASetupNotConfigured(t *testing.T) {
 	_, rdb := setupMiniredis(t)
 	bl := disposable.NewBlocklist("", false, 10*time.Second, zerolog.Nop())
 	cfg := testConfig()
-	cfg.MFAEncryptionKey = "" // simulate unconfigured MFA
+	cfg.MFAEncryptionKey = config.NewSecret("") // simulate unconfigured MFA
 	serverRepo := &fakeServerRepo{ownerID: uuid.New()}
 	permPub := permission.NewPublisher(rdb)
 	svc, err := NewService(repo, rdb, cfg, bl, nil, serverRepo, permPub, zerolog.Nop())
@@ -1439,7 +1439,7 @@ func TestServiceVerifyMFANotConfigured(t *testing.T) {
 	}
 
 	// Simulate removing the encryption key after users have enrolled.
-	svc.config.MFAEncryptionKey = ""
+	svc.config.MFAEncryptionKey = config.NewSecret("")
 
 	_, err = svc.VerifyMFA(ctx, result.Ticket, "123456")
 	if !errors.Is(err, ErrMFANotConfigured) {
@@ -1469,7 +1469,7 @@ func TestServiceConfirmMFASetupNotConfigured(t *testing.T) {
 	}
 
 	// Simulate removing the encryption key after the setup flow has begun.
-	svc.config.MFAEncryptionKey = ""
+	svc.config.MFAEncryptionKey = config.NewSecret("")
 
 	_, err = svc.ConfirmMFASetup(ctx, userID, "123456")
 	if !errors.Is(err, ErrMFANotConfigured) {
@@ -1487,7 +1487,7 @@ func TestServiceDisableMFANotConfigured(t *testing.T) {
 	userID := repo.users["alice@example.com"].ID
 
 	// Simulate removing the encryption key after users have enrolled.
-	svc.config.MFAEncryptionKey = ""
+	svc.config.MFAEncryptionKey = config.NewSecret("")
 
 	err := svc.DisableMFA(ctx, userID, "strongpassword", "123456")
 	if !errors.Is(err, ErrMFANotConfigured) {

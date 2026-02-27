@@ -134,7 +134,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*AuthResul
 		return nil, ErrDisposableEmail
 	}
 
-	emailHMAC, err := HMACIdentifier(email, s.config.ServerSecret)
+	emailHMAC, err := HMACIdentifier(email, s.config.ServerSecret.Expose())
 	if err != nil {
 		return nil, fmt.Errorf("compute email HMAC: %w", err)
 	}
@@ -144,7 +144,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*AuthResul
 		return nil, ErrAccountTombstoned
 	}
 
-	usernameHMAC, err := HMACIdentifier(strings.ToLower(req.Username), s.config.ServerSecret)
+	usernameHMAC, err := HMACIdentifier(strings.ToLower(req.Username), s.config.ServerSecret.Expose())
 	if err != nil {
 		return nil, fmt.Errorf("compute username HMAC: %w", err)
 	}
@@ -291,7 +291,7 @@ func (s *Service) Refresh(ctx context.Context, oldToken string) (*TokenPair, err
 		return nil, err // ErrRefreshTokenReused passes through
 	}
 
-	accessToken, err := NewAccessToken(userID, s.config.JWTSecret, s.config.JWTAccessTTL, s.config.ServerURL)
+	accessToken, err := NewAccessToken(userID, s.config.JWTSecret.Expose(), s.config.JWTAccessTTL, s.config.ServerURL)
 	if err != nil {
 		return nil, fmt.Errorf("create access token: %w", err)
 	}
@@ -375,7 +375,7 @@ func (s *Service) VerifyMFA(ctx context.Context, ticket, code string) (*AuthResu
 		return nil, ErrMFANotConfigured
 	}
 
-	secret, err := DecryptTOTPSecret(*creds.MFASecret, s.config.MFAEncryptionKey)
+	secret, err := DecryptTOTPSecret(*creds.MFASecret, s.config.MFAEncryptionKey.Expose())
 	if err != nil {
 		return nil, fmt.Errorf("decrypt MFA secret: %w", err)
 	}
@@ -428,7 +428,7 @@ func (s *Service) BeginMFASetup(ctx context.Context, userID uuid.UUID, password 
 		return nil, fmt.Errorf("generate TOTP key: %w", err)
 	}
 
-	encrypted, err := EncryptTOTPSecret(key.Secret(), s.config.MFAEncryptionKey)
+	encrypted, err := EncryptTOTPSecret(key.Secret(), s.config.MFAEncryptionKey.Expose())
 	if err != nil {
 		return nil, fmt.Errorf("encrypt TOTP secret: %w", err)
 	}
@@ -459,7 +459,7 @@ func (s *Service) ConfirmMFASetup(ctx context.Context, userID uuid.UUID, code st
 		return nil, err
 	}
 
-	secret, err := DecryptTOTPSecret(encrypted, s.config.MFAEncryptionKey)
+	secret, err := DecryptTOTPSecret(encrypted, s.config.MFAEncryptionKey.Expose())
 	if err != nil {
 		return nil, fmt.Errorf("decrypt pending MFA secret: %w", err)
 	}
@@ -524,7 +524,7 @@ func (s *Service) DisableMFA(ctx context.Context, userID uuid.UUID, password, co
 		return ErrMFANotConfigured
 	}
 
-	secret, err := DecryptTOTPSecret(*creds.MFASecret, s.config.MFAEncryptionKey)
+	secret, err := DecryptTOTPSecret(*creds.MFASecret, s.config.MFAEncryptionKey.Expose())
 	if err != nil {
 		return fmt.Errorf("decrypt MFA secret: %w", err)
 	}
@@ -637,7 +637,7 @@ func (s *Service) DeleteAccount(ctx context.Context, userID uuid.UUID, password 
 
 	tombstones := make([]user.Tombstone, 0, 2)
 
-	emailHMAC, err := HMACIdentifier(creds.Email, s.config.ServerSecret)
+	emailHMAC, err := HMACIdentifier(creds.Email, s.config.ServerSecret.Expose())
 	if err != nil {
 		return fmt.Errorf("compute email HMAC: %w", err)
 	}
@@ -647,7 +647,7 @@ func (s *Service) DeleteAccount(ctx context.Context, userID uuid.UUID, password 
 	})
 
 	if s.config.DeletionTombstoneUsernames {
-		usernameHMAC, err := HMACIdentifier(strings.ToLower(creds.Username), s.config.ServerSecret)
+		usernameHMAC, err := HMACIdentifier(strings.ToLower(creds.Username), s.config.ServerSecret.Expose())
 		if err != nil {
 			return fmt.Errorf("compute username HMAC: %w", err)
 		}
@@ -719,7 +719,7 @@ func (s *Service) tryRecoveryCode(ctx context.Context, userID uuid.UUID, code st
 }
 
 func (s *Service) issueTokens(ctx context.Context, userID uuid.UUID) (*TokenPair, error) {
-	accessToken, err := NewAccessToken(userID, s.config.JWTSecret, s.config.JWTAccessTTL, s.config.ServerURL)
+	accessToken, err := NewAccessToken(userID, s.config.JWTSecret.Expose(), s.config.JWTAccessTTL, s.config.ServerURL)
 	if err != nil {
 		return nil, fmt.Errorf("create access token: %w", err)
 	}

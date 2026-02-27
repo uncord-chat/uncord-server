@@ -212,7 +212,7 @@ func (h *Hub) delayedOffline(userID uuid.UUID) {
 
 // handleIdentify authenticates a client using a JWT token, assembles the READY payload, and registers the client.
 func (h *Hub) handleIdentify(client *Client, token string) {
-	claims, err := auth.ValidateAccessToken(token, h.cfg.JWTSecret, h.cfg.ServerURL)
+	claims, err := auth.ValidateAccessToken(token, h.cfg.JWTSecret.Expose(), h.cfg.ServerURL)
 	if err != nil {
 		h.log.Debug().Err(err).Msg("Identify token validation failed")
 		client.closeWithCode(CloseAuthFailed, "invalid token")
@@ -279,7 +279,7 @@ func (h *Hub) handleIdentify(client *Client, token string) {
 
 // handleResume restores a client's session from Valkey and replays missed events.
 func (h *Hub) handleResume(client *Client, data models.ResumeData) {
-	claims, err := auth.ValidateAccessToken(data.Token, h.cfg.JWTSecret, h.cfg.ServerURL)
+	claims, err := auth.ValidateAccessToken(data.Token, h.cfg.JWTSecret.Expose(), h.cfg.ServerURL)
 	if err != nil {
 		h.log.Debug().Err(err).Msg("Resume token validation failed")
 		client.closeWithCode(CloseAuthFailed, "invalid token")

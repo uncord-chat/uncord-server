@@ -176,7 +176,7 @@ func testConfig() *config.Config {
 		GatewayMaxConnections:      10,
 		RateLimitWSCount:           120,
 		RateLimitWSWindowSeconds:   60,
-		JWTSecret:                  "test-secret-for-defaults-minimum-32",
+		JWTSecret:                  config.NewSecret("test-secret-for-defaults-minimum-32"),
 		ServerURL:                  "http://localhost:8080",
 	}
 }

@@ -331,8 +331,8 @@ func TestLoadOverrides(t *testing.T) {
 	if cfg.InitOwnerUsername != "testadmin" {
 		t.Errorf("InitOwnerUsername = %q, want %q", cfg.InitOwnerUsername, "testadmin")
 	}
-	if cfg.JWTSecret != "test-secret-key-that-is-32-chars!" {
-		t.Errorf("JWTSecret = %q, want %q", cfg.JWTSecret, "test-secret-key-that-is-32-chars!")
+	if cfg.JWTSecret.Expose() != "test-secret-key-that-is-32-chars!" {
+		t.Errorf("JWTSecret = %q, want %q", cfg.JWTSecret.Expose(), "test-secret-key-that-is-32-chars!")
 	}
 	if cfg.JWTAccessTTL != 30*time.Minute {
 		t.Errorf("JWTAccessTTL = %v, want 30m", cfg.JWTAccessTTL)
@@ -483,8 +483,8 @@ func TestLoadSMTPOverrides(t *testing.T) {
 	if cfg.SMTPUsername != "user@example.com" {
 		t.Errorf("SMTPUsername = %q, want %q", cfg.SMTPUsername, "user@example.com")
 	}
-	if cfg.SMTPPassword != "secret" {
-		t.Errorf("SMTPPassword = %q, want %q", cfg.SMTPPassword, "secret")
+	if cfg.SMTPPassword.Expose() != "secret" {
+		t.Errorf("SMTPPassword = %q, want %q", cfg.SMTPPassword.Expose(), "secret")
 	}
 	if cfg.SMTPFrom != "hello@example.com" {
 		t.Errorf("SMTPFrom = %q, want %q", cfg.SMTPFrom, "hello@example.com")
@@ -616,8 +616,8 @@ func TestLoadDevelopmentOverrides(t *testing.T) {
 			if cfg.SMTPUsername != tt.wantUsername {
 				t.Errorf("SMTPUsername = %q, want %q", cfg.SMTPUsername, tt.wantUsername)
 			}
-			if cfg.SMTPPassword != tt.wantPassword {
-				t.Errorf("SMTPPassword = %q, want %q", cfg.SMTPPassword, tt.wantPassword)
+			if cfg.SMTPPassword.Expose() != tt.wantPassword {
+				t.Errorf("SMTPPassword = %q, want %q", cfg.SMTPPassword.Expose(), tt.wantPassword)
 			}
 			if cfg.ServerURL != tt.wantServerURL {
 				t.Errorf("ServerURL = %q, want %q", cfg.ServerURL, tt.wantServerURL)
@@ -725,7 +725,7 @@ func TestLoadValidationDeletionTombstoneRetentionNegative(t *testing.T) {
 	t.Setenv("SERVER_SECRET", testServerSecret)
 
 	cfg := &Config{
-		JWTSecret:                       "test-secret-for-defaults-minimum-32",
+		JWTSecret:                       NewSecret("test-secret-for-defaults-minimum-32"),
 		ServerPort:                      8080,
 		DatabaseMaxConn:                 25,
 		DatabaseMinConn:                 5,
@@ -755,7 +755,7 @@ func TestLoadValidationDeletionTombstoneRetentionNegative(t *testing.T) {
 		RateLimitMsgWindowSeconds:       5,
 		RateLimitMsgGlobalCount:         30,
 		RateLimitMsgGlobalWindowSeconds: 60,
-		ServerSecret:                    testServerSecret,
+		ServerSecret:                    NewSecret(testServerSecret),
 		MFATicketTTL:                    5 * time.Minute,
 		LoginAttemptRetention:           2160 * time.Hour,
 		DeletionTombstoneRetention:      -time.Hour,

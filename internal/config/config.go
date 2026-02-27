@@ -24,12 +24,12 @@ type Config struct {
 	LogHealthRequests bool
 
 	// Database
-	DatabaseURL     string
+	DatabaseURL     Secret
 	DatabaseMaxConn int
 	DatabaseMinConn int
 
 	// Valkey
-	ValkeyURL         string
+	ValkeyURL         Secret
 	ValkeyDialTimeout time.Duration
 
 	// Argon2 password hashing
@@ -40,7 +40,7 @@ type Config struct {
 	Argon2KeyLength   uint32
 
 	// JWT
-	JWTSecret     string
+	JWTSecret     Secret
 	JWTAccessTTL  time.Duration
 	JWTRefreshTTL time.Duration
 
@@ -55,12 +55,12 @@ type Config struct {
 
 	// Typesense
 	TypesenseURL     string
-	TypesenseAPIKey  string
+	TypesenseAPIKey  Secret
 	TypesenseTimeout time.Duration
 
 	// First-run owner
 	InitOwnerEmail    string
-	InitOwnerPassword string
+	InitOwnerPassword Secret
 	InitOwnerUsername string
 
 	// Data directory
@@ -120,15 +120,15 @@ type Config struct {
 	SMTPHost     string
 	SMTPPort     int
 	SMTPUsername string
-	SMTPPassword string
+	SMTPPassword Secret
 	SMTPFrom     string
 
 	// MFA
-	MFAEncryptionKey string
+	MFAEncryptionKey Secret
 	MFATicketTTL     time.Duration
 
 	// Account Deletion
-	ServerSecret               string        // Required. Hex-encoded 32-byte HMAC key for tombstones and future use.
+	ServerSecret               Secret        // Required. Hex-encoded 32-byte HMAC key for tombstones and future use.
 	DeletionTombstoneUsernames bool          // Also tombstone usernames on deletion. Default: true.
 	DeletionTombstoneRetention time.Duration // How long to retain deletion tombstones. 0 = permanent. Default: 0.
 
@@ -152,11 +152,11 @@ func Load() (*Config, error) {
 		ServerEnv:         envStr("SERVER_ENV", "production"),
 		LogHealthRequests: p.bool("LOG_HEALTH_REQUESTS", true),
 
-		DatabaseURL:     envStr("DATABASE_URL", "postgres://uncord:password@postgres:5432/uncord?sslmode=disable"),
+		DatabaseURL:     NewSecret(envStr("DATABASE_URL", "postgres://uncord:password@postgres:5432/uncord?sslmode=disable")),
 		DatabaseMaxConn: p.int("DATABASE_MAX_CONNS", 25),
 		DatabaseMinConn: p.int("DATABASE_MIN_CONNS", 5),
 
-		ValkeyURL:         envStr("VALKEY_URL", "valkey://valkey:6379/0"),
+		ValkeyURL:         NewSecret(envStr("VALKEY_URL", "valkey://valkey:6379/0")),
 		ValkeyDialTimeout: p.duration("VALKEY_DIAL_TIMEOUT", 5*time.Second),
 
 		Argon2Memory:      p.uint32("ARGON2_MEMORY", 65536),
@@ -165,7 +165,7 @@ func Load() (*Config, error) {
 		Argon2SaltLength:  p.uint32("ARGON2_SALT_LENGTH", 16),
 		Argon2KeyLength:   p.uint32("ARGON2_KEY_LENGTH", 32),
 
-		JWTSecret:             envStr("JWT_SECRET", ""),
+		JWTSecret:             NewSecret(envStr("JWT_SECRET", "")),
 		JWTAccessTTL:          p.duration("JWT_ACCESS_TTL", 15*time.Minute),
 		JWTRefreshTTL:         p.duration("JWT_REFRESH_TTL", 7*24*time.Hour),
 		LoginAttemptRetention: p.duration("LOGIN_ATTEMPT_RETENTION", 2160*time.Hour),
@@ -176,11 +176,11 @@ func Load() (*Config, error) {
 		DisposableEmailBlocklistTimeout:         p.duration("ABUSE_DISPOSABLE_EMAIL_BLOCKLIST_TIMEOUT", 10*time.Second),
 
 		TypesenseURL:     envStr("TYPESENSE_URL", "http://typesense:8108"),
-		TypesenseAPIKey:  envStr("TYPESENSE_API_KEY", "change-me-in-production"),
+		TypesenseAPIKey:  NewSecret(envStr("TYPESENSE_API_KEY", "change-me-in-production")),
 		TypesenseTimeout: p.duration("TYPESENSE_TIMEOUT", 30*time.Second),
 
 		InitOwnerEmail:    envStr("INIT_OWNER_EMAIL", ""),
-		InitOwnerPassword: envStr("INIT_OWNER_PASSWORD", ""),
+		InitOwnerPassword: NewSecret(envStr("INIT_OWNER_PASSWORD", "")),
 		InitOwnerUsername: envStr("INIT_OWNER_USERNAME", ""),
 
 		DataDir: envStr("DATA_DIR", ""),
@@ -230,13 +230,13 @@ func Load() (*Config, error) {
 		SMTPHost:     envStr("SMTP_HOST", ""),
 		SMTPPort:     p.int("SMTP_PORT", 587),
 		SMTPUsername: envStr("SMTP_USERNAME", ""),
-		SMTPPassword: envStr("SMTP_PASSWORD", ""),
+		SMTPPassword: NewSecret(envStr("SMTP_PASSWORD", "")),
 		SMTPFrom:     envStr("SMTP_FROM", "noreply@chat.example.com"),
 
-		MFAEncryptionKey: envStr("MFA_ENCRYPTION_KEY", ""),
+		MFAEncryptionKey: NewSecret(envStr("MFA_ENCRYPTION_KEY", "")),
 		MFATicketTTL:     p.duration("MFA_TICKET_TTL", 5*time.Minute),
 
-		ServerSecret:               envStr("SERVER_SECRET", ""),
+		ServerSecret:               NewSecret(envStr("SERVER_SECRET", "")),
 		DeletionTombstoneUsernames: p.bool("DELETION_TOMBSTONE_USERNAMES", true),
 		DeletionTombstoneRetention: p.duration("DELETION_TOMBSTONE_RETENTION", 0),
 
@@ -256,7 +256,7 @@ func Load() (*Config, error) {
 		cfg.SMTPHost = "mailpit"
 		cfg.SMTPPort = 1025
 		cfg.SMTPUsername = ""
-		cfg.SMTPPassword = ""
+		cfg.SMTPPassword = NewSecret("")
 		cfg.ServerURL = fmt.Sprintf("http://localhost:%d", cfg.ServerPort)
 	}
 
@@ -279,7 +279,7 @@ func (c *Config) SMTPConfigured() bool {
 
 // MFAConfigured returns true when the MFA encryption key is set, indicating that TOTP-based MFA is available.
 func (c *Config) MFAConfigured() bool {
-	return c.MFAEncryptionKey != ""
+	return c.MFAEncryptionKey.IsSet()
 }
 
 // BodyLimitBytes returns the maximum request body size in bytes, derived from MaxUploadSizeMB with a small margin for
@@ -302,9 +302,9 @@ func (c *Config) MaxUploadSizeBytes() int64 {
 func (c *Config) validate() error {
 	var errs []error
 
-	if c.JWTSecret == "" {
+	if !c.JWTSecret.IsSet() {
 		errs = append(errs, fmt.Errorf("JWT_SECRET is required"))
-	} else if len(c.JWTSecret) < minJWTSecretLength {
+	} else if len(c.JWTSecret.Expose()) < minJWTSecretLength {
 		errs = append(errs, fmt.Errorf("JWT_SECRET must be at least %d characters", minJWTSecretLength))
 	}
 
@@ -430,17 +430,17 @@ func (c *Config) validate() error {
 		errs = append(errs, fmt.Errorf("GATEWAY_READY_MEMBER_LIMIT must be at least 1"))
 	}
 
-	if c.MFAEncryptionKey != "" {
-		b, err := hex.DecodeString(c.MFAEncryptionKey)
+	if c.MFAEncryptionKey.IsSet() {
+		b, err := hex.DecodeString(c.MFAEncryptionKey.Expose())
 		if err != nil || len(b) != 32 {
 			errs = append(errs, fmt.Errorf("MFA_ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes)"))
 		}
 	}
 
-	if c.ServerSecret == "" {
+	if !c.ServerSecret.IsSet() {
 		errs = append(errs, fmt.Errorf("SERVER_SECRET is required"))
 	} else {
-		b, err := hex.DecodeString(c.ServerSecret)
+		b, err := hex.DecodeString(c.ServerSecret.Expose())
 		if err != nil || len(b) != 32 {
 			errs = append(errs, fmt.Errorf("SERVER_SECRET must be exactly 64 hex characters (32 bytes)"))
 		}

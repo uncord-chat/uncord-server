@@ -39,7 +39,7 @@ func IsFirstRun(ctx context.Context, db *pgxpool.Pool) (bool, error) {
 // RunFirstInit seeds the database with the owner account, default roles, channels, and onboarding config inside a
 // single transaction.
 func RunFirstInit(ctx context.Context, db *pgxpool.Pool, cfg *config.Config, logger zerolog.Logger) error {
-	if cfg.InitOwnerEmail == "" || cfg.InitOwnerPassword == "" || cfg.InitOwnerUsername == "" {
+	if cfg.InitOwnerEmail == "" || !cfg.InitOwnerPassword.IsSet() || cfg.InitOwnerUsername == "" {
 		return fmt.Errorf("INIT_OWNER_EMAIL, INIT_OWNER_PASSWORD, and INIT_OWNER_USERNAME must be set for first-run initialization")
 	}
 
@@ -54,7 +54,7 @@ func RunFirstInit(ctx context.Context, db *pgxpool.Pool, cfg *config.Config, log
 	username := cfg.InitOwnerUsername
 
 	hash, err := auth.HashPassword(
-		cfg.InitOwnerPassword,
+		cfg.InitOwnerPassword.Expose(),
 		cfg.Argon2Memory,
 		cfg.Argon2Iterations,
 		cfg.Argon2Parallelism,

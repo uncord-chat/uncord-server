@@ -174,7 +174,7 @@ func testAuthConfig() *config.Config {
 		ServerName:                 "Test Server",
 		ServerURL:                  "https://test.example.com",
 		ServerEnv:                  "production",
-		JWTSecret:                  "test-secret-at-least-32-chars-long!!",
+		JWTSecret:                  config.NewSecret("test-secret-at-least-32-chars-long!!"),
 		JWTAccessTTL:               15 * time.Minute,
 		JWTRefreshTTL:              7 * 24 * time.Hour,
 		Argon2Memory:               64 * 1024,
@@ -182,9 +182,9 @@ func testAuthConfig() *config.Config {
 		Argon2Parallelism:          1,
 		Argon2SaltLength:           16,
 		Argon2KeyLength:            32,
-		MFAEncryptionKey:           "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		MFAEncryptionKey:           config.NewSecret("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
 		MFATicketTTL:               5 * time.Minute,
-		ServerSecret:               "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		ServerSecret:               config.NewSecret("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
 		DeletionTombstoneUsernames: true,
 	}
 }
