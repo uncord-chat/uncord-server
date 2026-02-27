@@ -44,12 +44,11 @@ func (cfg *Config) ToModel() models.ServerConfig {
 	}
 }
 
-// UpdateParams groups the optional fields for updating the server configuration.
+// UpdateParams groups the optional fields for updating the server configuration. Image keys (icon, banner) are managed
+// through dedicated upload/delete endpoints and are not part of the PATCH flow.
 type UpdateParams struct {
 	Name        *string
 	Description *string
-	IconKey     *string
-	BannerKey   *string
 }
 
 // ValidateName checks that a non-nil name is between 1 and 100 characters (runes) after trimming whitespace. A nil
@@ -83,4 +82,8 @@ func ValidateDescription(desc *string) error {
 type Repository interface {
 	Get(ctx context.Context) (*Config, error)
 	Update(ctx context.Context, params UpdateParams) (*Config, error)
+	SetIconKey(ctx context.Context, key string) (*Config, error)
+	ClearIconKey(ctx context.Context) (*Config, error)
+	SetBannerKey(ctx context.Context, key string) (*Config, error)
+	ClearBannerKey(ctx context.Context) (*Config, error)
 }

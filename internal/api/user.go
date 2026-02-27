@@ -92,9 +92,7 @@ func (h *UserHandler) UpdateMe(c fiber.Ctx) error {
 
 	u, err := h.users.Update(c, userID, user.UpdateParams{
 		DisplayName:          body.DisplayName,
-		AvatarKey:            body.AvatarKey,
 		Pronouns:             body.Pronouns,
-		BannerKey:            body.BannerKey,
 		About:                body.About,
 		ThemeColourPrimary:   body.ThemeColourPrimary,
 		ThemeColourSecondary: body.ThemeColourSecondary,

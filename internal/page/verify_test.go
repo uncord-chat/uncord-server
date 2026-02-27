@@ -92,14 +92,8 @@ func (r *fakeRepo) Update(_ context.Context, id uuid.UUID, params user.UpdatePar
 				trimmed := strings.TrimSpace(*params.DisplayName)
 				c.DisplayName = &trimmed
 			}
-			if params.AvatarKey != nil {
-				c.AvatarKey = params.AvatarKey
-			}
 			if params.Pronouns != nil {
 				c.Pronouns = params.Pronouns
-			}
-			if params.BannerKey != nil {
-				c.BannerKey = params.BannerKey
 			}
 			if params.About != nil {
 				c.About = params.About
@@ -149,6 +143,22 @@ func (r *fakeRepo) PurgeTombstones(context.Context, time.Time) (int64, error) {
 	return 0, nil
 }
 
+func (r *fakeRepo) SetAvatarKey(_ context.Context, _ uuid.UUID, _ string) (*user.User, error) {
+	return nil, user.ErrNotFound
+}
+
+func (r *fakeRepo) ClearAvatarKey(_ context.Context, _ uuid.UUID) (*user.User, error) {
+	return nil, user.ErrNotFound
+}
+
+func (r *fakeRepo) SetBannerKey(_ context.Context, _ uuid.UUID, _ string) (*user.User, error) {
+	return nil, user.ErrNotFound
+}
+
+func (r *fakeRepo) ClearBannerKey(_ context.Context, _ uuid.UUID) (*user.User, error) {
+	return nil, user.ErrNotFound
+}
+
 type fakeServerRepo struct{}
 
 func (r *fakeServerRepo) Get(context.Context) (*server.Config, error) {
@@ -157,6 +167,22 @@ func (r *fakeServerRepo) Get(context.Context) (*server.Config, error) {
 
 func (r *fakeServerRepo) Update(context.Context, server.UpdateParams) (*server.Config, error) {
 	return nil, nil
+}
+
+func (r *fakeServerRepo) SetIconKey(context.Context, string) (*server.Config, error) {
+	return &server.Config{OwnerID: uuid.New()}, nil
+}
+
+func (r *fakeServerRepo) ClearIconKey(context.Context) (*server.Config, error) {
+	return &server.Config{OwnerID: uuid.New()}, nil
+}
+
+func (r *fakeServerRepo) SetBannerKey(context.Context, string) (*server.Config, error) {
+	return &server.Config{OwnerID: uuid.New()}, nil
+}
+
+func (r *fakeServerRepo) ClearBannerKey(context.Context) (*server.Config, error) {
+	return &server.Config{OwnerID: uuid.New()}, nil
 }
 
 func testVerifyHandler(t *testing.T) *fiber.App {

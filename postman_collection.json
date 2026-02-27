@@ -546,7 +546,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"display_name\": \"New Display Name\",\n  \"avatar_key\": null,\n  \"pronouns\": \"they/them\",\n  \"banner_key\": null,\n  \"about\": \"Hello, world!\",\n  \"theme_colour_primary\": 16711680,\n  \"theme_colour_secondary\": 255\n}"
+							"raw": "{\n  \"display_name\": \"New Display Name\",\n  \"pronouns\": \"they/them\",\n  \"about\": \"Hello, world!\",\n  \"theme_colour_primary\": 16711680,\n  \"theme_colour_secondary\": 255\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/users/@me",
@@ -599,6 +599,98 @@
 							"path": [
 								"users",
 								"{{user_id}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "Upload Avatar",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": ""
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/users/@me/avatar",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"@me",
+								"avatar"
+							]
+						}
+					}
+				},
+				{
+					"name": "Delete Avatar",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/users/@me/avatar",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"@me",
+								"avatar"
+							]
+						}
+					}
+				},
+				{
+					"name": "Upload Banner",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": ""
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/users/@me/banner",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"@me",
+								"banner"
+							]
+						}
+					}
+				},
+				{
+					"name": "Delete Banner",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/users/@me/banner",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"@me",
+								"banner"
 							]
 						}
 					}
@@ -667,6 +759,94 @@
 							"path": [
 								"server",
 								""
+							]
+						}
+					}
+				},
+				{
+					"name": "Upload Server Icon",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": ""
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/server/icon",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"server",
+								"icon"
+							]
+						}
+					}
+				},
+				{
+					"name": "Delete Server Icon",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/server/icon",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"server",
+								"icon"
+							]
+						}
+					}
+				},
+				{
+					"name": "Upload Server Banner",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": ""
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/server/banner",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"server",
+								"banner"
+							]
+						}
+					}
+				},
+				{
+					"name": "Delete Server Banner",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/server/banner",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"server",
+								"banner"
 							]
 						}
 					}

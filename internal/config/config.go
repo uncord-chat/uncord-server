@@ -13,6 +13,11 @@ import (
 // minJWTSecretLength is the minimum number of characters required for the JWT signing secret.
 const minJWTSecretLength = 32
 
+const (
+	storageBackendLocal = "local"
+	storageBackendS3    = "s3"
+)
+
 // Config holds application configuration populated from environment variables.
 type Config struct {
 	// Core
@@ -97,6 +102,8 @@ type Config struct {
 	MaxUploadSizeMB    int
 	MaxAvatarSizeMB    int
 	MaxAvatarDimension int
+	MaxBannerWidth     int
+	MaxBannerHeight    int
 
 	// Storage
 	StorageBackend   string // "local" or "s3"
@@ -212,8 +219,10 @@ func Load() (*Config, error) {
 		MaxUploadSizeMB:    p.int("MAX_UPLOAD_SIZE_MB", 100),
 		MaxAvatarSizeMB:    p.int("MAX_AVATAR_SIZE_MB", 8),
 		MaxAvatarDimension: p.int("MAX_AVATAR_DIMENSION", 1080),
+		MaxBannerWidth:     p.int("MAX_BANNER_WIDTH", 1920),
+		MaxBannerHeight:    p.int("MAX_BANNER_HEIGHT", 480),
 
-		StorageBackend:   envStr("STORAGE_BACKEND", "local"),
+		StorageBackend:   envStr("STORAGE_BACKEND", storageBackendLocal),
 		StorageLocalPath: envStr("STORAGE_LOCAL_PATH", "/data/uncord/media"),
 
 		MaxAttachmentsPerMessage: p.int("MAX_ATTACHMENTS_PER_MESSAGE", 10),
@@ -299,6 +308,11 @@ func (c *Config) MaxUploadSizeBytes() int64 {
 	return int64(c.MaxUploadSizeMB) * 1024 * 1024
 }
 
+// MaxAvatarSizeBytes returns the maximum avatar/banner upload size in bytes.
+func (c *Config) MaxAvatarSizeBytes() int64 {
+	return int64(c.MaxAvatarSizeMB) * 1024 * 1024
+}
+
 func (c *Config) validate() error {
 	var errs []error
 
@@ -348,11 +362,17 @@ func (c *Config) validate() error {
 	if c.MaxAvatarDimension < 1 {
 		errs = append(errs, fmt.Errorf("MAX_AVATAR_DIMENSION must be at least 1"))
 	}
+	if c.MaxBannerWidth < 1 {
+		errs = append(errs, fmt.Errorf("MAX_BANNER_WIDTH must be at least 1"))
+	}
+	if c.MaxBannerHeight < 1 {
+		errs = append(errs, fmt.Errorf("MAX_BANNER_HEIGHT must be at least 1"))
+	}
 
-	if c.StorageBackend != "local" && c.StorageBackend != "s3" {
+	if c.StorageBackend != storageBackendLocal && c.StorageBackend != storageBackendS3 {
 		errs = append(errs, fmt.Errorf("STORAGE_BACKEND must be \"local\" or \"s3\""))
 	}
-	if c.StorageBackend == "local" && c.StorageLocalPath == "" {
+	if c.StorageBackend == storageBackendLocal && c.StorageLocalPath == "" {
 		errs = append(errs, fmt.Errorf("STORAGE_LOCAL_PATH is required when STORAGE_BACKEND is \"local\""))
 	}
 

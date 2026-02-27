@@ -7,6 +7,7 @@ go 1.26.0
 // replace github.com/uncord-chat/uncord-protocol => ../uncord-protocol
 
 require (
+	github.com/HugoSmits86/nativewebp v1.2.1
 	github.com/alexedwards/argon2id v1.0.0
 	github.com/alicebob/miniredis/v2 v2.36.1
 	github.com/disintegration/imaging v1.6.2
@@ -21,7 +22,8 @@ require (
 	github.com/pressly/goose/v3 v3.26.0
 	github.com/redis/go-redis/v9 v9.17.3
 	github.com/rs/zerolog v1.34.0
-	github.com/uncord-chat/uncord-protocol v0.2.14
+	github.com/uncord-chat/uncord-protocol v0.2.15
+	golang.org/x/image v0.24.0
 	golang.org/x/sync v0.19.0
 )
 
@@ -50,7 +52,6 @@ require (
 	github.com/yuin/gopher-lua v1.1.1 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.47.0 // indirect
-	golang.org/x/image v0.0.0-20191009234506-e7c1f5e7dbb8 // indirect
 	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/text v0.33.0 // indirect

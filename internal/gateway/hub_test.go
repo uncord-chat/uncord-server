@@ -78,6 +78,22 @@ func (r *fakeUserRepo) PurgeTombstones(context.Context, time.Time) (int64, error
 	return 0, nil
 }
 
+func (r *fakeUserRepo) SetAvatarKey(context.Context, uuid.UUID, string) (*user.User, error) {
+	return nil, user.ErrNotFound
+}
+
+func (r *fakeUserRepo) ClearAvatarKey(context.Context, uuid.UUID) (*user.User, error) {
+	return nil, user.ErrNotFound
+}
+
+func (r *fakeUserRepo) SetBannerKey(context.Context, uuid.UUID, string) (*user.User, error) {
+	return nil, user.ErrNotFound
+}
+
+func (r *fakeUserRepo) ClearBannerKey(context.Context, uuid.UUID) (*user.User, error) {
+	return nil, user.ErrNotFound
+}
+
 // fakeServerRepo implements servercfg.Repository for testing.
 type fakeServerRepo struct {
 	cfg *servercfg.Config
@@ -87,6 +103,22 @@ func (r *fakeServerRepo) Get(context.Context) (*servercfg.Config, error) {
 	return r.cfg, nil
 }
 func (r *fakeServerRepo) Update(context.Context, servercfg.UpdateParams) (*servercfg.Config, error) {
+	return r.cfg, nil
+}
+
+func (r *fakeServerRepo) SetIconKey(_ context.Context, _ string) (*servercfg.Config, error) {
+	return r.cfg, nil
+}
+
+func (r *fakeServerRepo) ClearIconKey(_ context.Context) (*servercfg.Config, error) {
+	return r.cfg, nil
+}
+
+func (r *fakeServerRepo) SetBannerKey(_ context.Context, _ string) (*servercfg.Config, error) {
+	return r.cfg, nil
+}
+
+func (r *fakeServerRepo) ClearBannerKey(_ context.Context) (*servercfg.Config, error) {
 	return r.cfg, nil
 }
 

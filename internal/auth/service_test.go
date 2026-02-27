@@ -119,14 +119,8 @@ func (r *fakeRepository) Update(_ context.Context, id uuid.UUID, params user.Upd
 			if params.DisplayName != nil {
 				c.DisplayName = params.DisplayName
 			}
-			if params.AvatarKey != nil {
-				c.AvatarKey = params.AvatarKey
-			}
 			if params.Pronouns != nil {
 				c.Pronouns = params.Pronouns
-			}
-			if params.BannerKey != nil {
-				c.BannerKey = params.BannerKey
 			}
 			if params.About != nil {
 				c.About = params.About
@@ -248,6 +242,22 @@ func (r *fakeRepository) PurgeTombstones(context.Context, time.Time) (int64, err
 	return 0, nil
 }
 
+func (r *fakeRepository) SetAvatarKey(_ context.Context, _ uuid.UUID, _ string) (*user.User, error) {
+	return nil, user.ErrNotFound
+}
+
+func (r *fakeRepository) ClearAvatarKey(_ context.Context, _ uuid.UUID) (*user.User, error) {
+	return nil, user.ErrNotFound
+}
+
+func (r *fakeRepository) SetBannerKey(_ context.Context, _ uuid.UUID, _ string) (*user.User, error) {
+	return nil, user.ErrNotFound
+}
+
+func (r *fakeRepository) ClearBannerKey(_ context.Context, _ uuid.UUID) (*user.User, error) {
+	return nil, user.ErrNotFound
+}
+
 // fakeServerRepo implements server.Repository for unit tests.
 type fakeServerRepo struct {
 	ownerID uuid.UUID
@@ -263,6 +273,22 @@ func (r *fakeServerRepo) Get(_ context.Context) (*server.Config, error) {
 
 func (r *fakeServerRepo) Update(_ context.Context, _ server.UpdateParams) (*server.Config, error) {
 	return nil, fmt.Errorf("not implemented")
+}
+
+func (r *fakeServerRepo) SetIconKey(_ context.Context, _ string) (*server.Config, error) {
+	return &server.Config{ID: uuid.New(), Name: "Test Server", OwnerID: r.ownerID}, nil
+}
+
+func (r *fakeServerRepo) ClearIconKey(_ context.Context) (*server.Config, error) {
+	return &server.Config{ID: uuid.New(), Name: "Test Server", OwnerID: r.ownerID}, nil
+}
+
+func (r *fakeServerRepo) SetBannerKey(_ context.Context, _ string) (*server.Config, error) {
+	return &server.Config{ID: uuid.New(), Name: "Test Server", OwnerID: r.ownerID}, nil
+}
+
+func (r *fakeServerRepo) ClearBannerKey(_ context.Context) (*server.Config, error) {
+	return &server.Config{ID: uuid.New(), Name: "Test Server", OwnerID: r.ownerID}, nil
 }
 
 func testConfig() *config.Config {

@@ -235,31 +235,6 @@ func TestUpdateMe_EmptyBody(t *testing.T) {
 	}
 }
 
-func TestUpdateMe_AvatarKey(t *testing.T) {
-	t.Parallel()
-	repo := newFakeRepo()
-	u := seedUser(repo)
-	app := testUserApp(t, repo, u.ID)
-
-	resp := doReq(t, app, jsonReq(http.MethodPatch, "/@me", `{"avatar_key":"abc123"}`))
-	body := readBody(t, resp)
-
-	if resp.StatusCode != fiber.StatusOK {
-		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusOK)
-	}
-
-	env := parseSuccess(t, body)
-	var userResp struct {
-		AvatarKey *string `json:"avatar_key"`
-	}
-	if err := json.Unmarshal(env.Data, &userResp); err != nil {
-		t.Fatalf("unmarshal user response: %v", err)
-	}
-	if userResp.AvatarKey == nil || *userResp.AvatarKey != "abc123" {
-		t.Errorf("avatar_key = %v, want %q", userResp.AvatarKey, "abc123")
-	}
-}
-
 // --- Pronouns tests ---
 
 func TestUpdateMe_PronounsTooLong(t *testing.T) {
@@ -434,33 +409,6 @@ func TestUpdateMe_ThemeColourSuccess(t *testing.T) {
 	}
 	if userResp.ThemeColourSecondary == nil || *userResp.ThemeColourSecondary != 255 {
 		t.Errorf("theme_colour_secondary = %v, want 255", userResp.ThemeColourSecondary)
-	}
-}
-
-// --- Banner key tests ---
-
-func TestUpdateMe_BannerKey(t *testing.T) {
-	t.Parallel()
-	repo := newFakeRepo()
-	u := seedUser(repo)
-	app := testUserApp(t, repo, u.ID)
-
-	resp := doReq(t, app, jsonReq(http.MethodPatch, "/@me", `{"banner_key":"banner_abc123"}`))
-	body := readBody(t, resp)
-
-	if resp.StatusCode != fiber.StatusOK {
-		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusOK)
-	}
-
-	env := parseSuccess(t, body)
-	var userResp struct {
-		BannerKey *string `json:"banner_key"`
-	}
-	if err := json.Unmarshal(env.Data, &userResp); err != nil {
-		t.Fatalf("unmarshal user response: %v", err)
-	}
-	if userResp.BannerKey == nil || *userResp.BannerKey != "banner_abc123" {
-		t.Errorf("banner_key = %v, want %q", userResp.BannerKey, "banner_abc123")
 	}
 }
 

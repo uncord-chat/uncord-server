@@ -25,7 +25,7 @@ func TestLoadDefaults(t *testing.T) {
 		"INIT_OWNER_EMAIL", "INIT_OWNER_USERNAME", "INIT_OWNER_PASSWORD",
 		"ONBOARDING_OPEN_JOIN", "ONBOARDING_REQUIRE_EMAIL_VERIFICATION",
 		"ONBOARDING_MIN_ACCOUNT_AGE", "ONBOARDING_REQUIRE_PHONE", "ONBOARDING_REQUIRE_CAPTCHA",
-		"MAX_UPLOAD_SIZE_MB", "MAX_AVATAR_SIZE_MB", "MAX_AVATAR_DIMENSION",
+		"MAX_UPLOAD_SIZE_MB", "MAX_AVATAR_SIZE_MB", "MAX_AVATAR_DIMENSION", "MAX_BANNER_WIDTH", "MAX_BANNER_HEIGHT",
 		"STORAGE_BACKEND", "STORAGE_LOCAL_PATH",
 		"MAX_ATTACHMENTS_PER_MESSAGE", "ATTACHMENT_ORPHAN_TTL",
 		"RATE_LIMIT_UPLOAD_COUNT", "RATE_LIMIT_UPLOAD_WINDOW_SECONDS",
@@ -190,6 +190,12 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.MaxAvatarDimension != 1080 {
 		t.Errorf("MaxAvatarDimension = %d, want 1080", cfg.MaxAvatarDimension)
+	}
+	if cfg.MaxBannerWidth != 1920 {
+		t.Errorf("MaxBannerWidth = %d, want 1920", cfg.MaxBannerWidth)
+	}
+	if cfg.MaxBannerHeight != 480 {
+		t.Errorf("MaxBannerHeight = %d, want 480", cfg.MaxBannerHeight)
 	}
 
 	// Storage defaults
@@ -440,6 +446,14 @@ func TestMaxUploadSizeBytes(t *testing.T) {
 	want := int64(50) * 1024 * 1024
 	if got := cfg.MaxUploadSizeBytes(); got != want {
 		t.Errorf("MaxUploadSizeBytes() = %d, want %d", got, want)
+	}
+}
+
+func TestMaxAvatarSizeBytes(t *testing.T) {
+	cfg := &Config{MaxAvatarSizeMB: 8}
+	want := int64(8) * 1024 * 1024
+	if got := cfg.MaxAvatarSizeBytes(); got != want {
+		t.Errorf("MaxAvatarSizeBytes() = %d, want %d", got, want)
 	}
 }
 
@@ -761,6 +775,8 @@ func TestLoadValidationDeletionTombstoneRetentionNegative(t *testing.T) {
 		MaxUploadSizeMB:                 100,
 		MaxAvatarSizeMB:                 8,
 		MaxAvatarDimension:              1080,
+		MaxBannerWidth:                  1920,
+		MaxBannerHeight:                 480,
 		StorageBackend:                  "local",
 		StorageLocalPath:                "/data/uncord/media",
 		MaxAttachmentsPerMessage:        10,

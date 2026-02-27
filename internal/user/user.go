@@ -101,12 +101,11 @@ type CreateParams struct {
 	VerifyExpiry time.Time
 }
 
-// UpdateParams groups the optional fields for updating a user profile.
+// UpdateParams groups the optional fields for updating a user profile. Image keys (avatar, banner) are managed through
+// dedicated upload/delete endpoints and are not part of the PATCH flow.
 type UpdateParams struct {
 	DisplayName          *string
-	AvatarKey            *string
 	Pronouns             *string
-	BannerKey            *string
 	About                *string
 	ThemeColourPrimary   *int
 	ThemeColourSecondary *int
@@ -206,6 +205,10 @@ type Repository interface {
 	RecordLoginAttempt(ctx context.Context, email, ipAddress string, success bool) error
 	UpdatePasswordHash(ctx context.Context, userID uuid.UUID, hash string) error
 	Update(ctx context.Context, id uuid.UUID, params UpdateParams) (*User, error)
+	SetAvatarKey(ctx context.Context, id uuid.UUID, key string) (*User, error)
+	ClearAvatarKey(ctx context.Context, id uuid.UUID) (*User, error)
+	SetBannerKey(ctx context.Context, id uuid.UUID, key string) (*User, error)
+	ClearBannerKey(ctx context.Context, id uuid.UUID) (*User, error)
 	EnableMFA(ctx context.Context, userID uuid.UUID, encryptedSecret string, codeHashes []string) error
 	DisableMFA(ctx context.Context, userID uuid.UUID) error
 	GetUnusedRecoveryCodes(ctx context.Context, userID uuid.UUID) ([]MFARecoveryCode, error)

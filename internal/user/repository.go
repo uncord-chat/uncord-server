@@ -247,17 +247,14 @@ func (r *PGRepository) UpdatePasswordHash(ctx context.Context, userID uuid.UUID,
 func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdateParams) (*User, error) {
 	// No fields to update. Return the current row without issuing an UPDATE so the database trigger does not bump
 	// updated_at. A no-op PATCH should not alter the modification timestamp.
-	if params.DisplayName == nil && params.AvatarKey == nil && params.Pronouns == nil &&
-		params.BannerKey == nil && params.About == nil &&
+	if params.DisplayName == nil && params.Pronouns == nil && params.About == nil &&
 		params.ThemeColourPrimary == nil && params.ThemeColourSecondary == nil {
 		return r.GetByID(ctx, id)
 	}
 
 	const query = `UPDATE users SET
 		display_name           = COALESCE(@display_name, display_name),
-		avatar_key             = COALESCE(@avatar_key, avatar_key),
 		pronouns               = COALESCE(@pronouns, pronouns),
-		banner_key             = COALESCE(@banner_key, banner_key),
 		about                  = COALESCE(@about, about),
 		theme_colour_primary   = COALESCE(@theme_colour_primary, theme_colour_primary),
 		theme_colour_secondary = COALESCE(@theme_colour_secondary, theme_colour_secondary)
@@ -266,9 +263,7 @@ func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdatePa
 	args := pgx.NamedArgs{
 		"id":                     id,
 		"display_name":           params.DisplayName,
-		"avatar_key":             params.AvatarKey,
 		"pronouns":               params.Pronouns,
-		"banner_key":             params.BannerKey,
 		"about":                  params.About,
 		"theme_colour_primary":   params.ThemeColourPrimary,
 		"theme_colour_secondary": params.ThemeColourSecondary,
@@ -280,6 +275,58 @@ func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdatePa
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("update user: %w", err)
+	}
+	return u, nil
+}
+
+// SetAvatarKey sets the user's avatar storage key and returns the updated user.
+func (r *PGRepository) SetAvatarKey(ctx context.Context, id uuid.UUID, key string) (*User, error) {
+	u, err := scanUser(r.db.QueryRow(ctx,
+		`UPDATE users SET avatar_key = $1 WHERE id = $2 RETURNING `+selectColumns, key, id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("set avatar key: %w", err)
+	}
+	return u, nil
+}
+
+// ClearAvatarKey removes the user's avatar storage key and returns the updated user.
+func (r *PGRepository) ClearAvatarKey(ctx context.Context, id uuid.UUID) (*User, error) {
+	u, err := scanUser(r.db.QueryRow(ctx,
+		`UPDATE users SET avatar_key = NULL WHERE id = $1 RETURNING `+selectColumns, id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("clear avatar key: %w", err)
+	}
+	return u, nil
+}
+
+// SetBannerKey sets the user's banner storage key and returns the updated user.
+func (r *PGRepository) SetBannerKey(ctx context.Context, id uuid.UUID, key string) (*User, error) {
+	u, err := scanUser(r.db.QueryRow(ctx,
+		`UPDATE users SET banner_key = $1 WHERE id = $2 RETURNING `+selectColumns, key, id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("set banner key: %w", err)
+	}
+	return u, nil
+}
+
+// ClearBannerKey removes the user's banner storage key and returns the updated user.
+func (r *PGRepository) ClearBannerKey(ctx context.Context, id uuid.UUID) (*User, error) {
+	u, err := scanUser(r.db.QueryRow(ctx,
+		`UPDATE users SET banner_key = NULL WHERE id = $1 RETURNING `+selectColumns, id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("clear banner key: %w", err)
 	}
 	return u, nil
 }

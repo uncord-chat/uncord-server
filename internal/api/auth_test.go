@@ -91,14 +91,8 @@ func (r *fakeRepo) Update(_ context.Context, id uuid.UUID, params user.UpdatePar
 				trimmed := strings.TrimSpace(*params.DisplayName)
 				c.DisplayName = &trimmed
 			}
-			if params.AvatarKey != nil {
-				c.AvatarKey = params.AvatarKey
-			}
 			if params.Pronouns != nil {
 				c.Pronouns = params.Pronouns
-			}
-			if params.BannerKey != nil {
-				c.BannerKey = params.BannerKey
 			}
 			if params.About != nil {
 				c.About = params.About
@@ -109,6 +103,50 @@ func (r *fakeRepo) Update(_ context.Context, id uuid.UUID, params user.UpdatePar
 			if params.ThemeColourSecondary != nil {
 				c.ThemeColourSecondary = params.ThemeColourSecondary
 			}
+			cpy := c.User
+			return &cpy, nil
+		}
+	}
+	return nil, user.ErrNotFound
+}
+
+func (r *fakeRepo) SetAvatarKey(_ context.Context, id uuid.UUID, key string) (*user.User, error) {
+	for _, c := range r.users {
+		if c.ID == id {
+			c.AvatarKey = &key
+			cpy := c.User
+			return &cpy, nil
+		}
+	}
+	return nil, user.ErrNotFound
+}
+
+func (r *fakeRepo) ClearAvatarKey(_ context.Context, id uuid.UUID) (*user.User, error) {
+	for _, c := range r.users {
+		if c.ID == id {
+			c.AvatarKey = nil
+			cpy := c.User
+			return &cpy, nil
+		}
+	}
+	return nil, user.ErrNotFound
+}
+
+func (r *fakeRepo) SetBannerKey(_ context.Context, id uuid.UUID, key string) (*user.User, error) {
+	for _, c := range r.users {
+		if c.ID == id {
+			c.BannerKey = &key
+			cpy := c.User
+			return &cpy, nil
+		}
+	}
+	return nil, user.ErrNotFound
+}
+
+func (r *fakeRepo) ClearBannerKey(_ context.Context, id uuid.UUID) (*user.User, error) {
+	for _, c := range r.users {
+		if c.ID == id {
+			c.BannerKey = nil
 			cpy := c.User
 			return &cpy, nil
 		}

@@ -185,6 +185,22 @@ func (r *fakeInviteUserRepo) PurgeTombstones(context.Context, time.Time) (int64,
 	return 0, nil
 }
 
+func (r *fakeInviteUserRepo) SetAvatarKey(context.Context, uuid.UUID, string) (*user.User, error) {
+	return nil, user.ErrNotFound
+}
+
+func (r *fakeInviteUserRepo) ClearAvatarKey(context.Context, uuid.UUID) (*user.User, error) {
+	return nil, user.ErrNotFound
+}
+
+func (r *fakeInviteUserRepo) SetBannerKey(context.Context, uuid.UUID, string) (*user.User, error) {
+	return nil, user.ErrNotFound
+}
+
+func (r *fakeInviteUserRepo) ClearBannerKey(context.Context, uuid.UUID) (*user.User, error) {
+	return nil, user.ErrNotFound
+}
+
 // fakeInviteMemberRepo implements member.Repository for invite handler tests.
 type fakeInviteMemberRepo struct {
 	members []member.MemberWithProfile

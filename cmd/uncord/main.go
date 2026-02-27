@@ -443,6 +443,22 @@ func (s *server) registerRoutes(app *fiber.App) {
 	userGroup.Delete("/@me", userHandler.DeleteMe)
 	userGroup.Get("/:userID", userHandler.GetProfile)
 
+	// User image upload/delete routes (authenticated + verified email)
+	imageHandler := api.NewImageUploadHandler(
+		s.userRepo, s.serverRepo, s.storage,
+		s.cfg.MaxAvatarSizeBytes(), s.cfg.MaxAvatarDimension,
+		s.cfg.MaxBannerWidth, s.cfg.MaxBannerHeight, log.Logger)
+	uploadLimiter := limiter.New(limiter.Config{
+		Max:          s.cfg.RateLimitUploadCount,
+		Expiration:   time.Duration(s.cfg.RateLimitUploadWindowSeconds) * time.Second,
+		KeyGenerator: userKeyGenerator,
+		LimitReached: rateLimitReached,
+	})
+	userGroup.Put("/@me/avatar", uploadLimiter, imageHandler.UploadUserAvatar)
+	userGroup.Delete("/@me/avatar", imageHandler.DeleteUserAvatar)
+	userGroup.Put("/@me/banner", uploadLimiter, imageHandler.UploadUserBanner)
+	userGroup.Delete("/@me/banner", imageHandler.DeleteUserBanner)
+
 	// MFA management routes (authenticated + verified email)
 	mfaHandler := api.NewMFAHandler(s.authService, log.Logger)
 	mfaGroup := userGroup.Group("/@me/mfa")
@@ -458,6 +474,18 @@ func (s *server) registerRoutes(app *fiber.App) {
 	serverGroup.Get("/", serverHandler.Get)
 	serverGroup.Patch("/", requireActive,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageServer), serverHandler.Update)
+	serverGroup.Put("/icon", requireActive,
+		permission.RequireServerPermission(s.permResolver, permissions.ManageServer),
+		uploadLimiter, imageHandler.UploadServerIcon)
+	serverGroup.Delete("/icon", requireActive,
+		permission.RequireServerPermission(s.permResolver, permissions.ManageServer),
+		imageHandler.DeleteServerIcon)
+	serverGroup.Put("/banner", requireActive,
+		permission.RequireServerPermission(s.permResolver, permissions.ManageServer),
+		uploadLimiter, imageHandler.UploadServerBanner)
+	serverGroup.Delete("/banner", requireActive,
+		permission.RequireServerPermission(s.permResolver, permissions.ManageServer),
+		imageHandler.DeleteServerBanner)
 
 	// Channel routes (server group: list is open to pending, create requires active)
 	channelHandler := api.NewChannelHandler(s.channelRepo, s.memberRepo, s.onboardingRepo, s.permResolver, s.gatewayPublisher, s.cfg.MaxChannels, log.Logger)

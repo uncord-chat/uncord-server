@@ -39,12 +39,38 @@ func (r *fakeServerRepo) Update(_ context.Context, params server.UpdateParams) (
 	if params.Description != nil {
 		r.cfg.Description = *params.Description
 	}
-	if params.IconKey != nil {
-		r.cfg.IconKey = params.IconKey
+	return r.cfg, nil
+}
+
+func (r *fakeServerRepo) SetIconKey(_ context.Context, key string) (*server.Config, error) {
+	if r.cfg == nil {
+		return nil, server.ErrNotFound
 	}
-	if params.BannerKey != nil {
-		r.cfg.BannerKey = params.BannerKey
+	r.cfg.IconKey = &key
+	return r.cfg, nil
+}
+
+func (r *fakeServerRepo) ClearIconKey(_ context.Context) (*server.Config, error) {
+	if r.cfg == nil {
+		return nil, server.ErrNotFound
 	}
+	r.cfg.IconKey = nil
+	return r.cfg, nil
+}
+
+func (r *fakeServerRepo) SetBannerKey(_ context.Context, key string) (*server.Config, error) {
+	if r.cfg == nil {
+		return nil, server.ErrNotFound
+	}
+	r.cfg.BannerKey = &key
+	return r.cfg, nil
+}
+
+func (r *fakeServerRepo) ClearBannerKey(_ context.Context) (*server.Config, error) {
+	if r.cfg == nil {
+		return nil, server.ErrNotFound
+	}
+	r.cfg.BannerKey = nil
 	return r.cfg, nil
 }
 
@@ -352,33 +378,5 @@ func TestUpdateServer_EmptyBody(t *testing.T) {
 	}
 	if sc.Name != "Test Server" {
 		t.Errorf("name = %q, want %q (should be unchanged)", sc.Name, "Test Server")
-	}
-}
-
-func TestUpdateServer_IconAndBannerKey(t *testing.T) {
-	t.Parallel()
-	repo := seedServerConfig()
-	app := testServerApp(t, repo, uuid.New())
-
-	resp := doReq(t, app, jsonReq(http.MethodPatch, "/", `{"icon_key":"new-icon","banner_key":"new-banner"}`))
-	body := readBody(t, resp)
-
-	if resp.StatusCode != fiber.StatusOK {
-		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusOK)
-	}
-
-	env := parseSuccess(t, body)
-	var sc struct {
-		IconKey   *string `json:"icon_key"`
-		BannerKey *string `json:"banner_key"`
-	}
-	if err := json.Unmarshal(env.Data, &sc); err != nil {
-		t.Fatalf("unmarshal server config response: %v", err)
-	}
-	if sc.IconKey == nil || *sc.IconKey != "new-icon" {
-		t.Errorf("icon_key = %v, want %q", sc.IconKey, "new-icon")
-	}
-	if sc.BannerKey == nil || *sc.BannerKey != "new-banner" {
-		t.Errorf("banner_key = %v, want %q", sc.BannerKey, "new-banner")
 	}
 }

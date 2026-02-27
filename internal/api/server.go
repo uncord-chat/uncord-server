@@ -64,8 +64,6 @@ func (h *ServerHandler) Update(c fiber.Ctx) error {
 	cfg, err := h.servers.Update(c, server.UpdateParams{
 		Name:        body.Name,
 		Description: body.Description,
-		IconKey:     body.IconKey,
-		BannerKey:   body.BannerKey,
 	})
 	if err != nil {
 		return h.mapServerError(c, err)
