@@ -404,7 +404,7 @@ func run() error {
 
 func (s *server) registerRoutes(app *fiber.App) {
 	requireAuth := auth.RequireAuth(s.cfg.JWTSecret.Expose(), s.cfg.ServerURL)
-	requireVerified := auth.RequireVerifiedEmail(s.userRepo)
+	requireVerified := auth.RequireVerifiedEmail()
 	requireActive := member.RequireActiveMember(s.memberRepo)
 
 	// Browser-facing email verification page (outside /api/v1/ because users click this link directly from email)

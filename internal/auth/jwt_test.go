@@ -15,7 +15,7 @@ func TestNewAccessTokenAndValidate(t *testing.T) {
 	userID := uuid.New()
 	secret := "test-secret-key-for-jwt"
 
-	tokenStr, err := NewAccessToken(userID, secret, 15*time.Minute, testIssuer)
+	tokenStr, err := NewAccessToken(userID, secret, 15*time.Minute, testIssuer, true)
 	if err != nil {
 		t.Fatalf("NewAccessToken() error = %v", err)
 	}
@@ -28,11 +28,34 @@ func TestNewAccessTokenAndValidate(t *testing.T) {
 	if claims.Subject != userID.String() {
 		t.Errorf("Subject = %q, want %q", claims.Subject, userID.String())
 	}
+	if !claims.EmailVerified {
+		t.Error("EmailVerified = false, want true")
+	}
+}
+
+func TestNewAccessTokenEmailVerifiedFalse(t *testing.T) {
+	t.Parallel()
+	userID := uuid.New()
+	secret := "test-secret-key-for-jwt"
+
+	tokenStr, err := NewAccessToken(userID, secret, 15*time.Minute, testIssuer, false)
+	if err != nil {
+		t.Fatalf("NewAccessToken() error = %v", err)
+	}
+
+	claims, err := ValidateAccessToken(tokenStr, secret, testIssuer)
+	if err != nil {
+		t.Fatalf("ValidateAccessToken() error = %v", err)
+	}
+
+	if claims.EmailVerified {
+		t.Error("EmailVerified = true, want false")
+	}
 }
 
 func TestNewAccessTokenEmptySecret(t *testing.T) {
 	t.Parallel()
-	_, err := NewAccessToken(uuid.New(), "", 15*time.Minute, testIssuer)
+	_, err := NewAccessToken(uuid.New(), "", 15*time.Minute, testIssuer, false)
 	if err == nil {
 		t.Fatal("NewAccessToken() with empty secret should return error")
 	}
@@ -40,7 +63,7 @@ func TestNewAccessTokenEmptySecret(t *testing.T) {
 
 func TestNewAccessTokenEmptyIssuer(t *testing.T) {
 	t.Parallel()
-	_, err := NewAccessToken(uuid.New(), "secret", 15*time.Minute, "")
+	_, err := NewAccessToken(uuid.New(), "secret", 15*time.Minute, "", false)
 	if err == nil {
 		t.Fatal("NewAccessToken() with empty issuer should return error")
 	}
@@ -77,7 +100,7 @@ func TestValidateAccessTokenWrongSecret(t *testing.T) {
 	t.Parallel()
 	userID := uuid.New()
 
-	tokenStr, err := NewAccessToken(userID, "correct-secret", 15*time.Minute, testIssuer)
+	tokenStr, err := NewAccessToken(userID, "correct-secret", 15*time.Minute, testIssuer, false)
 	if err != nil {
 		t.Fatalf("NewAccessToken() error = %v", err)
 	}
@@ -93,7 +116,7 @@ func TestValidateAccessTokenWrongIssuer(t *testing.T) {
 	userID := uuid.New()
 	secret := "test-secret"
 
-	tokenStr, err := NewAccessToken(userID, secret, 15*time.Minute, testIssuer)
+	tokenStr, err := NewAccessToken(userID, secret, 15*time.Minute, testIssuer, false)
 	if err != nil {
 		t.Fatalf("NewAccessToken() error = %v", err)
 	}

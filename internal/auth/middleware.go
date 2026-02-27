@@ -10,7 +10,6 @@ import (
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 
 	"github.com/uncord-chat/uncord-server/internal/httputil"
-	"github.com/uncord-chat/uncord-server/internal/user"
 )
 
 // RequireAuth returns Fiber middleware that validates a JWT Bearer token from the Authorization header and stores the
@@ -47,23 +46,20 @@ func RequireAuth(secret, issuer string) fiber.Handler {
 		}
 
 		c.Locals("userID", userID)
+		c.Locals("emailVerified", claims.EmailVerified)
 		return c.Next()
 	}
 }
 
 // RequireVerifiedEmail returns Fiber middleware that blocks users whose email address has not been verified. Must be
-// placed after RequireAuth so that c.Locals("userID") is populated.
-func RequireVerifiedEmail(users user.Repository) fiber.Handler {
+// placed after RequireAuth, which stores the email_verified JWT claim in c.Locals("emailVerified").
+func RequireVerifiedEmail() fiber.Handler {
 	return func(c fiber.Ctx) error {
-		userID, ok := c.Locals("userID").(uuid.UUID)
+		verified, ok := c.Locals("emailVerified").(bool)
 		if !ok {
 			return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
 		}
-		u, err := users.GetByID(c, userID)
-		if err != nil {
-			return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "User not found")
-		}
-		if !u.EmailVerified {
+		if !verified {
 			return httputil.Fail(c, fiber.StatusForbidden, apierrors.EmailNotVerified,
 				"Email verification is required")
 		}

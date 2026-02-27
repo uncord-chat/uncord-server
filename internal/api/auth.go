@@ -127,13 +127,12 @@ func (h *AuthHandler) VerifyEmail(c fiber.Ctx) error {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "token is required")
 	}
 
-	if err := h.auth.VerifyEmail(c, body.Token); err != nil {
+	result, err := h.auth.VerifyEmail(c, body.Token)
+	if err != nil {
 		return h.mapAuthError(c, err)
 	}
 
-	return httputil.Success(c, models.MessageResponse{
-		Message: "Email verified successfully",
-	})
+	return httputil.Success(c, toAuthResponse(result))
 }
 
 // VerifyPassword handles POST /api/v1/auth/verify-password.

@@ -197,7 +197,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*AuthResul
 
 	s.log.Debug().Str("user_id", userID.String()).Msg("User registered")
 
-	tokens, err := s.issueTokens(ctx, userID)
+	tokens, err := s.issueTokens(ctx, userID, false)
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +270,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResult, er
 
 	s.recordLoginAttempt(ctx, email, req.IP, true)
 
-	tokens, err := s.issueTokens(ctx, u.ID)
+	tokens, err := s.issueTokens(ctx, u.ID, u.EmailVerified)
 	if err != nil {
 		return nil, err
 	}
@@ -284,14 +284,21 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResult, er
 	}, nil
 }
 
-// Refresh rotates a refresh token and issues a new access token.
+// Refresh rotates a refresh token and issues a new access token. The user's current email verification status is read
+// from the database so that the new access token reflects the latest state. One DB query per refresh is far cheaper
+// than one per authenticated request.
 func (s *Service) Refresh(ctx context.Context, oldToken string) (*TokenPair, error) {
 	newRefresh, userID, err := RotateRefreshToken(ctx, s.redis, oldToken, s.config.JWTRefreshTTL)
 	if err != nil {
 		return nil, err // ErrRefreshTokenReused passes through
 	}
 
-	accessToken, err := NewAccessToken(userID, s.config.JWTSecret.Expose(), s.config.JWTAccessTTL, s.config.ServerURL)
+	u, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get user for refresh: %w", err)
+	}
+
+	accessToken, err := NewAccessToken(userID, s.config.JWTSecret.Expose(), s.config.JWTAccessTTL, s.config.ServerURL, u.EmailVerified)
 	if err != nil {
 		return nil, fmt.Errorf("create access token: %w", err)
 	}
@@ -302,17 +309,35 @@ func (s *Service) Refresh(ctx context.Context, oldToken string) (*TokenPair, err
 	}, nil
 }
 
-// VerifyEmail consumes a verification token and marks the user as verified.
-func (s *Service) VerifyEmail(ctx context.Context, token string) error {
+// VerifyEmail consumes a verification token, marks the user as verified, and issues fresh auth tokens with the
+// email_verified claim set to true. Callers that do not need the tokens (e.g. the browser page handler) may discard the
+// result.
+func (s *Service) VerifyEmail(ctx context.Context, token string) (*AuthResult, error) {
 	userID, err := s.users.VerifyEmail(ctx, token)
 	if err != nil {
 		if errors.Is(err, user.ErrInvalidToken) {
-			return ErrInvalidToken
+			return nil, ErrInvalidToken
 		}
-		return fmt.Errorf("verify email: %w", err)
+		return nil, fmt.Errorf("verify email: %w", err)
 	}
+
+	u, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get user after email verification: %w", err)
+	}
+
+	tokens, err := s.issueTokens(ctx, userID, true)
+	if err != nil {
+		return nil, err
+	}
+
 	s.log.Debug().Str("user_id", userID.String()).Msg("User email verified")
-	return nil
+
+	return &AuthResult{
+		User:         u.ToModel(),
+		AccessToken:  tokens.AccessToken,
+		RefreshToken: tokens.RefreshToken,
+	}, nil
 }
 
 // ResendVerification generates a new email verification token and sends a verification email. Returns
@@ -675,7 +700,7 @@ func (s *Service) DeleteAccount(ctx context.Context, userID uuid.UUID, password 
 
 // completeMFALogin issues tokens and builds an AuthResult with MFAEnabled set to true.
 func (s *Service) completeMFALogin(ctx context.Context, creds *user.Credentials) (*AuthResult, error) {
-	tokens, err := s.issueTokens(ctx, creds.ID)
+	tokens, err := s.issueTokens(ctx, creds.ID, creds.EmailVerified)
 	if err != nil {
 		return nil, err
 	}
@@ -718,8 +743,8 @@ func (s *Service) tryRecoveryCode(ctx context.Context, userID uuid.UUID, code st
 	return ErrInvalidMFACode
 }
 
-func (s *Service) issueTokens(ctx context.Context, userID uuid.UUID) (*TokenPair, error) {
-	accessToken, err := NewAccessToken(userID, s.config.JWTSecret.Expose(), s.config.JWTAccessTTL, s.config.ServerURL)
+func (s *Service) issueTokens(ctx context.Context, userID uuid.UUID, emailVerified bool) (*TokenPair, error) {
+	accessToken, err := NewAccessToken(userID, s.config.JWTSecret.Expose(), s.config.JWTAccessTTL, s.config.ServerURL, emailVerified)
 	if err != nil {
 		return nil, fmt.Errorf("create access token: %w", err)
 	}

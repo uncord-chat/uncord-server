@@ -30,6 +30,7 @@ type fakeRepository struct {
 	verifyErr       error
 	loginAttempts   []loginAttempt
 	replaceTokenErr error
+	verifyUserID    uuid.UUID // ID returned by VerifyEmail on success; must exist in users map
 }
 
 type loginAttempt struct {
@@ -81,6 +82,13 @@ func (r *fakeRepository) VerifyEmail(_ context.Context, token string) (uuid.UUID
 		return uuid.Nil, r.verifyErr
 	}
 	if token == "valid-token" {
+		if r.verifyUserID != uuid.Nil {
+			return r.verifyUserID, nil
+		}
+		// Return the first user in the map so GetByID can find them.
+		for _, c := range r.users {
+			return c.ID, nil
+		}
 		return uuid.New(), nil
 	}
 	return uuid.Nil, user.ErrInvalidToken
@@ -711,10 +719,35 @@ func TestServiceVerifyEmailSuccess(t *testing.T) {
 	t.Parallel()
 	repo := newFakeRepository()
 	svc := newTestService(t, repo)
+	ctx := context.Background()
 
-	err := svc.VerifyEmail(context.Background(), "valid-token")
+	// Register a user so GetByID can find them after verification.
+	reg, err := svc.Register(ctx, RegisterRequest{
+		Email:    "verify@example.com",
+		Username: "verifyuser",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	uid, _ := uuid.Parse(reg.User.ID)
+	repo.verifyUserID = uid
+
+	result, err := svc.VerifyEmail(ctx, "valid-token")
 	if err != nil {
 		t.Fatalf("VerifyEmail() error = %v", err)
+	}
+	if result == nil {
+		t.Fatal("VerifyEmail() returned nil result")
+	}
+	if result.AccessToken == "" {
+		t.Error("VerifyEmail() returned empty access token")
+	}
+	if result.RefreshToken == "" {
+		t.Error("VerifyEmail() returned empty refresh token")
+	}
+	if result.User.ID != reg.User.ID {
+		t.Errorf("VerifyEmail() user ID = %q, want %q", result.User.ID, reg.User.ID)
 	}
 }
 
@@ -723,7 +756,7 @@ func TestServiceVerifyEmailInvalidToken(t *testing.T) {
 	repo := newFakeRepository()
 	svc := newTestService(t, repo)
 
-	err := svc.VerifyEmail(context.Background(), "invalid-token")
+	_, err := svc.VerifyEmail(context.Background(), "invalid-token")
 	if !errors.Is(err, ErrInvalidToken) {
 		t.Errorf("VerifyEmail() error = %v, want ErrInvalidToken", err)
 	}
@@ -735,7 +768,7 @@ func TestServiceVerifyEmailRepoError(t *testing.T) {
 	repo.verifyErr = errors.New("database error")
 	svc := newTestService(t, repo)
 
-	err := svc.VerifyEmail(context.Background(), "any-token")
+	_, err := svc.VerifyEmail(context.Background(), "any-token")
 	if err == nil {
 		t.Fatal("VerifyEmail() should fail when repo errors")
 	}

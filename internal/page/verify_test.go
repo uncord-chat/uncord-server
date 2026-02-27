@@ -62,6 +62,10 @@ func (r *fakeRepo) GetByEmail(_ context.Context, email string) (*user.Credential
 
 func (r *fakeRepo) VerifyEmail(_ context.Context, token string) (uuid.UUID, error) {
 	if token == "valid-token" {
+		// Return the first user in the map so GetByID can find them.
+		for _, c := range r.users {
+			return c.ID, nil
+		}
 		return uuid.New(), nil
 	}
 	return uuid.Nil, user.ErrInvalidToken
@@ -178,10 +182,21 @@ func testVerifyHandler(t *testing.T) *fiber.App {
 	}
 
 	bl := disposable.NewBlocklist("", false, 10*time.Second, zerolog.Nop())
+	repo := newFakeRepo()
 	permPub := permission.NewPublisher(rdb)
-	svc, err := auth.NewService(newFakeRepo(), rdb, cfg, bl, nil, &fakeServerRepo{}, permPub, zerolog.Nop())
+	svc, err := auth.NewService(repo, rdb, cfg, bl, nil, &fakeServerRepo{}, permPub, zerolog.Nop())
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
+	}
+
+	// Register a user so that VerifyEmail can look them up by ID after marking the token valid.
+	_, err = svc.Register(t.Context(), auth.RegisterRequest{
+		Email:    "verify@example.com",
+		Username: "verifyuser",
+		Password: "strongpassword",
+	})
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
 	}
 
 	handler := NewVerifyHandler(svc, cfg.ServerName, nil, zerolog.Nop())

@@ -238,6 +238,21 @@
 				},
 				{
 					"name": "Verify Email (API)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const data = pm.response.json().data;",
+									"    pm.collectionVariables.set('token', data.access_token);",
+									"    pm.collectionVariables.set('refresh_token', data.refresh_token);",
+									"}"
+								]
+							}
+						}
+					],
 					"request": {
 						"auth": {
 							"type": "noauth"

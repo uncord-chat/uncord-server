@@ -11,11 +11,13 @@ import (
 // AccessClaims holds the JWT claims for an access token.
 type AccessClaims struct {
 	jwt.RegisteredClaims
+	EmailVerified bool `json:"email_verified"`
 }
 
 // NewAccessToken creates a signed JWT access token for the given user. The issuer is embedded in the token and must be
-// verified during validation.
-func NewAccessToken(userID uuid.UUID, secret string, ttl time.Duration, issuer string) (string, error) {
+// verified during validation. The emailVerified claim is embedded so that downstream middleware can check verification
+// status without a database query.
+func NewAccessToken(userID uuid.UUID, secret string, ttl time.Duration, issuer string, emailVerified bool) (string, error) {
 	if secret == "" {
 		return "", fmt.Errorf("JWT secret must not be empty")
 	}
@@ -31,6 +33,7 @@ func NewAccessToken(userID uuid.UUID, secret string, ttl time.Duration, issuer s
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
 		},
+		EmailVerified: emailVerified,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

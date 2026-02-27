@@ -65,6 +65,10 @@ func (r *fakeRepo) GetByEmail(_ context.Context, email string) (*user.Credential
 
 func (r *fakeRepo) VerifyEmail(_ context.Context, token string) (uuid.UUID, error) {
 	if token == "valid-token" {
+		// Return the first user in the map so GetByID can find them.
+		for _, c := range r.users {
+			return c.ID, nil
+		}
 		return uuid.New(), nil
 	}
 	return uuid.Nil, user.ErrInvalidToken
@@ -581,6 +585,10 @@ func TestVerifyEmailHandler_Success(t *testing.T) {
 	t.Parallel()
 	app := testAuthHandler(t)
 
+	// Register a user so the verify-email endpoint can look them up by ID.
+	doReq(t, app, jsonReq(http.MethodPost, "/register",
+		`{"email":"verify@example.com","username":"verifyuser","password":"strongpassword"}`))
+
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/verify-email", `{"token":"valid-token"}`))
 	body := readBody(t, resp)
 
@@ -589,14 +597,24 @@ func TestVerifyEmailHandler_Success(t *testing.T) {
 	}
 
 	env := parseSuccess(t, body)
-	var msgResp struct {
-		Message string `json:"message"`
+	var authResp struct {
+		User struct {
+			ID string `json:"id"`
+		} `json:"user"`
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
 	}
-	if err := json.Unmarshal(env.Data, &msgResp); err != nil {
-		t.Fatalf("unmarshal message response: %v", err)
+	if err := json.Unmarshal(env.Data, &authResp); err != nil {
+		t.Fatalf("unmarshal auth response: %v", err)
 	}
-	if msgResp.Message == "" {
-		t.Error("message is empty")
+	if authResp.User.ID == "" {
+		t.Error("user.id is empty")
+	}
+	if authResp.AccessToken == "" {
+		t.Error("access_token is empty")
+	}
+	if authResp.RefreshToken == "" {
+		t.Error("refresh_token is empty")
 	}
 }
 

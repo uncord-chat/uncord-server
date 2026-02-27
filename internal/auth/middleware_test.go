@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -12,8 +11,6 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
-
-	"github.com/uncord-chat/uncord-server/internal/user"
 )
 
 func TestRequireAuthNoHeader(t *testing.T) {
@@ -72,7 +69,7 @@ func TestRequireAuthExpiredToken(t *testing.T) {
 	})
 
 	// Create an expired token
-	tokenStr, err := NewAccessToken(uuid.New(), secret, -1*time.Second, testIssuer)
+	tokenStr, err := NewAccessToken(uuid.New(), secret, -1*time.Second, testIssuer, false)
 	if err != nil {
 		t.Fatalf("NewAccessToken() error = %v", err)
 	}
@@ -107,10 +104,17 @@ func TestRequireAuthValid(t *testing.T) {
 		if !ok {
 			return c.Status(500).SendString("userID not found in locals")
 		}
+		verified, ok := c.Locals("emailVerified").(bool)
+		if !ok {
+			return c.Status(500).SendString("emailVerified not found in locals")
+		}
+		if !verified {
+			return c.Status(500).SendString("emailVerified should be true")
+		}
 		return c.SendString(id.String())
 	})
 
-	tokenStr, err := NewAccessToken(userID, secret, 15*time.Minute, testIssuer)
+	tokenStr, err := NewAccessToken(userID, secret, 15*time.Minute, testIssuer, true)
 	if err != nil {
 		t.Fatalf("NewAccessToken() error = %v", err)
 	}
@@ -141,7 +145,7 @@ func TestRequireAuthWrongSignature(t *testing.T) {
 		return c.SendStatus(200)
 	})
 
-	tokenStr, _ := NewAccessToken(uuid.New(), "wrong-secret", 15*time.Minute, testIssuer)
+	tokenStr, _ := NewAccessToken(uuid.New(), "wrong-secret", 15*time.Minute, testIssuer, false)
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenStr)
@@ -173,113 +177,30 @@ func readErrorCode(t *testing.T, resp *http.Response) string {
 	return body.Error.Code
 }
 
-// fakeUserLookup implements user.Repository for RequireVerifiedEmail tests. Only GetByID is exercised; all other
-// methods panic to surface unintended calls.
-type fakeUserLookup struct {
-	users map[uuid.UUID]*user.User
-}
-
-func (f *fakeUserLookup) GetByID(_ context.Context, id uuid.UUID) (*user.User, error) {
-	u, ok := f.users[id]
-	if !ok {
-		return nil, user.ErrNotFound
-	}
-	return u, nil
-}
-
-func (f *fakeUserLookup) Create(context.Context, user.CreateParams) (uuid.UUID, error) {
-	panic("not implemented")
-}
-func (f *fakeUserLookup) GetByEmail(context.Context, string) (*user.Credentials, error) {
-	panic("not implemented")
-}
-func (f *fakeUserLookup) GetCredentialsByID(context.Context, uuid.UUID) (*user.Credentials, error) {
-	panic("not implemented")
-}
-func (f *fakeUserLookup) VerifyEmail(context.Context, string) (uuid.UUID, error) {
-	panic("not implemented")
-}
-func (f *fakeUserLookup) ReplaceVerificationToken(context.Context, uuid.UUID, string, time.Time, time.Duration) error {
-	panic("not implemented")
-}
-func (f *fakeUserLookup) RecordLoginAttempt(context.Context, string, string, bool) error {
-	panic("not implemented")
-}
-func (f *fakeUserLookup) UpdatePasswordHash(context.Context, uuid.UUID, string) error {
-	panic("not implemented")
-}
-func (f *fakeUserLookup) Update(context.Context, uuid.UUID, user.UpdateParams) (*user.User, error) {
-	panic("not implemented")
-}
-func (f *fakeUserLookup) EnableMFA(context.Context, uuid.UUID, string, []string) error {
-	panic("not implemented")
-}
-func (f *fakeUserLookup) DisableMFA(context.Context, uuid.UUID) error {
-	panic("not implemented")
-}
-func (f *fakeUserLookup) GetUnusedRecoveryCodes(context.Context, uuid.UUID) ([]user.MFARecoveryCode, error) {
-	panic("not implemented")
-}
-func (f *fakeUserLookup) UseRecoveryCode(context.Context, uuid.UUID) error {
-	panic("not implemented")
-}
-func (f *fakeUserLookup) ReplaceRecoveryCodes(context.Context, uuid.UUID, []string) error {
-	panic("not implemented")
-}
-func (f *fakeUserLookup) DeleteWithTombstones(context.Context, uuid.UUID, []user.Tombstone) error {
-	panic("not implemented")
-}
-func (f *fakeUserLookup) CheckTombstone(context.Context, user.TombstoneType, string) (bool, error) {
-	panic("not implemented")
-}
-func (f *fakeUserLookup) PurgeLoginAttempts(context.Context, time.Time) (int64, error) {
-	panic("not implemented")
-}
-func (f *fakeUserLookup) PurgeTombstones(context.Context, time.Time) (int64, error) {
-	panic("not implemented")
-}
-
 func TestRequireVerifiedEmail(t *testing.T) {
 	t.Parallel()
 
-	verifiedID := uuid.New()
-	unverifiedID := uuid.New()
-	unknownID := uuid.New()
-
-	lookup := &fakeUserLookup{
-		users: map[uuid.UUID]*user.User{
-			verifiedID:   {EmailVerified: true},
-			unverifiedID: {EmailVerified: false},
-		},
-	}
-	mw := RequireVerifiedEmail(lookup)
+	mw := RequireVerifiedEmail()
 
 	tests := []struct {
-		name       string
-		userID     uuid.UUID
-		setLocals  bool
-		wantStatus int
-		wantCode   string
+		name          string
+		emailVerified bool
+		setLocals     bool
+		wantStatus    int
+		wantCode      string
 	}{
 		{
-			name:       "verified user passes through",
-			userID:     verifiedID,
-			setLocals:  true,
-			wantStatus: http.StatusOK,
+			name:          "verified user passes through",
+			emailVerified: true,
+			setLocals:     true,
+			wantStatus:    http.StatusOK,
 		},
 		{
-			name:       "unverified user is blocked",
-			userID:     unverifiedID,
-			setLocals:  true,
-			wantStatus: http.StatusForbidden,
-			wantCode:   string(apierrors.EmailNotVerified),
-		},
-		{
-			name:       "unknown user is blocked",
-			userID:     unknownID,
-			setLocals:  true,
-			wantStatus: http.StatusUnauthorized,
-			wantCode:   string(apierrors.Unauthorised),
+			name:          "unverified user is blocked",
+			emailVerified: false,
+			setLocals:     true,
+			wantStatus:    http.StatusForbidden,
+			wantCode:      string(apierrors.EmailNotVerified),
 		},
 		{
 			name:       "missing locals is blocked",
@@ -295,10 +216,10 @@ func TestRequireVerifiedEmail(t *testing.T) {
 
 			app := fiber.New()
 
-			// Inject the userID local before the middleware under test.
+			// Inject the emailVerified local before the middleware under test.
 			app.Use(func(c fiber.Ctx) error {
 				if tt.setLocals {
-					c.Locals("userID", tt.userID)
+					c.Locals("emailVerified", tt.emailVerified)
 				}
 				return c.Next()
 			})

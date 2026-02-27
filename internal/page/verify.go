@@ -74,7 +74,7 @@ func (h *VerifyHandler) VerifyEmail(c fiber.Ctx) error {
 		})
 	}
 
-	if err := h.auth.VerifyEmail(c, token); err != nil {
+	if _, err := h.auth.VerifyEmail(c, token); err != nil {
 		if errors.Is(err, auth.ErrInvalidToken) {
 			return h.renderPage(c, fiber.StatusBadRequest, verifyData{
 				Title:        h.serverName + " — Email Verification",
