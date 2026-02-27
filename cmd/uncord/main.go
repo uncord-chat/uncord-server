@@ -441,6 +441,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 	userGroup.Get("/@me", userHandler.GetMe)
 	userGroup.Patch("/@me", userHandler.UpdateMe)
 	userGroup.Delete("/@me", userHandler.DeleteMe)
+	userGroup.Get("/:userID", userHandler.GetProfile)
 
 	// MFA management routes (authenticated + verified email)
 	mfaHandler := api.NewMFAHandler(s.authService, log.Logger)

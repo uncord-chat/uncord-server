@@ -17,12 +17,20 @@ import (
 func seedUser(repo *fakeRepo) *user.User {
 	id := uuid.New()
 	displayName := "Alice"
+	pronouns := "she/her"
+	about := "Hello there"
+	primary := 16711680
 	c := &user.Credentials{
 		User: user.User{
-			ID:          id,
-			Email:       "alice@example.com",
-			Username:    "alice",
-			DisplayName: &displayName,
+			ID:                 id,
+			Email:              "alice@example.com",
+			Username:           "alice",
+			DisplayName:        &displayName,
+			Pronouns:           &pronouns,
+			About:              &about,
+			MFAEnabled:         true,
+			EmailVerified:      true,
+			ThemeColourPrimary: &primary,
 		},
 	}
 	repo.users[c.Email] = c
@@ -38,6 +46,7 @@ func testUserApp(t *testing.T, repo *fakeRepo, userID uuid.UUID) *fiber.App {
 
 	app.Get("/@me", handler.GetMe)
 	app.Patch("/@me", handler.UpdateMe)
+	app.Get("/:userID", handler.GetProfile)
 	return app
 }
 
@@ -452,5 +461,93 @@ func TestUpdateMe_BannerKey(t *testing.T) {
 	}
 	if userResp.BannerKey == nil || *userResp.BannerKey != "banner_abc123" {
 		t.Errorf("banner_key = %v, want %q", userResp.BannerKey, "banner_abc123")
+	}
+}
+
+// --- GetProfile tests ---
+
+func TestGetProfile_InvalidID(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepo()
+	u := seedUser(repo)
+	app := testUserApp(t, repo, u.ID)
+
+	resp := doReq(t, app, jsonReq(http.MethodGet, "/not-a-uuid", ""))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusBadRequest)
+	}
+	env := parseError(t, body)
+	if env.Error.Code != string(apierrors.ValidationError) {
+		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.ValidationError)
+	}
+}
+
+func TestGetProfile_NotFound(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepo()
+	u := seedUser(repo)
+	app := testUserApp(t, repo, u.ID)
+
+	resp := doReq(t, app, jsonReq(http.MethodGet, "/"+uuid.New().String(), ""))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusNotFound {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusNotFound)
+	}
+	env := parseError(t, body)
+	if env.Error.Code != string(apierrors.UnknownUser) {
+		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.UnknownUser)
+	}
+}
+
+func TestGetProfile_Success(t *testing.T) {
+	t.Parallel()
+	repo := newFakeRepo()
+	u := seedUser(repo)
+	app := testUserApp(t, repo, u.ID)
+
+	resp := doReq(t, app, jsonReq(http.MethodGet, "/"+u.ID.String(), ""))
+	body := readBody(t, resp)
+
+	if resp.StatusCode != fiber.StatusOK {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusOK)
+	}
+
+	// Verify the raw JSON contains public fields and excludes private ones.
+	env := parseSuccess(t, body)
+	raw := make(map[string]json.RawMessage)
+	if err := json.Unmarshal(env.Data, &raw); err != nil {
+		t.Fatalf("unmarshal profile response: %v", err)
+	}
+
+	for _, field := range []string{"id", "username", "display_name", "pronouns", "about", "theme_colour_primary"} {
+		if _, ok := raw[field]; !ok {
+			t.Errorf("expected field %q in response", field)
+		}
+	}
+	for _, field := range []string{"email", "mfa_enabled", "email_verified"} {
+		if _, ok := raw[field]; ok {
+			t.Errorf("private field %q must not appear in profile response", field)
+		}
+	}
+
+	var profile struct {
+		ID          string  `json:"id"`
+		Username    string  `json:"username"`
+		DisplayName *string `json:"display_name"`
+	}
+	if err := json.Unmarshal(env.Data, &profile); err != nil {
+		t.Fatalf("unmarshal profile fields: %v", err)
+	}
+	if profile.ID != u.ID.String() {
+		t.Errorf("id = %q, want %q", profile.ID, u.ID.String())
+	}
+	if profile.Username != "alice" {
+		t.Errorf("username = %q, want %q", profile.Username, "alice")
+	}
+	if profile.DisplayName == nil || *profile.DisplayName != "Alice" {
+		t.Errorf("display_name = %v, want %q", profile.DisplayName, "Alice")
 	}
 }

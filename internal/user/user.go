@@ -60,6 +60,22 @@ func (u *User) ToModel() models.User {
 	}
 }
 
+// ToProfileModel converts the internal user struct to the public profile response type, excluding private fields such
+// as email, MFA status, and email verification state.
+func (u *User) ToProfileModel() models.UserProfile {
+	return models.UserProfile{
+		ID:                   u.ID.String(),
+		Username:             u.Username,
+		DisplayName:          u.DisplayName,
+		AvatarKey:            u.AvatarKey,
+		Pronouns:             u.Pronouns,
+		BannerKey:            u.BannerKey,
+		About:                u.About,
+		ThemeColourPrimary:   u.ThemeColourPrimary,
+		ThemeColourSecondary: u.ThemeColourSecondary,
+	}
+}
+
 // Credentials extends User with the password hash and optional MFA secret. Only repository methods that serve the
 // authentication path return this type; all other read methods return *User to prevent credential leakage at the type
 // level.

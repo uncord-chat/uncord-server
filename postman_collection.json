@@ -66,6 +66,10 @@
 		{
 			"key": "attachment_id",
 			"value": ""
+		},
+		{
+			"key": "user_id",
+			"value": ""
 		}
 	],
 	"item": [
@@ -563,6 +567,23 @@
 							"path": [
 								"users",
 								"@me"
+							]
+						}
+					}
+				},
+				{
+					"name": "Get User Profile",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/users/{{user_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"{{user_id}}"
 							]
 						}
 					}

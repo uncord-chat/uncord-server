@@ -41,6 +41,21 @@ func (h *UserHandler) GetMe(c fiber.Ctx) error {
 	return httputil.Success(c, u.ToModel())
 }
 
+// GetProfile handles GET /api/v1/users/:userID.
+func (h *UserHandler) GetProfile(c fiber.Ctx) error {
+	targetID, err := uuid.Parse(c.Params("userID"))
+	if err != nil {
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid user ID format")
+	}
+
+	u, err := h.users.GetByID(c, targetID)
+	if err != nil {
+		return h.mapUserError(c, err)
+	}
+
+	return httputil.Success(c, u.ToProfileModel())
+}
+
 // UpdateMe handles PATCH /api/v1/users/@me.
 func (h *UserHandler) UpdateMe(c fiber.Ctx) error {
 	userID, ok := c.Locals("userID").(uuid.UUID)

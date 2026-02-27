@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 func TestSentinelErrors(t *testing.T) {
@@ -324,5 +326,62 @@ func TestValidateThemeColour(t *testing.T) {
 				t.Errorf("ValidateThemeColour() error = %v, want ErrThemeColourRange", err)
 			}
 		})
+	}
+}
+
+func TestUser_ToProfileModel(t *testing.T) {
+	t.Parallel()
+
+	displayName := "Alice"
+	pronouns := "she/her"
+	about := "Hello there"
+	primary := 16711680
+	secondary := 255
+	avatarKey := "avatar123"
+	bannerKey := "banner456"
+
+	u := &User{
+		ID:                   uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+		Email:                "alice@example.com",
+		Username:             "alice",
+		DisplayName:          &displayName,
+		AvatarKey:            &avatarKey,
+		Pronouns:             &pronouns,
+		BannerKey:            &bannerKey,
+		About:                &about,
+		ThemeColourPrimary:   &primary,
+		ThemeColourSecondary: &secondary,
+		MFAEnabled:           true,
+		EmailVerified:        true,
+	}
+
+	profile := u.ToProfileModel()
+
+	if profile.ID != "11111111-1111-1111-1111-111111111111" {
+		t.Errorf("ID = %q, want %q", profile.ID, "11111111-1111-1111-1111-111111111111")
+	}
+	if profile.Username != "alice" {
+		t.Errorf("Username = %q, want %q", profile.Username, "alice")
+	}
+	if profile.DisplayName == nil || *profile.DisplayName != "Alice" {
+		t.Errorf("DisplayName = %v, want %q", profile.DisplayName, "Alice")
+	}
+	if profile.AvatarKey == nil || *profile.AvatarKey != "avatar123" {
+		t.Errorf("AvatarKey = %v, want %q", profile.AvatarKey, "avatar123")
+	}
+	if profile.Pronouns == nil || *profile.Pronouns != "she/her" {
+		t.Errorf("Pronouns = %v, want %q", profile.Pronouns, "she/her")
+	}
+	if profile.BannerKey == nil || *profile.BannerKey != "banner456" {
+		t.Errorf("BannerKey = %v, want %q", profile.BannerKey, "banner456")
+	}
+	if profile.About == nil || *profile.About != "Hello there" {
+		t.Errorf("About = %v, want %q", profile.About, "Hello there")
+	}
+	if profile.ThemeColourPrimary == nil || *profile.ThemeColourPrimary != 16711680 {
+		t.Errorf("ThemeColourPrimary = %v, want %d", profile.ThemeColourPrimary, 16711680)
+	}
+	if profile.ThemeColourSecondary == nil || *profile.ThemeColourSecondary != 255 {
+		t.Errorf("ThemeColourSecondary = %v, want %d", profile.ThemeColourSecondary, 255)
 	}
 }
