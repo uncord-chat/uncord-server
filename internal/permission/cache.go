@@ -13,7 +13,10 @@ import (
 )
 
 const (
-	// CacheTTL is the default time-to-live for cached permission values.
+	// CacheTTL is the default time-to-live for cached permission values. Under normal operation, pub/sub invalidation
+	// keeps the cache consistent. If the subscriber connection drops and reconnects, entries written during the outage
+	// may serve stale permissions until they expire naturally. This eventual consistency window (up to CacheTTL) is an
+	// acceptable trade-off for the simplicity of a TTL based fallback over active consistency tracking.
 	CacheTTL = 300 * time.Second
 
 	// CachePrefix is the key prefix for cached permissions in Valkey.
