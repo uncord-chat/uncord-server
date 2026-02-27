@@ -47,9 +47,10 @@ type HubDeps struct {
 }
 
 // Hub is the central WebSocket connection registry and event distributor. It manages client connections, subscribes to
-// gateway events via Valkey pub/sub, and dispatches events to connected clients with permission filtering.
+// gateway events via Valkey pub/sub, and dispatches events to connected clients with permission filtering. Each user
+// may have multiple concurrent connections (e.g. multiple browser tabs); the client map stores a slice per user.
 type Hub struct {
-	clients        map[uuid.UUID]*Client
+	clients        map[uuid.UUID][]*Client
 	mu             sync.RWMutex
 	rdb            *redis.Client
 	cfg            *config.Config
@@ -70,7 +71,7 @@ type Hub struct {
 // NewHub creates a new gateway hub.
 func NewHub(d HubDeps) *Hub {
 	return &Hub{
-		clients:        make(map[uuid.UUID]*Client),
+		clients:        make(map[uuid.UUID][]*Client),
 		rdb:            d.RDB,
 		cfg:            d.Cfg,
 		sessions:       d.Sessions,
@@ -133,42 +134,63 @@ func (h *Hub) ServeWebSocket(conn *websocket.Conn) {
 	client.readPump()
 }
 
-// register adds an authenticated client to the Hub. If the user already has an active connection, the old connection
-// is displaced with an InvalidSession frame.
+// register adds an authenticated client to the Hub. A user may have multiple concurrent connections; the new client is
+// appended to the user's connection slice.
 func (h *Hub) register(client *Client) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if len(h.clients) >= h.cfg.GatewayMaxConnections {
+	if h.totalClientsLocked() >= h.cfg.GatewayMaxConnections {
 		return ErrMaxConnections
 	}
 
 	userID := client.UserID()
-	if existing, ok := h.clients[userID]; ok {
-		h.log.Debug().Stringer("user_id", userID).Msg("Displacing existing connection")
-		if frame, err := NewInvalidSessionFrame(false); err == nil {
-			existing.enqueue(frame)
-		}
-		existing.closeSend()
-		delete(h.clients, userID)
-	}
-
-	h.clients[userID] = client
-	h.log.Debug().Stringer("user_id", userID).Int("total", len(h.clients)).Msg("Client registered")
+	h.clients[userID] = append(h.clients[userID], client)
+	h.log.Debug().Stringer("user_id", userID).Int("total", h.totalClientsLocked()).Msg("Client registered")
 	return nil
 }
 
-// unregister removes a client from the Hub and persists its session for future resume.
+// totalClientsLocked returns the total number of connected clients across all users. The caller must hold h.mu (read
+// or write).
+func (h *Hub) totalClientsLocked() int {
+	n := 0
+	for _, cs := range h.clients {
+		n += len(cs)
+	}
+	return n
+}
+
+// unregister removes a client from the Hub and persists its session for future resume. Presence is only cleared after
+// a delay if the user has no remaining connections.
 func (h *Hub) unregister(client *Client) {
 	h.mu.Lock()
 
 	userID := client.UserID()
-	current, ok := h.clients[userID]
-	if !ok || current != client {
+	cs := h.clients[userID]
+
+	idx := -1
+	for i, c := range cs {
+		if c == client {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
 		h.mu.Unlock()
 		return
 	}
-	delete(h.clients, userID)
+
+	last := len(cs) - 1
+	cs[idx] = cs[last]
+	cs[last] = nil
+	cs = cs[:last]
+
+	if len(cs) == 0 {
+		delete(h.clients, userID)
+	} else {
+		h.clients[userID] = cs
+	}
+	hasRemaining := len(cs) > 0
 	h.mu.Unlock()
 
 	client.closeSend()
@@ -180,7 +202,7 @@ func (h *Hub) unregister(client *Client) {
 			h.log.Warn().Err(err).Stringer("user_id", userID).Msg("Failed to save session on disconnect")
 		}
 
-		if h.presence != nil {
+		if h.presence != nil && !hasRemaining {
 			go h.delayedOffline(userID)
 		}
 	}
@@ -194,7 +216,7 @@ func (h *Hub) delayedOffline(userID uuid.UUID) {
 	time.Sleep(time.Duration(h.cfg.GatewayOfflineDelayMS) * time.Millisecond)
 
 	h.mu.RLock()
-	_, reconnected := h.clients[userID]
+	reconnected := len(h.clients[userID]) > 0
 	h.mu.RUnlock()
 
 	if reconnected {
@@ -474,10 +496,12 @@ func (h *Hub) handlePubSubEvent(ctx context.Context, payload string) {
 	}
 
 	h.mu.RLock()
-	targets := make([]*Client, 0, len(h.clients))
-	for _, c := range h.clients {
-		if c.IsIdentified() {
-			targets = append(targets, c)
+	targets := make([]*Client, 0, h.totalClientsLocked())
+	for _, cs := range h.clients {
+		for _, c := range cs {
+			if c.IsIdentified() {
+				targets = append(targets, c)
+			}
 		}
 	}
 	h.mu.RUnlock()
@@ -487,21 +511,24 @@ func (h *Hub) handlePubSubEvent(ctx context.Context, payload string) {
 	}
 
 	// For channel-scoped events, filter by ViewChannels permission. If the resolver is unavailable, skip filtering
-	// and deliver to all identified clients rather than silently dropping the event.
+	// and deliver to all identified clients rather than silently dropping the event. Permission results are cached
+	// per user so that multiple connections from the same user do not trigger redundant resolver calls.
 	if isChannelScoped && h.resolver != nil {
-		userIDs := make([]uuid.UUID, len(targets))
-		for i, c := range targets {
-			userIDs[i] = c.UserID()
-		}
-
+		permCache := make(map[uuid.UUID]bool)
 		permitted := make([]*Client, 0, len(targets))
-		for i, c := range targets {
-			ok, pErr := h.resolver.HasPermission(ctx, userIDs[i], channelID, permissions.ViewChannels)
-			if pErr != nil {
-				h.log.Warn().Err(pErr).Stringer("user_id", userIDs[i]).Msg("Permission check failed during dispatch")
-				continue
+		for _, c := range targets {
+			uid := c.UserID()
+			allowed, cached := permCache[uid]
+			if !cached {
+				var pErr error
+				allowed, pErr = h.resolver.HasPermission(ctx, uid, channelID, permissions.ViewChannels)
+				if pErr != nil {
+					h.log.Warn().Err(pErr).Stringer("user_id", uid).Msg("Permission check failed during dispatch")
+					continue
+				}
+				permCache[uid] = allowed
 			}
-			if ok {
+			if allowed {
 				permitted = append(permitted, c)
 			}
 		}
@@ -658,27 +685,29 @@ func (h *Hub) Shutdown() {
 	}
 
 	reconnect, _ := NewReconnectFrame()
-	for userID, client := range h.clients {
-		if reconnect != nil {
-			client.enqueue(reconnect)
+	for userID, cs := range h.clients {
+		for _, client := range cs {
+			if reconnect != nil {
+				client.enqueue(reconnect)
+			}
+			client.closeSend()
+			_ = client.conn.WriteControl(
+				websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.CloseGoingAway, "server shutting down"),
+				time.Now().Add(writeWait),
+			)
+			_ = client.conn.Close()
 		}
-		client.closeSend()
-		_ = client.conn.WriteControl(
-			websocket.CloseMessage,
-			websocket.FormatCloseMessage(websocket.CloseGoingAway, "server shutting down"),
-			time.Now().Add(writeWait),
-		)
-		_ = client.conn.Close()
 		delete(h.clients, userID)
 	}
 	h.log.Info().Msg("Gateway hub shut down")
 }
 
-// ClientCount returns the number of currently connected clients.
+// ClientCount returns the total number of currently connected clients across all users.
 func (h *Hub) ClientCount() int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	return len(h.clients)
+	return h.totalClientsLocked()
 }
 
 // Slice conversion helpers that delegate to each domain type's ToModel() method.

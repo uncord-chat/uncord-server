@@ -267,7 +267,7 @@ func TestHandlePubSubEventBroadcast(t *testing.T) {
 	client.mu.Unlock()
 
 	hub.mu.Lock()
-	hub.clients[userID] = client
+	hub.clients[userID] = []*Client{client}
 	hub.mu.Unlock()
 
 	// Simulate a non-channel-scoped event (e.g., SERVER_UPDATE).
@@ -296,7 +296,7 @@ func TestHandlePubSubEventBroadcast(t *testing.T) {
 	}
 }
 
-func TestRegisterDisplacesExisting(t *testing.T) {
+func TestRegisterMultipleConnectionsSameUser(t *testing.T) {
 	t.Parallel()
 	_, rdb := newTestRedis(t)
 	cfg := testConfig()
@@ -306,40 +306,45 @@ func TestRegisterDisplacesExisting(t *testing.T) {
 
 	userID := uuid.New()
 
-	old := &Client{hub: hub, send: make(chan []byte, 256), done: make(chan struct{}), log: zerolog.Nop()}
-	old.mu.Lock()
-	old.userID = userID
-	old.sessionID = "old-session"
-	old.identified = true
-	old.mu.Unlock()
+	first := &Client{hub: hub, send: make(chan []byte, 256), done: make(chan struct{}), log: zerolog.Nop()}
+	first.mu.Lock()
+	first.userID = userID
+	first.sessionID = "session-1"
+	first.identified = true
+	first.mu.Unlock()
 
-	hub.mu.Lock()
-	hub.clients[userID] = old
-	hub.mu.Unlock()
-
-	newer := &Client{hub: hub, send: make(chan []byte, 256), done: make(chan struct{}), log: zerolog.Nop()}
-	newer.mu.Lock()
-	newer.userID = userID
-	newer.sessionID = "new-session"
-	newer.identified = true
-	newer.mu.Unlock()
-
-	if err := hub.register(newer); err != nil {
-		t.Fatalf("register() error = %v", err)
+	if err := hub.register(first); err != nil {
+		t.Fatalf("register(first) error = %v", err)
 	}
 
-	// The old client's done channel should be closed (displaced).
-	select {
-	case <-old.done:
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for old client displacement")
+	second := &Client{hub: hub, send: make(chan []byte, 256), done: make(chan struct{}), log: zerolog.Nop()}
+	second.mu.Lock()
+	second.userID = userID
+	second.sessionID = "session-2"
+	second.identified = true
+	second.mu.Unlock()
+
+	if err := hub.register(second); err != nil {
+		t.Fatalf("register(second) error = %v", err)
 	}
 
+	// Both clients should be registered under the same user.
 	hub.mu.RLock()
-	current := hub.clients[userID]
+	cs := hub.clients[userID]
 	hub.mu.RUnlock()
-	if current != newer {
-		t.Error("registered client is not the new one")
+
+	if len(cs) != 2 {
+		t.Fatalf("len(clients[userID]) = %d, want 2", len(cs))
+	}
+	if hub.ClientCount() != 2 {
+		t.Errorf("ClientCount() = %d, want 2", hub.ClientCount())
+	}
+
+	// The first client should not be displaced.
+	select {
+	case <-first.done:
+		t.Fatal("first client was closed unexpectedly")
+	default:
 	}
 }
 
@@ -600,7 +605,7 @@ func TestHandlePubSubEventEphemeral(t *testing.T) {
 			client.mu.Unlock()
 
 			hub.mu.Lock()
-			hub.clients[userID] = client
+			hub.clients[userID] = []*Client{client}
 			hub.mu.Unlock()
 
 			// The envelope omits channel_id to avoid triggering the permission filter (which requires a non-nil
@@ -636,6 +641,125 @@ func TestHandlePubSubEventEphemeral(t *testing.T) {
 				t.Errorf("currentSeq() = %d, want 0 (ephemeral should not increment)", seq)
 			}
 		})
+	}
+}
+
+func TestMultiClientDispatch(t *testing.T) {
+	t.Parallel()
+	_, rdb := newTestRedis(t)
+	cfg := testConfig()
+	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
+
+	hub := NewHub(HubDeps{RDB: rdb, Cfg: cfg, Sessions: sessions, Logger: zerolog.Nop()})
+
+	userID := uuid.New()
+
+	// Register two clients for the same user to simulate multiple browser tabs.
+	c1 := &Client{hub: hub, send: make(chan []byte, 256), done: make(chan struct{}), log: zerolog.Nop()}
+	c1.mu.Lock()
+	c1.userID = userID
+	c1.sessionID = "tab-1"
+	c1.identified = true
+	c1.mu.Unlock()
+
+	c2 := &Client{hub: hub, send: make(chan []byte, 256), done: make(chan struct{}), log: zerolog.Nop()}
+	c2.mu.Lock()
+	c2.userID = userID
+	c2.sessionID = "tab-2"
+	c2.identified = true
+	c2.mu.Unlock()
+
+	hub.mu.Lock()
+	hub.clients[userID] = []*Client{c1, c2}
+	hub.mu.Unlock()
+
+	env := envelope{Type: string(events.ServerUpdate), Data: map[string]string{"name": "Both Tabs"}}
+	payload, _ := json.Marshal(env)
+	hub.handlePubSubEvent(context.Background(), string(payload))
+
+	// Both clients should receive the event.
+	for _, c := range []*Client{c1, c2} {
+		select {
+		case msg := <-c.send:
+			var f events.Frame
+			if err := json.Unmarshal(msg, &f); err != nil {
+				t.Fatalf("unmarshal frame: %v", err)
+			}
+			if f.Op != events.OpcodeDispatch {
+				t.Errorf("Op = %d, want %d", f.Op, events.OpcodeDispatch)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("timed out waiting for dispatch to session %s", c.SessionID())
+		}
+	}
+
+	// Each client maintains an independent sequence counter.
+	if s1, s2 := c1.currentSeq(), c2.currentSeq(); s1 != 1 || s2 != 1 {
+		t.Errorf("sequences = (%d, %d), want (1, 1)", s1, s2)
+	}
+}
+
+func TestUnregisterPartial(t *testing.T) {
+	t.Parallel()
+	_, rdb := newTestRedis(t)
+	cfg := testConfig()
+	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
+
+	hub := NewHub(HubDeps{RDB: rdb, Cfg: cfg, Sessions: sessions, Logger: zerolog.Nop()})
+
+	userID := uuid.New()
+
+	c1 := &Client{hub: hub, send: make(chan []byte, 256), done: make(chan struct{}), log: zerolog.Nop()}
+	c1.mu.Lock()
+	c1.userID = userID
+	c1.sessionID = "partial-1"
+	c1.identified = true
+	c1.mu.Unlock()
+
+	c2 := &Client{hub: hub, send: make(chan []byte, 256), done: make(chan struct{}), log: zerolog.Nop()}
+	c2.mu.Lock()
+	c2.userID = userID
+	c2.sessionID = "partial-2"
+	c2.identified = true
+	c2.mu.Unlock()
+
+	if err := hub.register(c1); err != nil {
+		t.Fatalf("register(c1) error = %v", err)
+	}
+	if err := hub.register(c2); err != nil {
+		t.Fatalf("register(c2) error = %v", err)
+	}
+
+	// Unregister the first client; the second should remain.
+	hub.unregister(c1)
+
+	if count := hub.ClientCount(); count != 1 {
+		t.Fatalf("ClientCount() = %d after partial unregister, want 1", count)
+	}
+
+	hub.mu.RLock()
+	cs := hub.clients[userID]
+	hub.mu.RUnlock()
+
+	if len(cs) != 1 {
+		t.Fatalf("len(clients[userID]) = %d, want 1", len(cs))
+	}
+	if cs[0] != c2 {
+		t.Error("remaining client is not c2")
+	}
+
+	// Unregister the second client; the user entry should be removed entirely.
+	hub.unregister(c2)
+
+	if count := hub.ClientCount(); count != 0 {
+		t.Errorf("ClientCount() = %d after full unregister, want 0", count)
+	}
+
+	hub.mu.RLock()
+	_, exists := hub.clients[userID]
+	hub.mu.RUnlock()
+	if exists {
+		t.Error("user entry still exists in client map after all connections closed")
 	}
 }
 
@@ -762,15 +886,12 @@ func TestHubConcurrentRegisterUnregisterDispatch(t *testing.T) {
 	wg.Wait()
 
 	// After all goroutines complete, the hub should be empty.
-	hub.mu.RLock()
-	remaining := len(hub.clients)
-	hub.mu.RUnlock()
-	if remaining != 0 {
-		t.Errorf("hub.clients has %d entries after full teardown, want 0", remaining)
+	if remaining := hub.ClientCount(); remaining != 0 {
+		t.Errorf("ClientCount() = %d after full teardown, want 0", remaining)
 	}
 }
 
-func TestHubConcurrentDisplacement(t *testing.T) {
+func TestHubConcurrentMultiClient(t *testing.T) {
 	t.Parallel()
 	_, rdb := newTestRedis(t)
 	cfg := testConfig()
@@ -779,7 +900,7 @@ func TestHubConcurrentDisplacement(t *testing.T) {
 
 	hub := NewHub(HubDeps{RDB: rdb, Cfg: cfg, Sessions: sessions, Logger: zerolog.Nop()})
 
-	// A single userID is shared by all goroutines so each register() call displaces the previous client.
+	// A single userID is shared by all goroutines; all connections should coexist.
 	userID := uuid.New()
 	const goroutines = 30
 
@@ -797,7 +918,7 @@ func TestHubConcurrentDisplacement(t *testing.T) {
 			}
 			client.mu.Lock()
 			client.userID = userID
-			client.sessionID = fmt.Sprintf("displace-%d", n)
+			client.sessionID = fmt.Sprintf("multi-%d", n)
 			client.identified = true
 			client.mu.Unlock()
 
@@ -808,12 +929,9 @@ func TestHubConcurrentDisplacement(t *testing.T) {
 
 	wg.Wait()
 
-	// Exactly one client should remain for the shared userID.
-	hub.mu.RLock()
-	remaining := len(hub.clients)
-	hub.mu.RUnlock()
-	if remaining != 1 {
-		t.Errorf("hub.clients has %d entries after displacement, want 1", remaining)
+	// All clients for the same user should coexist.
+	if count := hub.ClientCount(); count != goroutines {
+		t.Errorf("ClientCount() = %d, want %d", count, goroutines)
 	}
 }
 
@@ -851,7 +969,7 @@ func benchmarkDispatch(b *testing.B, clientCount int) {
 		client.mu.Unlock()
 
 		hub.mu.Lock()
-		hub.clients[userID] = client
+		hub.clients[userID] = []*Client{client}
 		hub.mu.Unlock()
 	}
 
@@ -865,10 +983,12 @@ func benchmarkDispatch(b *testing.B, clientCount int) {
 
 		// Drain all client send buffers to prevent back-pressure from stalling the next iteration.
 		hub.mu.RLock()
-		for _, c := range hub.clients {
-			select {
-			case <-c.send:
-			default:
+		for _, cs := range hub.clients {
+			for _, c := range cs {
+				select {
+				case <-c.send:
+				default:
+				}
 			}
 		}
 		hub.mu.RUnlock()
