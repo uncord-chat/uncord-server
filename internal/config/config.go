@@ -467,6 +467,11 @@ func (c *Config) validate() error {
 		if _, err := mail.ParseAddress(c.SMTPFrom); err != nil {
 			errs = append(errs, fmt.Errorf("SMTP_FROM is not a valid email address: %q", c.SMTPFrom))
 		}
+		hasUser := c.SMTPUsername != ""
+		hasPass := c.SMTPPassword.Expose() != ""
+		if hasUser != hasPass {
+			errs = append(errs, fmt.Errorf("SMTP_USERNAME and SMTP_PASSWORD must both be set or both be empty"))
+		}
 	}
 
 	return errors.Join(errs...)

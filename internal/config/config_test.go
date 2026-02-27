@@ -493,11 +493,13 @@ func TestLoadSMTPOverrides(t *testing.T) {
 
 func TestLoadSMTPValidation(t *testing.T) {
 	tests := []struct {
-		name    string
-		host    string
-		port    string
-		from    string
-		wantErr string
+		name     string
+		host     string
+		port     string
+		from     string
+		username string
+		password string
+		wantErr  string
 	}{
 		{
 			name:    "invalid port",
@@ -513,6 +515,22 @@ func TestLoadSMTPValidation(t *testing.T) {
 			from:    "not-an-email",
 			wantErr: "SMTP_FROM",
 		},
+		{
+			name:     "username without password",
+			host:     "mail.example.com",
+			port:     "587",
+			from:     "noreply@example.com",
+			username: "user@example.com",
+			wantErr:  "SMTP_USERNAME and SMTP_PASSWORD must both be set or both be empty",
+		},
+		{
+			name:     "password without username",
+			host:     "mail.example.com",
+			port:     "587",
+			from:     "noreply@example.com",
+			password: "secret",
+			wantErr:  "SMTP_USERNAME and SMTP_PASSWORD must both be set or both be empty",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -521,6 +539,12 @@ func TestLoadSMTPValidation(t *testing.T) {
 			t.Setenv("SMTP_HOST", tt.host)
 			t.Setenv("SMTP_PORT", tt.port)
 			t.Setenv("SMTP_FROM", tt.from)
+			if tt.username != "" {
+				t.Setenv("SMTP_USERNAME", tt.username)
+			}
+			if tt.password != "" {
+				t.Setenv("SMTP_PASSWORD", tt.password)
+			}
 
 			_, err := Load()
 			if err == nil {
