@@ -22,6 +22,7 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/message"
 	"github.com/uncord-chat/uncord-server/internal/permission"
 	"github.com/uncord-chat/uncord-server/internal/presence"
+	"github.com/uncord-chat/uncord-server/internal/reaction"
 	"github.com/uncord-chat/uncord-server/internal/typesense"
 )
 
@@ -29,6 +30,7 @@ import (
 type MessageHandler struct {
 	messages       message.Repository
 	attachments    attachment.Repository
+	reactions      reaction.Repository
 	storage        media.StorageProvider
 	resolver       *permission.Resolver
 	indexer        *typesense.Indexer
@@ -43,6 +45,7 @@ type MessageHandler struct {
 func NewMessageHandler(
 	messages message.Repository,
 	attachments attachment.Repository,
+	reactions reaction.Repository,
 	storage media.StorageProvider,
 	resolver *permission.Resolver,
 	indexer *typesense.Indexer,
@@ -55,6 +58,7 @@ func NewMessageHandler(
 	return &MessageHandler{
 		messages:       messages,
 		attachments:    attachments,
+		reactions:      reactions,
 		storage:        storage,
 		resolver:       resolver,
 		indexer:        indexer,
@@ -91,7 +95,8 @@ func (h *MessageHandler) ListMessages(c fiber.Ctx) error {
 		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
 	}
 
-	// Batch-load attachments for all returned messages.
+	// Batch-load attachments and reactions for all returned messages.
+	userID, _ := c.Locals("userID").(uuid.UUID)
 	messageIDs := make([]uuid.UUID, len(messages))
 	for i := range messages {
 		messageIDs[i] = messages[i].ID
@@ -101,10 +106,20 @@ func (h *MessageHandler) ListMessages(c fiber.Ctx) error {
 		h.log.Error().Err(err).Str("handler", "message").Msg("list message attachments failed")
 		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
 	}
+	reactionMap, err := h.reactions.SummariesByMessages(c, messageIDs)
+	if err != nil {
+		h.log.Error().Err(err).Str("handler", "message").Msg("list message reactions failed")
+		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
+	}
+	userReactions, err := h.reactions.UserReactionsByMessages(c, messageIDs, userID)
+	if err != nil {
+		h.log.Error().Err(err).Str("handler", "message").Msg("load user reactions failed")
+		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
+	}
 
 	result := make([]models.Message, len(messages))
 	for i := range messages {
-		result[i] = h.toMessageModel(&messages[i], attachmentMap[messages[i].ID])
+		result[i] = h.toMessageModel(&messages[i], attachmentMap[messages[i].ID], reactionMap[messages[i].ID], userReactions[messages[i].ID])
 	}
 	return httputil.Success(c, result)
 }
@@ -182,7 +197,8 @@ func (h *MessageHandler) CreateMessage(c fiber.Ctx) error {
 		}
 	}
 
-	result := h.toMessageModel(msg, linked)
+	// Newly created messages have no reactions yet.
+	result := h.toMessageModel(msg, linked, nil, nil)
 
 	// Best-effort Typesense indexing. Uses context.Background because Fiber recycles the request context after the
 	// handler returns.
@@ -273,7 +289,19 @@ func (h *MessageHandler) EditMessage(c fiber.Ctx) error {
 		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
 	}
 
-	result := h.toMessageModel(msg, attachments)
+	msgIDs := []uuid.UUID{msg.ID}
+	reactionMap, err := h.reactions.SummariesByMessages(c, msgIDs)
+	if err != nil {
+		h.log.Error().Err(err).Str("handler", "message").Msg("load message reactions failed")
+		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
+	}
+	userReactions, err := h.reactions.UserReactionsByMessages(c, msgIDs, userID)
+	if err != nil {
+		h.log.Error().Err(err).Str("handler", "message").Msg("load user reactions failed")
+		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
+	}
+
+	result := h.toMessageModel(msg, attachments, reactionMap[msg.ID], userReactions[msg.ID])
 
 	// Best-effort Typesense upsert. Uses context.Background because Fiber recycles the request context after the
 	// handler returns.
@@ -357,8 +385,10 @@ func (h *MessageHandler) DeleteMessage(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-// toMessageModel converts the internal message type to the protocol response type.
-func (h *MessageHandler) toMessageModel(m *message.Message, attachments []attachment.Attachment) models.Message {
+// toMessageModel converts the internal message type to the protocol response type. The summaries parameter contains
+// grouped reaction counts for this message (nil is safe and produces an empty slice). The myReactions map contains the
+// emoji keys the requesting user has reacted with (used to set the Me flag).
+func (h *MessageHandler) toMessageModel(m *message.Message, attachments []attachment.Attachment, summaries []reaction.Summary, myReactions map[string]bool) models.Message {
 	var replyToID *string
 	if m.ReplyToID != nil {
 		s := m.ReplyToID.String()
@@ -375,6 +405,25 @@ func (h *MessageHandler) toMessageModel(m *message.Message, attachments []attach
 		modelAttachments[i] = toAttachmentModel(&attachments[i], h.storage)
 	}
 
+	modelReactions := make([]models.ReactionSummary, len(summaries))
+	for i, s := range summaries {
+		var emojiID *string
+		var reactionKey string
+		if s.EmojiID != nil {
+			id := s.EmojiID.String()
+			emojiID = &id
+			reactionKey = "custom:" + id
+		} else if s.EmojiUnicode != nil {
+			reactionKey = *s.EmojiUnicode
+		}
+		modelReactions[i] = models.ReactionSummary{
+			EmojiID:      emojiID,
+			EmojiUnicode: s.EmojiUnicode,
+			Count:        s.Count,
+			Me:           myReactions[reactionKey],
+		}
+	}
+
 	return models.Message{
 		ID:        m.ID.String(),
 		ChannelID: m.ChannelID.String(),
@@ -386,6 +435,7 @@ func (h *MessageHandler) toMessageModel(m *message.Message, attachments []attach
 		},
 		Content:     m.Content,
 		Attachments: modelAttachments,
+		Reactions:   modelReactions,
 		ReplyToID:   replyToID,
 		Pinned:      m.Pinned,
 		EditedAt:    editedAt,

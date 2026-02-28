@@ -17,6 +17,7 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/media"
 	"github.com/uncord-chat/uncord-server/internal/message"
 	"github.com/uncord-chat/uncord-server/internal/permission"
+	"github.com/uncord-chat/uncord-server/internal/reaction"
 )
 
 const testMaxContent = 4000
@@ -227,6 +228,33 @@ func testMessageApp(t *testing.T, repo message.Repository, resolver *permission.
 	return testMessageAppWithAttachments(t, repo, newFakeAttachmentRepo(), resolver, userID)
 }
 
+// fakeReactionRepo implements reaction.Repository for handler tests.
+type fakeReactionRepo struct{}
+
+func (r *fakeReactionRepo) Add(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ *uuid.UUID, _ *string) (*reaction.Reaction, error) {
+	return &reaction.Reaction{ID: uuid.New()}, nil
+}
+
+func (r *fakeReactionRepo) Remove(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ *uuid.UUID, _ *string) error {
+	return nil
+}
+
+func (r *fakeReactionRepo) ListByMessage(_ context.Context, _ uuid.UUID) ([]reaction.Reaction, error) {
+	return nil, nil
+}
+
+func (r *fakeReactionRepo) ListByEmoji(_ context.Context, _ uuid.UUID, _ *uuid.UUID, _ *string) ([]reaction.Reaction, error) {
+	return nil, nil
+}
+
+func (r *fakeReactionRepo) SummariesByMessages(_ context.Context, _ []uuid.UUID) (map[uuid.UUID][]reaction.Summary, error) {
+	return nil, nil
+}
+
+func (r *fakeReactionRepo) UserReactionsByMessages(_ context.Context, _ []uuid.UUID, _ uuid.UUID) (map[uuid.UUID]map[string]bool, error) {
+	return nil, nil
+}
+
 func testMessageAppWithAttachments(
 	t *testing.T,
 	repo message.Repository,
@@ -240,7 +268,7 @@ func testMessageAppWithAttachments(
 		t.Fatalf("NewLocalStorage() error: %v", err)
 	}
 	t.Cleanup(func() { _ = storage.Close() })
-	handler := NewMessageHandler(repo, attachRepo, storage, resolver, nil, nil, nil, testMaxContent, 10, zerolog.Nop())
+	handler := NewMessageHandler(repo, attachRepo, &fakeReactionRepo{}, storage, resolver, nil, nil, nil, testMaxContent, 10, zerolog.Nop())
 	app := fiber.New()
 
 	app.Use(fakeAuth(userID))

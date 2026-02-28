@@ -123,6 +123,10 @@ type Config struct {
 	MaxRoles         int
 	MaxMessageLength int
 
+	// Emoji
+	MaxEmojiSizeKB    int // Maximum emoji file size in kilobytes. Default: 256.
+	MaxEmojiPerServer int // Maximum number of custom emoji per server. Default: 200.
+
 	// SMTP
 	SMTPHost     string
 	SMTPPort     int
@@ -236,6 +240,9 @@ func Load() (*Config, error) {
 		MaxRoles:         p.int("MAX_ROLES", 250),
 		MaxMessageLength: p.int("MAX_MESSAGE_LENGTH", 4000),
 
+		MaxEmojiSizeKB:    p.int("MAX_EMOJI_SIZE_KB", 256),
+		MaxEmojiPerServer: p.int("MAX_EMOJI_PER_SERVER", 200),
+
 		SMTPHost:     envStr("SMTP_HOST", ""),
 		SMTPPort:     p.int("SMTP_PORT", 587),
 		SMTPUsername: envStr("SMTP_USERNAME", ""),
@@ -311,6 +318,11 @@ func (c *Config) MaxUploadSizeBytes() int64 {
 // MaxAvatarSizeBytes returns the maximum avatar/banner upload size in bytes.
 func (c *Config) MaxAvatarSizeBytes() int64 {
 	return int64(c.MaxAvatarSizeMB) * 1024 * 1024
+}
+
+// MaxEmojiSizeBytes returns the maximum emoji file size in bytes.
+func (c *Config) MaxEmojiSizeBytes() int64 {
+	return int64(c.MaxEmojiSizeKB) * 1024
 }
 
 func (c *Config) validate() error {
@@ -398,6 +410,12 @@ func (c *Config) validate() error {
 	}
 	if c.MaxMessageLength < 1 {
 		errs = append(errs, fmt.Errorf("MAX_MESSAGE_LENGTH must be at least 1"))
+	}
+	if c.MaxEmojiSizeKB < 1 {
+		errs = append(errs, fmt.Errorf("MAX_EMOJI_SIZE_KB must be at least 1"))
+	}
+	if c.MaxEmojiPerServer < 1 {
+		errs = append(errs, fmt.Errorf("MAX_EMOJI_PER_SERVER must be at least 1"))
 	}
 
 	if c.RateLimitAPIRequests < 1 {

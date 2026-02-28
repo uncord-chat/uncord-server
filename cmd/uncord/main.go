@@ -37,6 +37,7 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/config"
 	"github.com/uncord-chat/uncord-server/internal/disposable"
 	"github.com/uncord-chat/uncord-server/internal/email"
+	"github.com/uncord-chat/uncord-server/internal/emoji"
 	"github.com/uncord-chat/uncord-server/internal/gateway"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 	"github.com/uncord-chat/uncord-server/internal/invite"
@@ -48,6 +49,7 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/permission"
 	"github.com/uncord-chat/uncord-server/internal/postgres"
 	"github.com/uncord-chat/uncord-server/internal/presence"
+	"github.com/uncord-chat/uncord-server/internal/reaction"
 	"github.com/uncord-chat/uncord-server/internal/role"
 	"github.com/uncord-chat/uncord-server/internal/search"
 	servercfg "github.com/uncord-chat/uncord-server/internal/server"
@@ -83,6 +85,8 @@ type server struct {
 	documentStore    *onboarding.DocumentStore
 	messageRepo      message.Repository
 	attachmentRepo   attachment.Repository
+	emojiRepo        emoji.Repository
+	reactionRepo     reaction.Repository
 	storage          media.StorageProvider
 	permStore        permission.OverrideStore
 	permReadStore    permission.Store
@@ -287,6 +291,8 @@ func run() error {
 	onboardingRepo := onboarding.NewPGRepository(db, log.Logger)
 	messageRepo := message.NewPGRepository(db, log.Logger)
 	attachmentRepo := attachment.NewPGRepository(db, log.Logger)
+	emojiRepo := emoji.NewPGRepository(db, log.Logger)
+	reactionRepo := reaction.NewPGRepository(db, log.Logger)
 	typesenseIndexer := typesense.NewIndexer(cfg.TypesenseURL, cfg.TypesenseAPIKey.Expose(), cfg.TypesenseTimeout)
 	gatewayPub := gateway.NewPublisher(rdb, log.Logger)
 	presenceStore := presence.NewStore(rdb)
@@ -343,6 +349,8 @@ func run() error {
 		documentStore:    documentStore,
 		messageRepo:      messageRepo,
 		attachmentRepo:   attachmentRepo,
+		emojiRepo:        emojiRepo,
+		reactionRepo:     reactionRepo,
 		storage:          storage,
 		authService:      authService,
 		permStore:        permStore,
@@ -487,6 +495,20 @@ func (s *server) registerRoutes(app *fiber.App) {
 		permission.RequireServerPermission(s.permResolver, permissions.ManageServer),
 		imageHandler.DeleteServerBanner)
 
+	// Emoji routes (under /api/v1/server/emoji, all require active membership)
+	emojiHandler := api.NewEmojiHandler(s.emojiRepo, s.storage, s.gatewayPublisher,
+		s.cfg.MaxEmojiSizeBytes(), 128, s.cfg.MaxEmojiPerServer, log.Logger)
+	serverGroup.Get("/emoji", requireActive, emojiHandler.ListEmoji)
+	serverGroup.Post("/emoji", requireActive,
+		permission.RequireServerPermission(s.permResolver, permissions.ManageEmoji),
+		uploadLimiter, emojiHandler.CreateEmoji)
+	serverGroup.Patch("/emoji/:emojiID", requireActive,
+		permission.RequireServerPermission(s.permResolver, permissions.ManageEmoji),
+		emojiHandler.UpdateEmoji)
+	serverGroup.Delete("/emoji/:emojiID", requireActive,
+		permission.RequireServerPermission(s.permResolver, permissions.ManageEmoji),
+		emojiHandler.DeleteEmoji)
+
 	// Channel routes (server group: list is open to pending, create requires active)
 	channelHandler := api.NewChannelHandler(s.channelRepo, s.memberRepo, s.onboardingRepo, s.permResolver, s.gatewayPublisher, s.cfg.MaxChannels, log.Logger)
 	serverGroup.Get("/channels", channelHandler.ListChannels)
@@ -532,8 +554,8 @@ func (s *server) registerRoutes(app *fiber.App) {
 
 	// Message routes (nested under channels for list and create, inherits active requirement)
 	messageHandler := api.NewMessageHandler(
-		s.messageRepo, s.attachmentRepo, s.storage, s.permResolver, s.typesenseIndexer, s.gatewayPublisher,
-		s.presenceStore, s.cfg.MaxMessageLength, s.cfg.MaxAttachmentsPerMessage, log.Logger)
+		s.messageRepo, s.attachmentRepo, s.reactionRepo, s.storage, s.permResolver, s.typesenseIndexer,
+		s.gatewayPublisher, s.presenceStore, s.cfg.MaxMessageLength, s.cfg.MaxAttachmentsPerMessage, log.Logger)
 	channelGroup.Get("/:channelID/messages",
 		permission.RequirePermission(s.permResolver, permissions.ViewChannels|permissions.ReadMessageHistory),
 		messageHandler.ListMessages)
@@ -561,6 +583,21 @@ func (s *server) registerRoutes(app *fiber.App) {
 	channelGroup.Delete("/:channelID/typing",
 		permission.RequirePermission(s.permResolver, permissions.SendMessages),
 		typingHandler.StopTyping)
+
+	// Reaction routes (nested under channels, inherits active requirement)
+	reactionHandler := api.NewReactionHandler(s.reactionRepo, s.messageRepo, s.emojiRepo,
+		s.gatewayPublisher, log.Logger)
+	channelGroup.Put("/:channelID/messages/:messageID/reactions/:emoji",
+		permission.RequirePermission(s.permResolver, permissions.AddReactions),
+		reactionHandler.AddReaction)
+	channelGroup.Delete("/:channelID/messages/:messageID/reactions/:emoji",
+		reactionHandler.RemoveReaction)
+	channelGroup.Get("/:channelID/messages/:messageID/reactions",
+		permission.RequirePermission(s.permResolver, permissions.ViewChannels),
+		reactionHandler.ListReactions)
+	channelGroup.Get("/:channelID/messages/:messageID/reactions/:emoji",
+		permission.RequirePermission(s.permResolver, permissions.ViewChannels),
+		reactionHandler.ListReactionUsers)
 
 	// Message routes (standalone for edit and delete, require active membership)
 	messageGroup := app.Group("/api/v1/messages", requireAuth, requireVerified, requireActive)
