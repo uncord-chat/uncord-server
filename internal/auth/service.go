@@ -766,8 +766,10 @@ func (s *Service) recordLoginAttempt(ctx context.Context, email, ip string, succ
 	}
 }
 
+// generateSecureToken returns a hex-encoded cryptographically secure random token of n bytes. Since Go 1.24,
+// crypto/rand.Read never returns an error (it panics on catastrophic OS entropy failure).
 func generateSecureToken(n int) string {
 	b := make([]byte, n)
-	_, _ = rand.Read(b)
+	rand.Read(b)
 	return hex.EncodeToString(b)
 }
