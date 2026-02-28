@@ -40,7 +40,7 @@ RUN addgroup -S uncord && adduser -S uncord -G uncord
 COPY --from=build /bin/uncord /usr/local/bin/uncord
 COPY data/ /data/uncord/
 
-RUN chown -R uncord:uncord /data/uncord
+RUN mkdir -p /data/uncord/media && chown -R uncord:uncord /data/uncord
 
 USER uncord
 
