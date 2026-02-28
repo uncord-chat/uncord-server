@@ -807,7 +807,8 @@ func newFiberApp(cfg *config.Config) *fiber.App {
 }
 
 // loadTemplates loads optional email and page templates from the data directory. Returns nil templates when dataDir is
-// empty, which causes the application to use compiled-in defaults.
+// empty, which causes the application to use compiled-in defaults. Templates are trusted input from the server operator;
+// html/template auto-escapes rendered values but does not guard against arbitrary actions in the template definitions.
 func loadTemplates(dataDir string) (verification *template.Template, verifyPage *template.Template, err error) {
 	if dataDir == "" {
 		return nil, nil, nil
