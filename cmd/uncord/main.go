@@ -719,7 +719,6 @@ func (s *server) registerRoutes(app *fiber.App) {
 			if err != nil {
 				return fiber.ErrNotFound
 			}
-			defer func() { _ = rc.Close() }()
 
 			// Derive the content type from the storage key extension. The key preserves the original file extension
 			// (e.g. "attachments/{channelID}/{uuid}.jpg"), so mime.TypeByExtension produces the correct type without
