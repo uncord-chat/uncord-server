@@ -74,6 +74,10 @@
 		{
 			"key": "emoji_id",
 			"value": ""
+		},
+		{
+			"key": "thread_id",
+			"value": ""
 		}
 	],
 	"item": [
@@ -2340,6 +2344,239 @@
 							]
 						},
 						"description": "Allows users to join the server without an invite when open_join is enabled in the onboarding configuration."
+					}
+				}
+			]
+		},
+		{
+			"name": "Threads",
+			"description": "Thread creation, listing, updating, and thread message management.",
+			"item": [
+				{
+					"name": "Create Thread",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var data = pm.response.json().data;",
+									"    pm.collectionVariables.set('thread_id', data.id);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\t\"name\": \"Discussion Thread\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/messages/{{message_id}}/threads",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"messages",
+								"{{message_id}}",
+								"threads"
+							]
+						},
+						"description": "Creates a thread on a message. Requires the CreateThreads permission on the parent channel."
+					}
+				},
+				{
+					"name": "List Channel Threads",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/channels/{{channel_id}}/threads",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"channels",
+								"{{channel_id}}",
+								"threads"
+							]
+						},
+						"description": "Lists all threads in a channel. Requires ViewChannels permission."
+					}
+				},
+				{
+					"name": "Get Thread",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/threads/{{thread_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"threads",
+								"{{thread_id}}"
+							]
+						},
+						"description": "Returns a single thread by ID. Requires ViewChannels permission on the parent channel."
+					}
+				},
+				{
+					"name": "Update Thread",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\t\"name\": \"Updated Thread Name\",\n\t\"archived\": false,\n\t\"locked\": false\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/threads/{{thread_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"threads",
+								"{{thread_id}}"
+							]
+						},
+						"description": "Updates a thread's name, archived, or locked state. Requires ManageChannels permission on the parent channel. Locked threads reject changes unless the update explicitly unlocks them."
+					}
+				},
+				{
+					"name": "List Thread Messages",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/threads/{{thread_id}}/messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"threads",
+								"{{thread_id}}",
+								"messages"
+							],
+							"query": [
+								{
+									"key": "before",
+									"value": "",
+									"disabled": true
+								},
+								{
+									"key": "limit",
+									"value": "50",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Lists messages in a thread with cursor-based pagination. Requires ViewChannels and ReadMessageHistory permissions on the parent channel."
+					}
+				},
+				{
+					"name": "Create Thread Message",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\t\"content\": \"Hello from the thread!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/threads/{{thread_id}}/messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"threads",
+								"{{thread_id}}",
+								"messages"
+							]
+						},
+						"description": "Sends a message in a thread. Requires SendMessagesThreads permission. Archived and locked threads reject new messages."
+					}
+				}
+			]
+		},
+		{
+			"name": "Pins",
+			"description": "Pin and unpin messages, and list pinned messages in a channel.",
+			"item": [
+				{
+					"name": "Pin Message",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/messages/{{message_id}}/pin",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"messages",
+								"{{message_id}}",
+								"pin"
+							]
+						},
+						"description": "Pins a message. Requires ManageMessages permission on the channel."
+					}
+				},
+				{
+					"name": "Unpin Message",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/messages/{{message_id}}/pin",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"messages",
+								"{{message_id}}",
+								"pin"
+							]
+						},
+						"description": "Unpins a message. Requires ManageMessages permission on the channel."
+					}
+				},
+				{
+					"name": "List Pinned Messages",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/channels/{{channel_id}}/pins",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"channels",
+								"{{channel_id}}",
+								"pins"
+							]
+						},
+						"description": "Lists all pinned messages in a channel. Requires ViewChannels permission."
 					}
 				}
 			]

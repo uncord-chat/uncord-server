@@ -369,10 +369,21 @@ func (h *MessageHandler) DeleteMessage(c fiber.Ctx) error {
 // grouped reaction counts for this message (nil is safe and produces an empty slice). The myReactions map contains the
 // emoji keys the requesting user has reacted with (used to set the Me flag).
 func (h *MessageHandler) toMessageModel(m *message.Message, attachments []attachment.Attachment, summaries []reaction.Summary, myReactions map[string]bool) models.Message {
+	return buildMessageModel(m, attachments, summaries, myReactions, h.storage)
+}
+
+// buildMessageModel converts an internal message to a protocol response model. This is a package-level function so
+// that multiple handlers (MessageHandler, ThreadHandler, PinHandler) can reuse the same conversion logic.
+func buildMessageModel(m *message.Message, attachments []attachment.Attachment, summaries []reaction.Summary, myReactions map[string]bool, storage media.StorageProvider) models.Message {
 	var replyToID *string
 	if m.ReplyToID != nil {
 		s := m.ReplyToID.String()
 		replyToID = &s
+	}
+	var threadID *string
+	if m.ThreadID != nil {
+		s := m.ThreadID.String()
+		threadID = &s
 	}
 	var editedAt *string
 	if m.EditedAt != nil {
@@ -382,7 +393,7 @@ func (h *MessageHandler) toMessageModel(m *message.Message, attachments []attach
 
 	modelAttachments := make([]models.Attachment, len(attachments))
 	for i := range attachments {
-		modelAttachments[i] = toAttachmentModel(&attachments[i], h.storage)
+		modelAttachments[i] = toAttachmentModel(&attachments[i], storage)
 	}
 
 	modelReactions := make([]models.ReactionSummary, len(summaries))
@@ -417,6 +428,7 @@ func (h *MessageHandler) toMessageModel(m *message.Message, attachments []attach
 		Attachments: modelAttachments,
 		Reactions:   modelReactions,
 		ReplyToID:   replyToID,
+		ThreadID:    threadID,
 		Pinned:      m.Pinned,
 		EditedAt:    editedAt,
 		CreatedAt:   m.CreatedAt.Format(time.RFC3339),

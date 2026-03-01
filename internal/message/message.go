@@ -18,6 +18,8 @@ var (
 	ErrReplyNotFound  = errors.New("reply target message not found")
 	ErrNotAuthor      = errors.New("you can only modify your own messages")
 	ErrAlreadyDeleted = errors.New("message has already been deleted")
+	ErrAlreadyPinned  = errors.New("message is already pinned")
+	ErrNotPinned      = errors.New("message is not pinned")
 )
 
 // Pagination defaults.
@@ -34,6 +36,7 @@ type Message struct {
 	Content   string
 	EditedAt  *time.Time
 	ReplyToID *uuid.UUID
+	ThreadID  *uuid.UUID
 	Pinned    bool
 	Deleted   bool
 	CreatedAt time.Time
@@ -51,6 +54,7 @@ type CreateParams struct {
 	AuthorID  uuid.UUID
 	Content   string
 	ReplyToID *uuid.UUID
+	ThreadID  *uuid.UUID
 }
 
 // ValidateContent checks that content is non-empty after trimming and does not exceed the given maximum rune count.
@@ -82,6 +86,10 @@ type Repository interface {
 	Create(ctx context.Context, params CreateParams) (*Message, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*Message, error)
 	List(ctx context.Context, channelID uuid.UUID, before *uuid.UUID, limit int) ([]Message, error)
+	ListByThread(ctx context.Context, threadID uuid.UUID, before *uuid.UUID, limit int) ([]Message, error)
+	ListPinned(ctx context.Context, channelID uuid.UUID) ([]Message, error)
 	Update(ctx context.Context, id uuid.UUID, content string) (*Message, error)
 	SoftDelete(ctx context.Context, id uuid.UUID) error
+	Pin(ctx context.Context, id uuid.UUID) (*Message, error)
+	Unpin(ctx context.Context, id uuid.UUID) (*Message, error)
 }

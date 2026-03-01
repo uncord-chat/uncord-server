@@ -54,6 +54,7 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/role"
 	"github.com/uncord-chat/uncord-server/internal/search"
 	servercfg "github.com/uncord-chat/uncord-server/internal/server"
+	"github.com/uncord-chat/uncord-server/internal/thread"
 	"github.com/uncord-chat/uncord-server/internal/typesense"
 	"github.com/uncord-chat/uncord-server/internal/user"
 	"github.com/uncord-chat/uncord-server/internal/valkey"
@@ -85,6 +86,7 @@ type server struct {
 	onboardingRepo   onboarding.Repository
 	documentStore    *onboarding.DocumentStore
 	messageRepo      message.Repository
+	threadRepo       thread.Repository
 	attachmentRepo   attachment.Repository
 	emojiRepo        emoji.Repository
 	reactionRepo     reaction.Repository
@@ -291,6 +293,7 @@ func run() error {
 	inviteRepo := invite.NewPGRepository(db)
 	onboardingRepo := onboarding.NewPGRepository(db)
 	messageRepo := message.NewPGRepository(db)
+	threadRepo := thread.NewPGRepository(db)
 	attachmentRepo := attachment.NewPGRepository(db)
 	emojiRepo := emoji.NewPGRepository(db)
 	reactionRepo := reaction.NewPGRepository(db)
@@ -352,6 +355,7 @@ func run() error {
 		onboardingRepo:   onboardingRepo,
 		documentStore:    documentStore,
 		messageRepo:      messageRepo,
+		threadRepo:       threadRepo,
 		attachmentRepo:   attachmentRepo,
 		emojiRepo:        emojiRepo,
 		reactionRepo:     reactionRepo,
@@ -607,6 +611,46 @@ func (s *server) registerRoutes(app *fiber.App) {
 	messageGroup := app.Group("/api/v1/messages", requireAuth, requireVerified, requireActive)
 	messageGroup.Patch("/:messageID", messageHandler.EditMessage)
 	messageGroup.Delete("/:messageID", messageHandler.DeleteMessage)
+
+	// Thread routes
+	threadHandler := api.NewThreadHandler(
+		s.threadRepo, s.messageRepo, s.channelRepo, s.attachmentRepo, s.reactionRepo, s.storage,
+		s.permResolver, s.gatewayPublisher, s.presenceStore,
+		s.cfg.MaxMessageLength, s.cfg.MaxAttachmentsPerMessage, log.Logger)
+
+	// Thread creation (under /api/v1/messages, inherits auth/verified/active)
+	messageGroup.Post("/:messageID/threads", threadHandler.CreateThread)
+
+	// Thread listing (under /api/v1/channels, ViewChannels via middleware)
+	channelGroup.Get("/:channelID/threads",
+		permission.RequirePermission(s.permResolver, permissions.ViewChannels),
+		threadHandler.ListThreads)
+
+	// Pinned messages (under /api/v1/channels, ViewChannels via middleware)
+	pinHandler := api.NewPinHandler(
+		s.messageRepo, s.attachmentRepo, s.reactionRepo, s.storage,
+		s.permResolver, s.gatewayPublisher, log.Logger)
+	channelGroup.Get("/:channelID/pins",
+		permission.RequirePermission(s.permResolver, permissions.ViewChannels),
+		pinHandler.ListPins)
+
+	// Thread-scoped routes (standalone group)
+	threadGroup := app.Group("/api/v1/threads", requireAuth, requireVerified, requireActive)
+	threadGroup.Get("/:threadID", threadHandler.GetThread)
+	threadGroup.Patch("/:threadID", threadHandler.UpdateThread)
+	threadGroup.Get("/:threadID/messages", threadHandler.ListThreadMessages)
+	threadGroup.Post("/:threadID/messages",
+		limiter.New(limiter.Config{
+			Max:          s.cfg.RateLimitMsgCount,
+			Expiration:   time.Duration(s.cfg.RateLimitMsgWindowSeconds) * time.Second,
+			KeyGenerator: userKeyGenerator,
+			LimitReached: rateLimitReached,
+		}),
+		threadHandler.CreateThreadMessage)
+
+	// Pin/unpin (under /api/v1/messages, inherits auth/verified/active)
+	messageGroup.Put("/:messageID/pin", pinHandler.PinMessage)
+	messageGroup.Delete("/:messageID/pin", pinHandler.UnpinMessage)
 
 	// Search routes (require active membership)
 	searchSearcher := search.NewTypesenseSearcher(s.cfg.TypesenseURL, s.cfg.TypesenseAPIKey.Expose(), s.cfg.TypesenseTimeout)

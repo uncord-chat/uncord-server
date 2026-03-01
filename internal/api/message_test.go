@@ -52,6 +52,7 @@ func (r *fakeMessageRepo) Create(_ context.Context, params message.CreateParams)
 		AuthorID:          params.AuthorID,
 		Content:           params.Content,
 		ReplyToID:         params.ReplyToID,
+		ThreadID:          params.ThreadID,
 		CreatedAt:         now,
 		UpdatedAt:         now,
 		AuthorUsername:    "testuser",
@@ -118,6 +119,69 @@ func (r *fakeMessageRepo) SoftDelete(_ context.Context, id uuid.UUID) error {
 		}
 	}
 	return message.ErrNotFound
+}
+
+func (r *fakeMessageRepo) Pin(_ context.Context, id uuid.UUID) (*message.Message, error) {
+	for i := range r.messages {
+		if r.messages[i].ID == id && !r.messages[i].Deleted {
+			if r.messages[i].Pinned {
+				return nil, message.ErrAlreadyPinned
+			}
+			r.messages[i].Pinned = true
+			return &r.messages[i], nil
+		}
+	}
+	return nil, message.ErrNotFound
+}
+
+func (r *fakeMessageRepo) Unpin(_ context.Context, id uuid.UUID) (*message.Message, error) {
+	for i := range r.messages {
+		if r.messages[i].ID == id && !r.messages[i].Deleted {
+			if !r.messages[i].Pinned {
+				return nil, message.ErrNotPinned
+			}
+			r.messages[i].Pinned = false
+			return &r.messages[i], nil
+		}
+	}
+	return nil, message.ErrNotFound
+}
+
+func (r *fakeMessageRepo) ListPinned(_ context.Context, channelID uuid.UUID) ([]message.Message, error) {
+	var result []message.Message
+	for i := range r.messages {
+		if r.messages[i].ChannelID == channelID && r.messages[i].Pinned && !r.messages[i].Deleted {
+			result = append(result, r.messages[i])
+		}
+	}
+	return result, nil
+}
+
+func (r *fakeMessageRepo) ListByThread(_ context.Context, threadID uuid.UUID, before *uuid.UUID, limit int) ([]message.Message, error) {
+	var result []message.Message
+	for i := len(r.messages) - 1; i >= 0; i-- {
+		msg := r.messages[i]
+		if msg.ThreadID == nil || *msg.ThreadID != threadID || msg.Deleted {
+			continue
+		}
+		if before != nil {
+			var beforeTime time.Time
+			for j := range r.messages {
+				if r.messages[j].ID == *before {
+					beforeTime = r.messages[j].CreatedAt
+					break
+				}
+			}
+			if !msg.CreatedAt.Before(beforeTime) {
+				continue
+			}
+		}
+		result = append(result, msg)
+		if len(result) >= limit {
+			break
+		}
+	}
+	return result, nil
 }
 
 func seedMessage(repo *fakeMessageRepo, channelID, authorID uuid.UUID) *message.Message {

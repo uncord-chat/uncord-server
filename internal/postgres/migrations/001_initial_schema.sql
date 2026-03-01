@@ -141,6 +141,7 @@ CREATE INDEX idx_messages_channel_time ON messages (channel_id, created_at DESC)
 CREATE INDEX idx_messages_author ON messages (author_id, created_at DESC);
 CREATE INDEX idx_messages_thread ON messages (thread_id) WHERE thread_id IS NOT NULL;
 CREATE INDEX idx_messages_reply ON messages (reply_to_id) WHERE reply_to_id IS NOT NULL;
+CREATE INDEX idx_messages_pinned ON messages (channel_id, created_at DESC) WHERE pinned = true AND deleted = false;
 
 -- Message Attachments
 
@@ -184,6 +185,7 @@ ALTER TABLE messages ADD CONSTRAINT fk_messages_thread
 
 CREATE INDEX idx_threads_channel ON threads (channel_id);
 CREATE INDEX idx_threads_parent_message ON threads (parent_message_id);
+CREATE UNIQUE INDEX idx_threads_parent_message_unique ON threads (parent_message_id);
 
 -- Reactions
 

@@ -12,7 +12,7 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/postgres"
 )
 
-const selectColumns = `m.id, m.channel_id, m.author_id, m.content, m.edited_at, m.reply_to_id,
+const selectColumns = `m.id, m.channel_id, m.author_id, m.content, m.edited_at, m.reply_to_id, m.thread_id,
 m.pinned, m.deleted, m.created_at, m.updated_at,
 u.username, u.display_name, u.avatar_key`
 
@@ -48,16 +48,17 @@ func (r *PGRepository) Create(ctx context.Context, params CreateParams) (*Messag
 		}
 
 		row := tx.QueryRow(ctx,
-			`INSERT INTO messages (channel_id, author_id, content, reply_to_id)
-			 VALUES ($1, $2, $3, $4)
+			`INSERT INTO messages (channel_id, author_id, content, reply_to_id, thread_id)
+			 VALUES ($1, $2, $3, $4, $5)
 			 RETURNING id, created_at, updated_at`,
-			params.ChannelID, params.AuthorID, params.Content, params.ReplyToID,
+			params.ChannelID, params.AuthorID, params.Content, params.ReplyToID, params.ThreadID,
 		)
 
 		msg.ChannelID = params.ChannelID
 		msg.AuthorID = params.AuthorID
 		msg.Content = params.Content
 		msg.ReplyToID = params.ReplyToID
+		msg.ThreadID = params.ThreadID
 		if err := row.Scan(&msg.ID, &msg.CreatedAt, &msg.UpdatedAt); err != nil {
 			return fmt.Errorf("insert message: %w", err)
 		}
@@ -170,11 +171,127 @@ func (r *PGRepository) SoftDelete(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
+// Pin marks a message as pinned. Returns ErrAlreadyPinned if the message is already pinned, or ErrNotFound if the
+// message does not exist or is deleted.
+func (r *PGRepository) Pin(ctx context.Context, id uuid.UUID) (*Message, error) {
+	msg, err := r.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if msg.Pinned {
+		return nil, ErrAlreadyPinned
+	}
+
+	tag, err := r.db.Exec(ctx,
+		"UPDATE messages SET pinned = true WHERE id = $1 AND deleted = false", id,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("pin message: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, ErrNotFound
+	}
+	return r.GetByID(ctx, id)
+}
+
+// Unpin marks a message as unpinned. Returns ErrNotPinned if the message is not currently pinned, or ErrNotFound if the
+// message does not exist or is deleted.
+func (r *PGRepository) Unpin(ctx context.Context, id uuid.UUID) (*Message, error) {
+	msg, err := r.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if !msg.Pinned {
+		return nil, ErrNotPinned
+	}
+
+	tag, err := r.db.Exec(ctx,
+		"UPDATE messages SET pinned = false WHERE id = $1 AND deleted = false", id,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("unpin message: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, ErrNotFound
+	}
+	return r.GetByID(ctx, id)
+}
+
+// ListPinned returns all pinned, non-deleted messages in a channel ordered newest first.
+func (r *PGRepository) ListPinned(ctx context.Context, channelID uuid.UUID) ([]Message, error) {
+	rows, err := r.db.Query(ctx, fmt.Sprintf(
+		`SELECT %s %s
+		 WHERE m.channel_id = $1 AND m.pinned = true AND m.deleted = false
+		 ORDER BY m.created_at DESC`, selectColumns, baseJoin),
+		channelID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query pinned messages: %w", err)
+	}
+	defer rows.Close()
+
+	var messages []Message
+	for rows.Next() {
+		msg, scanErr := scanMessage(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		messages = append(messages, *msg)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate pinned messages: %w", err)
+	}
+	return messages, nil
+}
+
+// ListByThread returns non-deleted messages in a thread ordered newest first. Cursor-based pagination is supported via
+// the before parameter, matching the List method's behaviour.
+func (r *PGRepository) ListByThread(ctx context.Context, threadID uuid.UUID, before *uuid.UUID, limit int) ([]Message, error) {
+	var rows pgx.Rows
+	var err error
+
+	if before != nil {
+		rows, err = r.db.Query(ctx, fmt.Sprintf(
+			`SELECT %s %s
+			 WHERE m.thread_id = $1 AND m.deleted = false
+			   AND (m.created_at, m.id) < (SELECT created_at, id FROM messages WHERE id = $2)
+			 ORDER BY m.created_at DESC, m.id DESC
+			 LIMIT $3`, selectColumns, baseJoin),
+			threadID, *before, limit,
+		)
+	} else {
+		rows, err = r.db.Query(ctx, fmt.Sprintf(
+			`SELECT %s %s
+			 WHERE m.thread_id = $1 AND m.deleted = false
+			 ORDER BY m.created_at DESC, m.id DESC
+			 LIMIT $2`, selectColumns, baseJoin),
+			threadID, limit,
+		)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query thread messages: %w", err)
+	}
+	defer rows.Close()
+
+	var messages []Message
+	for rows.Next() {
+		msg, scanErr := scanMessage(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		messages = append(messages, *msg)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate thread messages: %w", err)
+	}
+	return messages, nil
+}
+
 // scanMessage scans a single row into a Message struct.
 func scanMessage(row pgx.Row) (*Message, error) {
 	var msg Message
 	err := row.Scan(
-		&msg.ID, &msg.ChannelID, &msg.AuthorID, &msg.Content, &msg.EditedAt, &msg.ReplyToID,
+		&msg.ID, &msg.ChannelID, &msg.AuthorID, &msg.Content, &msg.EditedAt, &msg.ReplyToID, &msg.ThreadID,
 		&msg.Pinned, &msg.Deleted, &msg.CreatedAt, &msg.UpdatedAt,
 		&msg.AuthorUsername, &msg.AuthorDisplayName, &msg.AuthorAvatarKey,
 	)
