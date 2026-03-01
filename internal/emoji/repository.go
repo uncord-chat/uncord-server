@@ -142,7 +142,7 @@ func scanEmoji(row pgx.Row) (*Emoji, error) {
 	var e Emoji
 	err := row.Scan(&e.ID, &e.Name, &e.Animated, &e.StorageKey, &e.UploaderID, &e.CreatedAt, &e.UpdatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan emoji: %w", err)
 	}
 	return &e, nil
 }

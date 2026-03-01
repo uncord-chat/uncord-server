@@ -87,7 +87,7 @@ func scanConfig(row pgx.Row) (*Config, error) {
 		&cfg.CreatedAt, &cfg.UpdatedAt,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan onboarding config: %w", err)
 	}
 	return &cfg, nil
 }
