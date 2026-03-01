@@ -22,6 +22,7 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/cors"
 	"github.com/gofiber/fiber/v3/middleware/limiter"
 	"github.com/gofiber/fiber/v3/middleware/requestid"
+	"github.com/gofiber/fiber/v3/middleware/timeout"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -789,6 +790,24 @@ func newFiberApp(cfg *config.Config) *fiber.App {
 	} else {
 		app.Use(httputil.RequestLogger(log.Logger, "/api/v1/health"))
 	}
+	// Enforce a per-request timeout on all REST handlers. WebSocket upgrade requests are excluded because the gateway
+	// manages its own connection lifecycle. The timeout middleware runs the remaining handler chain in a goroutine and
+	// returns 408 if processing exceeds the configured duration.
+	app.Use(timeout.New(func(c fiber.Ctx) error { return c.Next() }, timeout.Config{
+		Timeout: cfg.RequestTimeout,
+		Next: func(c fiber.Ctx) bool {
+			return c.Get(fiber.HeaderUpgrade) == "websocket"
+		},
+		OnTimeout: func(c fiber.Ctx) error {
+			return c.Status(fiber.StatusRequestTimeout).JSON(httputil.ErrorResponse{
+				Error: httputil.ErrorBody{
+					Code:    apierrors.InternalError,
+					Message: "Request timed out",
+				},
+			})
+		},
+	}))
+
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:  strings.Split(cfg.CORSAllowOrigins, ","),
 		AllowMethods:  []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
@@ -962,6 +981,8 @@ func fiberStatusToAPICode(status int) apierrors.Code {
 		return apierrors.NotFound
 	case fiber.StatusMethodNotAllowed:
 		return apierrors.ValidationError
+	case fiber.StatusRequestTimeout:
+		return apierrors.InternalError
 	case fiber.StatusTooManyRequests:
 		return apierrors.RateLimited
 	case fiber.StatusRequestEntityTooLarge:

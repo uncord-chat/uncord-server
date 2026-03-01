@@ -40,6 +40,7 @@ func TestLoadDefaults(t *testing.T) {
 		"RATE_LIMIT_WS_COUNT", "RATE_LIMIT_WS_WINDOW_SECONDS",
 		"RATE_LIMIT_MSG_COUNT", "RATE_LIMIT_MSG_WINDOW_SECONDS",
 		"RATE_LIMIT_MSG_GLOBAL_COUNT", "RATE_LIMIT_MSG_GLOBAL_WINDOW_SECONDS",
+		"REQUEST_TIMEOUT",
 	}
 	for _, k := range keys {
 		t.Setenv(k, "")
@@ -63,6 +64,9 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.ServerEnv != "production" {
 		t.Errorf("ServerEnv = %q, want %q", cfg.ServerEnv, "production")
+	}
+	if cfg.RequestTimeout != 30*time.Second {
+		t.Errorf("RequestTimeout = %v, want 30s", cfg.RequestTimeout)
 	}
 
 	// Database defaults
@@ -811,6 +815,7 @@ func TestLoadValidationDeletionTombstoneRetentionNegative(t *testing.T) {
 		DeletionTombstoneRetention:      -time.Hour,
 		DataCleanupInterval:             12 * time.Hour,
 		MaxMessageLength:                4000,
+		RequestTimeout:                  30 * time.Second,
 	}
 	err := cfg.validate()
 	if err == nil {
@@ -1034,5 +1039,19 @@ func TestLoadValidationGatewayPublishTimeoutTooLow(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "GATEWAY_PUBLISH_TIMEOUT must be at least 1s") {
 		t.Errorf("error %q does not mention GATEWAY_PUBLISH_TIMEOUT", err.Error())
+	}
+}
+
+func TestLoadValidationRequestTimeoutTooLow(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+	t.Setenv("SERVER_SECRET", testServerSecret)
+	t.Setenv("REQUEST_TIMEOUT", "500ms")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() returned nil error, want validation error for REQUEST_TIMEOUT < 1s")
+	}
+	if !strings.Contains(err.Error(), "REQUEST_TIMEOUT must be at least 1s") {
+		t.Errorf("error %q does not mention REQUEST_TIMEOUT", err.Error())
 	}
 }

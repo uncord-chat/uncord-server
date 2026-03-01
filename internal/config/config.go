@@ -25,8 +25,9 @@ type Config struct {
 	ServerDescription string
 	ServerURL         string
 	ServerPort        int
-	ServerEnv         string // "development" or "production"
+	ServerEnv         string        // "development" or "production"
 	LogHealthRequests bool
+	RequestTimeout    time.Duration // Maximum duration for REST request processing. Default: 30s.
 
 	// Database
 	DatabaseURL     Secret
@@ -165,6 +166,7 @@ func Load() (*Config, error) {
 		ServerPort:        p.int("SERVER_PORT", 8080),
 		ServerEnv:         envStr("SERVER_ENV", "production"),
 		LogHealthRequests: p.bool("LOG_HEALTH_REQUESTS", true),
+		RequestTimeout:    p.duration("REQUEST_TIMEOUT", 30*time.Second),
 
 		DatabaseURL:     NewSecret(envStr("DATABASE_URL", "postgres://uncord:password@postgres:5432/uncord?sslmode=disable")),
 		DatabaseMaxConn: p.int("DATABASE_MAX_CONNS", 25),
@@ -342,6 +344,9 @@ func (c *Config) validate() error {
 
 	if c.ServerPort < 1 || c.ServerPort > 65535 {
 		errs = append(errs, fmt.Errorf("SERVER_PORT must be between 1 and 65535"))
+	}
+	if c.RequestTimeout < time.Second {
+		errs = append(errs, fmt.Errorf("REQUEST_TIMEOUT must be at least 1s"))
 	}
 
 	if c.DatabaseMaxConn < 1 {
