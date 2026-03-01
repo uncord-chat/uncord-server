@@ -110,7 +110,7 @@ func (h *ReactionHandler) AddReaction(c fiber.Ctx) error {
 
 // RemoveReaction handles DELETE /api/v1/channels/:channelID/messages/:messageID/reactions/:emoji.
 func (h *ReactionHandler) RemoveReaction(c fiber.Ctx) error {
-	_, err := uuid.Parse(c.Params("channelID"))
+	channelID, err := uuid.Parse(c.Params("channelID"))
 	if err != nil {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
 	}
@@ -135,7 +135,6 @@ func (h *ReactionHandler) RemoveReaction(c fiber.Ctx) error {
 	}
 
 	if h.gateway != nil {
-		channelID, _ := uuid.Parse(c.Params("channelID"))
 		data := models.ReactionRemoveData{
 			MessageID: messageID.String(),
 			ChannelID: channelID.String(),
