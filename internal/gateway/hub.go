@@ -475,7 +475,9 @@ func (h *Hub) handlePubSubEvent(ctx context.Context, payload string) {
 
 	eventType := events.DispatchEvent(env.Type)
 
-	// Re-marshal the data field to json.RawMessage for the frame constructor.
+	// The envelope uses an untyped Data field because the pub/sub channel carries heterogeneous event types.
+	// Re-marshalling to json.RawMessage lets the hub forward events without knowing their full shape, at the cost of
+	// one extra marshal round-trip per event. A typed approach would couple the hub to every protocol event definition.
 	rawData, err := json.Marshal(env.Data)
 	if err != nil {
 		h.log.Warn().Err(err).Msg("Failed to re-marshal event data")
