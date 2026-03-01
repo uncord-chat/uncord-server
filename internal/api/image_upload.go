@@ -58,7 +58,7 @@ func (h *ImageUploadHandler) UploadUserAvatar(c fiber.Ctx) error {
 	}
 
 	buf, err := h.readAndResize(c, h.maxAvatarDim, h.maxAvatarDim)
-	if buf == nil {
+	if err != nil {
 		return err
 	}
 
@@ -126,7 +126,7 @@ func (h *ImageUploadHandler) UploadUserBanner(c fiber.Ctx) error {
 	}
 
 	buf, err := h.readAndResize(c, h.maxBannerW, h.maxBannerH)
-	if buf == nil {
+	if err != nil {
 		return err
 	}
 
@@ -188,7 +188,7 @@ func (h *ImageUploadHandler) DeleteUserBanner(c fiber.Ctx) error {
 // UploadServerIcon handles PUT /api/v1/server/icon.
 func (h *ImageUploadHandler) UploadServerIcon(c fiber.Ctx) error {
 	buf, err := h.readAndResize(c, h.maxAvatarDim, h.maxAvatarDim)
-	if buf == nil {
+	if err != nil {
 		return err
 	}
 
@@ -245,7 +245,7 @@ func (h *ImageUploadHandler) DeleteServerIcon(c fiber.Ctx) error {
 // UploadServerBanner handles PUT /api/v1/server/banner.
 func (h *ImageUploadHandler) UploadServerBanner(c fiber.Ctx) error {
 	buf, err := h.readAndResize(c, h.maxBannerW, h.maxBannerH)
-	if buf == nil {
+	if err != nil {
 		return err
 	}
 
