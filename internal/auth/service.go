@@ -770,6 +770,6 @@ func (s *Service) recordLoginAttempt(ctx context.Context, email, ip string, succ
 // crypto/rand.Read never returns an error (it panics on catastrophic OS entropy failure).
 func generateSecureToken(n int) string {
 	b := make([]byte, n)
-	rand.Read(b)
+	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
 }

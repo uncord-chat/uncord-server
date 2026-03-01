@@ -25,7 +25,7 @@ type Config struct {
 	ServerDescription string
 	ServerURL         string
 	ServerPort        int
-	ServerEnv         string        // "development" or "production"
+	ServerEnv         string // "development" or "production"
 	LogHealthRequests bool
 	RequestTimeout    time.Duration // Maximum duration for REST request processing. Default: 30s.
 
