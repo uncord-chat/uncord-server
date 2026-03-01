@@ -15,6 +15,13 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/postgres"
 )
 
+const (
+	// positionGeneral is the display position for the default #general channel created during first-run initialization.
+	positionGeneral = 0
+	// positionWelcome is the display position for the default #welcome channel created during first-run initialization.
+	positionWelcome = 1
+)
+
 // DefaultEveryonePermissions is the permission bitfield assigned to the @everyone role during first-run initialization.
 var DefaultEveryonePermissions = permissions.ViewChannels |
 	permissions.SendMessages |
@@ -124,7 +131,8 @@ func RunFirstInit(ctx context.Context, db *pgxpool.Pool, cfg *config.Config, log
 
 		// Insert #general channel
 		_, err = tx.Exec(ctx,
-			`INSERT INTO channels (name, type, position) VALUES ('general', 'text', 0)`,
+			`INSERT INTO channels (name, type, position) VALUES ('general', 'text', $1)`,
+			positionGeneral,
 		)
 		if err != nil {
 			return fmt.Errorf("insert #general channel: %w", err)
@@ -133,7 +141,8 @@ func RunFirstInit(ctx context.Context, db *pgxpool.Pool, cfg *config.Config, log
 		// Insert #welcome channel
 		var welcomeChannelID uuid.UUID
 		err = tx.QueryRow(ctx,
-			`INSERT INTO channels (name, type, position) VALUES ('welcome', 'text', 1) RETURNING id`,
+			`INSERT INTO channels (name, type, position) VALUES ('welcome', 'text', $1) RETURNING id`,
+			positionWelcome,
 		).Scan(&welcomeChannelID)
 		if err != nil {
 			return fmt.Errorf("insert #welcome channel: %w", err)
