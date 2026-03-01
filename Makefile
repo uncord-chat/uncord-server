@@ -1,4 +1,4 @@
-.PHONY: build run test test-cover lint vet fmt fmt-check check tidy docker-up docker-down docker-build docker-logs migrate-up migrate-down migrate-status clean
+.PHONY: build run test test-cover lint vet fmt fmt-check vulncheck check tidy docker-up docker-down docker-build docker-logs migrate-up migrate-down migrate-status clean
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
@@ -35,7 +35,10 @@ fmt:
 fmt-check:
 	test -z "$$(gofmt -l .)"
 
-check: fmt-check lint vet test
+vulncheck:
+	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+check: fmt-check lint vet vulncheck test
 
 # Dependencies
 
