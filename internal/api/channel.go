@@ -54,9 +54,9 @@ func NewChannelHandler(
 // ListChannels handles GET /api/v1/server/channels. Active and timed-out members see all channels they have permission
 // to view. Pending members see only the welcome channel (if configured). Non-members see an empty list.
 func (h *ChannelHandler) ListChannels(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	status, err := h.members.GetStatus(c, userID)

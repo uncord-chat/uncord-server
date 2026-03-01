@@ -133,9 +133,9 @@ func (h *MemberHandler) ListChannelMembers(c fiber.Ctx) error {
 // GetSelf handles GET /api/v1/server/members/@me. Unlike other member endpoints, this includes pending members so they
 // can check their own onboarding status.
 func (h *MemberHandler) GetSelf(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	m, err := h.members.GetByUserIDAnyStatus(c, userID)
@@ -147,9 +147,9 @@ func (h *MemberHandler) GetSelf(c fiber.Ctx) error {
 
 // UpdateSelf handles PATCH /api/v1/server/members/@me.
 func (h *MemberHandler) UpdateSelf(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	var body models.UpdateMemberRequest
@@ -173,9 +173,9 @@ func (h *MemberHandler) UpdateSelf(c fiber.Ctx) error {
 
 // Leave handles DELETE /api/v1/server/members/@me.
 func (h *MemberHandler) Leave(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	if err := h.checkNotOwner(c, userID); err != nil {
@@ -207,9 +207,9 @@ func (h *MemberHandler) GetMember(c fiber.Ctx) error {
 
 // UpdateMember handles PATCH /api/v1/server/members/:userID.
 func (h *MemberHandler) UpdateMember(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	targetID, err := uuid.Parse(c.Params("userID"))
@@ -242,9 +242,9 @@ func (h *MemberHandler) UpdateMember(c fiber.Ctx) error {
 
 // KickMember handles DELETE /api/v1/server/members/:userID.
 func (h *MemberHandler) KickMember(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	targetID, err := uuid.Parse(c.Params("userID"))
@@ -270,9 +270,9 @@ func (h *MemberHandler) KickMember(c fiber.Ctx) error {
 
 // SetTimeout handles PUT /api/v1/server/members/:userID/timeout.
 func (h *MemberHandler) SetTimeout(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	targetID, err := uuid.Parse(c.Params("userID"))
@@ -331,9 +331,9 @@ func (h *MemberHandler) ClearTimeout(c fiber.Ctx) error {
 
 // BanMember handles PUT /api/v1/server/bans/:userID.
 func (h *MemberHandler) BanMember(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	targetID, err := uuid.Parse(c.Params("userID"))
@@ -413,9 +413,9 @@ func (h *MemberHandler) ListBans(c fiber.Ctx) error {
 
 // AssignRole handles PUT /api/v1/server/members/:userID/roles/:roleID.
 func (h *MemberHandler) AssignRole(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	targetID, err := uuid.Parse(c.Params("userID"))
@@ -474,9 +474,9 @@ func (h *MemberHandler) AssignRole(c fiber.Ctx) error {
 
 // RemoveRole handles DELETE /api/v1/server/members/:userID/roles/:roleID.
 func (h *MemberHandler) RemoveRole(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	targetID, err := uuid.Parse(c.Params("userID"))

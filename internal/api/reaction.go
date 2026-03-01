@@ -56,9 +56,9 @@ func (h *ReactionHandler) AddReaction(c fiber.Ctx) error {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidMessageID, "Invalid message ID format")
 	}
 
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	emojiID, emojiUnicode, err := parseEmojiParam(c.Params("emoji"))
@@ -120,9 +120,9 @@ func (h *ReactionHandler) RemoveReaction(c fiber.Ctx) error {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidMessageID, "Invalid message ID format")
 	}
 
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	emojiID, emojiUnicode, err := parseEmojiParam(c.Params("emoji"))

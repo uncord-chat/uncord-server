@@ -35,9 +35,9 @@ func NewTypingHandler(presenceStore *presence.Store, gw *gateway.Publisher, logg
 // user, deduplicating rapid calls via a short-lived Valkey key. When the key is newly created, a TYPING_START dispatch
 // event is published to the gateway.
 func (h *TypingHandler) StartTyping(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	channelID, err := uuid.Parse(c.Params("channelID"))
@@ -68,9 +68,9 @@ func (h *TypingHandler) StartTyping(c fiber.Ctx) error {
 // StopTyping handles DELETE /api/v1/channels/:channelID/typing. It clears the typing indicator for the authenticated
 // user and publishes a TYPING_STOP dispatch event when the key existed.
 func (h *TypingHandler) StopTyping(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	channelID, err := uuid.Parse(c.Params("channelID"))

@@ -2,7 +2,6 @@ package api
 
 import (
 	"github.com/gofiber/fiber/v3"
-	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 	"github.com/uncord-chat/uncord-protocol/models"
@@ -24,9 +23,9 @@ func NewMFAHandler(svc *auth.Service, logger zerolog.Logger) *MFAHandler {
 
 // Enable handles POST /api/v1/users/@me/mfa/enable.
 func (h *MFAHandler) Enable(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	var body models.MFAEnableRequest
@@ -50,9 +49,9 @@ func (h *MFAHandler) Enable(c fiber.Ctx) error {
 
 // Confirm handles POST /api/v1/users/@me/mfa/confirm.
 func (h *MFAHandler) Confirm(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	var body models.MFAConfirmRequest
@@ -75,9 +74,9 @@ func (h *MFAHandler) Confirm(c fiber.Ctx) error {
 
 // Disable handles POST /api/v1/users/@me/mfa/disable.
 func (h *MFAHandler) Disable(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	var body models.MFADisableRequest
@@ -99,9 +98,9 @@ func (h *MFAHandler) Disable(c fiber.Ctx) error {
 
 // RegenerateCodes handles POST /api/v1/users/@me/mfa/recovery-codes.
 func (h *MFAHandler) RegenerateCodes(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	var body models.MFARegenerateCodesRequest

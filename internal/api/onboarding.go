@@ -66,9 +66,9 @@ func (h *OnboardingHandler) GetOnboarding(c fiber.Ctx) error {
 // UpdateOnboarding handles PATCH /api/v1/onboarding. Only the server owner may update the onboarding configuration.
 // Documents are managed on the filesystem, not via this endpoint.
 func (h *OnboardingHandler) UpdateOnboarding(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	srv, err := h.servers.Get(c)
@@ -126,9 +126,9 @@ func (h *OnboardingHandler) UpdateOnboarding(c fiber.Ctx) error {
 // AcceptOnboarding handles POST /api/v1/onboarding/accept. Validates that the client has accepted all required
 // documents, then activates the pending member.
 func (h *OnboardingHandler) AcceptOnboarding(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	var body models.AcceptOnboardingRequest
@@ -195,9 +195,9 @@ func (h *OnboardingHandler) AcceptOnboarding(c fiber.Ctx) error {
 // JoinServer handles POST /api/v1/server/join. Allows users to join the server without an invite when open_join is
 // enabled.
 func (h *OnboardingHandler) JoinServer(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	cfg, err := h.onboarding.Get(c)
@@ -243,9 +243,9 @@ func (h *OnboardingHandler) JoinServer(c fiber.Ctx) error {
 // GetOnboardingStatus handles GET /api/v1/onboarding/status. Returns the next step the authenticated user must complete
 // in the onboarding flow as a single computed string. Only requires authentication so it works at any onboarding stage.
 func (h *OnboardingHandler) GetOnboardingStatus(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	status, err := h.members.GetStatus(c, userID)

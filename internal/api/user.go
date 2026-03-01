@@ -28,9 +28,9 @@ func NewUserHandler(users user.Repository, authSvc *auth.Service, logger zerolog
 
 // GetMe handles GET /api/v1/users/@me.
 func (h *UserHandler) GetMe(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	u, err := h.users.GetByID(c, userID)
@@ -58,9 +58,9 @@ func (h *UserHandler) GetProfile(c fiber.Ctx) error {
 
 // UpdateMe handles PATCH /api/v1/users/@me.
 func (h *UserHandler) UpdateMe(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	var body models.UpdateUserRequest
@@ -106,9 +106,9 @@ func (h *UserHandler) UpdateMe(c fiber.Ctx) error {
 
 // DeleteMe handles DELETE /api/v1/users/@me.
 func (h *UserHandler) DeleteMe(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	var body models.DeleteAccountRequest

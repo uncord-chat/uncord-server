@@ -2,6 +2,7 @@ package httputil
 
 import (
 	"github.com/gofiber/fiber/v3"
+	"github.com/google/uuid"
 
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 )
@@ -40,4 +41,14 @@ func Fail(c fiber.Ctx, status int, code apierrors.Code, message string) error {
 			Message: message,
 		},
 	})
+}
+
+// UserID extracts the authenticated user's ID from the request context. If the value is absent (indicating the
+// RequireAuth middleware has not run), it returns a *fiber.Error that the global error handler renders as a 401.
+func UserID(c fiber.Ctx) (uuid.UUID, error) {
+	id, ok := c.Locals("userID").(uuid.UUID)
+	if !ok {
+		return uuid.Nil, fiber.NewError(fiber.StatusUnauthorized, "Missing user identity")
+	}
+	return id, nil
 }

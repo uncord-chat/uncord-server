@@ -3,6 +3,7 @@ package member
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,8 @@ import (
 	"github.com/google/uuid"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 	"github.com/uncord-chat/uncord-protocol/models"
+
+	"github.com/uncord-chat/uncord-server/internal/httputil"
 )
 
 // fakeStatusRepo implements the subset of Repository exercised by RequireActiveMember.
@@ -131,7 +134,23 @@ func TestRequireActiveMember(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			app := fiber.New()
+			app := fiber.New(fiber.Config{
+				ErrorHandler: func(c fiber.Ctx, err error) error {
+					status := fiber.StatusInternalServerError
+					msg := err.Error()
+					code := apierrors.InternalError
+					if fe, ok := errors.AsType[*fiber.Error](err); ok {
+						status = fe.Code
+						msg = fe.Message
+					}
+					if status == fiber.StatusUnauthorized {
+						code = apierrors.Unauthorised
+					}
+					return c.Status(status).JSON(httputil.ErrorResponse{
+						Error: httputil.ErrorBody{Code: code, Message: msg},
+					})
+				},
+			})
 
 			app.Use(func(c fiber.Ctx) error {
 				if tt.setLocals {

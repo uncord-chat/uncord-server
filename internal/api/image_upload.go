@@ -52,9 +52,9 @@ func NewImageUploadHandler(
 
 // UploadUserAvatar handles PUT /api/v1/users/@me/avatar.
 func (h *ImageUploadHandler) UploadUserAvatar(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	buf, err := h.readAndResize(c, h.maxAvatarDim, h.maxAvatarDim)
@@ -92,9 +92,9 @@ func (h *ImageUploadHandler) UploadUserAvatar(c fiber.Ctx) error {
 
 // DeleteUserAvatar handles DELETE /api/v1/users/@me/avatar.
 func (h *ImageUploadHandler) DeleteUserAvatar(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	current, err := h.users.GetByID(c, userID)
@@ -120,9 +120,9 @@ func (h *ImageUploadHandler) DeleteUserAvatar(c fiber.Ctx) error {
 
 // UploadUserBanner handles PUT /api/v1/users/@me/banner.
 func (h *ImageUploadHandler) UploadUserBanner(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	buf, err := h.readAndResize(c, h.maxBannerW, h.maxBannerH)
@@ -159,9 +159,9 @@ func (h *ImageUploadHandler) UploadUserBanner(c fiber.Ctx) error {
 
 // DeleteUserBanner handles DELETE /api/v1/users/@me/banner.
 func (h *ImageUploadHandler) DeleteUserBanner(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	current, err := h.users.GetByID(c, userID)

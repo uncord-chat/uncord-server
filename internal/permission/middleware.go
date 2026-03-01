@@ -14,9 +14,9 @@ import (
 // the channel specified by the "channelID" route parameter.
 func RequirePermission(resolver *Resolver, perm permissions.Permission) fiber.Handler {
 	return func(c fiber.Ctx) error {
-		userID, ok := c.Locals("userID").(uuid.UUID)
-		if !ok {
-			return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Authentication required")
+		userID, err := httputil.UserID(c)
+		if err != nil {
+			return err
 		}
 
 		channelIDStr := c.Params("channelID")
@@ -46,9 +46,9 @@ func RequirePermission(resolver *Resolver, perm permissions.Permission) fiber.Ha
 // server-level permission. Unlike RequirePermission, no channel ID is needed.
 func RequireServerPermission(resolver *Resolver, perm permissions.Permission) fiber.Handler {
 	return func(c fiber.Ctx) error {
-		userID, ok := c.Locals("userID").(uuid.UUID)
-		if !ok {
-			return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Authentication required")
+		userID, err := httputil.UserID(c)
+		if err != nil {
+			return err
 		}
 
 		allowed, err := resolver.HasServerPermission(c, userID, perm)

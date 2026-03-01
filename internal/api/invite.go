@@ -34,9 +34,9 @@ func NewInviteHandler(invites invite.Repository, onboardingRepo onboarding.Repos
 
 // CreateInvite handles POST /api/v1/server/invites.
 func (h *InviteHandler) CreateInvite(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	var body models.CreateInviteRequest
@@ -106,9 +106,9 @@ func (h *InviteHandler) DeleteInvite(c fiber.Ctx) error {
 
 // JoinViaInvite handles POST /api/v1/invites/:code/join.
 func (h *InviteHandler) JoinViaInvite(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	// Check ban before consuming the invite.

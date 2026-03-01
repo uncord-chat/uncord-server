@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 	"github.com/uncord-chat/uncord-protocol/models"
@@ -137,9 +136,9 @@ func (h *AuthHandler) VerifyEmail(c fiber.Ctx) error {
 
 // VerifyPassword handles POST /api/v1/auth/verify-password.
 func (h *AuthHandler) VerifyPassword(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	var body models.VerifyPasswordRequest
@@ -159,9 +158,9 @@ func (h *AuthHandler) VerifyPassword(c fiber.Ctx) error {
 
 // ResendVerification handles POST /api/v1/auth/resend-verification.
 func (h *AuthHandler) ResendVerification(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	if err := h.auth.ResendVerification(c, userID); err != nil {

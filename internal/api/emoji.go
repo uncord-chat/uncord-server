@@ -67,9 +67,9 @@ func (h *EmojiHandler) ListEmoji(c fiber.Ctx) error {
 
 // CreateEmoji handles POST /api/v1/server/emoji.
 func (h *EmojiHandler) CreateEmoji(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	name := c.FormValue("name")

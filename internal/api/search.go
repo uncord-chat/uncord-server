@@ -28,9 +28,9 @@ func NewSearchHandler(service *search.Service, logger zerolog.Logger) *SearchHan
 // SearchMessages handles GET /api/v1/search/messages. It returns messages matching the query, scoped to channels the
 // authenticated user has permission to view.
 func (h *SearchHandler) SearchMessages(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	query := strings.TrimSpace(c.Query("q"))

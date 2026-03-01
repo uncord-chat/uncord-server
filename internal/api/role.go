@@ -95,9 +95,9 @@ func (h *RoleHandler) CreateRole(c fiber.Ctx) error {
 
 // UpdateRole handles PATCH /api/v1/server/roles/:roleID.
 func (h *RoleHandler) UpdateRole(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	id, err := uuid.Parse(c.Params("roleID"))
@@ -174,9 +174,9 @@ func (h *RoleHandler) UpdateRole(c fiber.Ctx) error {
 
 // DeleteRole handles DELETE /api/v1/server/roles/:roleID.
 func (h *RoleHandler) DeleteRole(c fiber.Ctx) error {
-	userID, ok := c.Locals("userID").(uuid.UUID)
-	if !ok {
-		return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing user identity")
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
 	}
 
 	id, err := uuid.Parse(c.Params("roleID"))

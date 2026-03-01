@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/google/uuid"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 	"github.com/uncord-chat/uncord-protocol/models"
 
@@ -16,9 +15,9 @@ import (
 // c.Locals("userID") is populated.
 func RequireActiveMember(members Repository) fiber.Handler {
 	return func(c fiber.Ctx) error {
-		userID, ok := c.Locals("userID").(uuid.UUID)
-		if !ok {
-			return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Authentication required")
+		userID, err := httputil.UserID(c)
+		if err != nil {
+			return err
 		}
 		status, err := members.GetStatus(c, userID)
 		if err != nil {

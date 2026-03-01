@@ -977,6 +977,8 @@ func userChannelKeyGenerator(c fiber.Ctx) string {
 // error code.
 func fiberStatusToAPICode(status int) apierrors.Code {
 	switch status {
+	case fiber.StatusUnauthorized:
+		return apierrors.Unauthorised
 	case fiber.StatusNotFound:
 		return apierrors.NotFound
 	case fiber.StatusMethodNotAllowed:
