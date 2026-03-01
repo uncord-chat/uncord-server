@@ -25,5 +25,13 @@ jobs:
           go mod tidy
           git diff --exit-code go.mod go.sum
 
+      - name: Verify no local replace directive
+        run: |
+          if grep -q '^replace.*uncord-protocol' go.mod; then
+            echo "ERROR: go.mod contains an active replace directive for uncord-protocol."
+            echo "Remove or comment it out before merging."
+            exit 1
+          fi
+
       - name: Lint
         uses: golangci/golangci-lint-action@v9
