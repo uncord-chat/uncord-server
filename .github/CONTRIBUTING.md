@@ -19,7 +19,7 @@ Thanks for your interest in contributing. Uncord is built in the open and welcom
 
 - One concern per pull request. Don't mix refactors with features.
 - Write tests for new functionality.
-- Run `make test` and `make lint` before submitting.
+- Run `make check` before submitting (runs formatting, linting, vetting, and tests).
 - Write a clear PR description explaining what changed and why.
 - Reference the issue number if one exists.
 
