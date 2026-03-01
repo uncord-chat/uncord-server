@@ -195,7 +195,7 @@ func run() error {
 	permPublisher := permission.NewPublisher(rdb)
 
 	// Initialise user repository early because the background purge goroutine needs it.
-	userRepo := user.NewPGRepository(db, log.Logger)
+	userRepo := user.NewPGRepository(db)
 
 	// Start background services with a shared cancellable context. The WaitGroup ensures all goroutines have returned
 	// before the process exits.
@@ -283,17 +283,17 @@ func run() error {
 	}
 
 	// Initialise remaining repositories and services
-	serverRepo := servercfg.NewPGRepository(db, log.Logger)
-	channelRepo := channel.NewPGRepository(db, log.Logger)
-	categoryRepo := category.NewPGRepository(db, log.Logger)
-	roleRepo := role.NewPGRepository(db, log.Logger)
-	memberRepo := member.NewPGRepository(db, log.Logger)
-	inviteRepo := invite.NewPGRepository(db, log.Logger)
-	onboardingRepo := onboarding.NewPGRepository(db, log.Logger)
-	messageRepo := message.NewPGRepository(db, log.Logger)
-	attachmentRepo := attachment.NewPGRepository(db, log.Logger)
-	emojiRepo := emoji.NewPGRepository(db, log.Logger)
-	reactionRepo := reaction.NewPGRepository(db, log.Logger)
+	serverRepo := servercfg.NewPGRepository(db)
+	channelRepo := channel.NewPGRepository(db)
+	categoryRepo := category.NewPGRepository(db)
+	roleRepo := role.NewPGRepository(db)
+	memberRepo := member.NewPGRepository(db)
+	inviteRepo := invite.NewPGRepository(db)
+	onboardingRepo := onboarding.NewPGRepository(db)
+	messageRepo := message.NewPGRepository(db)
+	attachmentRepo := attachment.NewPGRepository(db)
+	emojiRepo := emoji.NewPGRepository(db)
+	reactionRepo := reaction.NewPGRepository(db)
 	typesenseIndexer := typesense.NewIndexer(cfg.TypesenseURL, cfg.TypesenseAPIKey.Expose(), cfg.TypesenseTimeout)
 	gatewayPub := gateway.NewPublisher(rdb, log.Logger, cfg.GatewayPublishWorkers, cfg.GatewayPublishQueueSize, cfg.GatewayPublishTimeout)
 	presenceStore := presence.NewStore(rdb)

@@ -7,20 +7,18 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/rs/zerolog"
 )
 
 const selectColumns = "id, name, description, icon_key, banner_key, owner_id, created_at, updated_at"
 
 // PGRepository implements Repository using PostgreSQL.
 type PGRepository struct {
-	db  *pgxpool.Pool
-	log zerolog.Logger
+	db *pgxpool.Pool
 }
 
 // NewPGRepository creates a new PostgreSQL-backed server config repository.
-func NewPGRepository(db *pgxpool.Pool, logger zerolog.Logger) *PGRepository {
-	return &PGRepository{db: db, log: logger}
+func NewPGRepository(db *pgxpool.Pool) *PGRepository {
+	return &PGRepository{db: db}
 }
 
 // Get returns the server configuration row.

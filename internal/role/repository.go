@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/rs/zerolog"
 
 	"github.com/uncord-chat/uncord-server/internal/postgres"
 )
@@ -20,13 +19,12 @@ const selectColumns = "id, name, colour, position, hoist, permissions, is_everyo
 
 // PGRepository implements Repository using PostgreSQL.
 type PGRepository struct {
-	db  *pgxpool.Pool
-	log zerolog.Logger
+	db *pgxpool.Pool
 }
 
 // NewPGRepository creates a new PostgreSQL-backed role repository.
-func NewPGRepository(db *pgxpool.Pool, logger zerolog.Logger) *PGRepository {
-	return &PGRepository{db: db, log: logger}
+func NewPGRepository(db *pgxpool.Pool) *PGRepository {
+	return &PGRepository{db: db}
 }
 
 // List returns all roles ordered by position.

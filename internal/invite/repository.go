@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/rs/zerolog"
 
 	"github.com/uncord-chat/uncord-server/internal/postgres"
 )
@@ -27,13 +26,12 @@ const selectColumns = `id, code, channel_id, creator_id, max_uses, use_count, ma
 
 // PGRepository implements Repository using PostgreSQL.
 type PGRepository struct {
-	db  *pgxpool.Pool
-	log zerolog.Logger
+	db *pgxpool.Pool
 }
 
 // NewPGRepository creates a new PostgreSQL-backed invite repository.
-func NewPGRepository(db *pgxpool.Pool, logger zerolog.Logger) *PGRepository {
-	return &PGRepository{db: db, log: logger}
+func NewPGRepository(db *pgxpool.Pool) *PGRepository {
+	return &PGRepository{db: db}
 }
 
 // Create inserts a new invite with a randomly generated code. If the channel does not exist, ErrChannelNotFound is

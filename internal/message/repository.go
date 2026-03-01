@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/rs/zerolog"
 
 	"github.com/uncord-chat/uncord-server/internal/postgres"
 )
@@ -21,13 +20,12 @@ const baseJoin = "FROM messages m JOIN users u ON u.id = m.author_id"
 
 // PGRepository implements Repository using PostgreSQL.
 type PGRepository struct {
-	db  *pgxpool.Pool
-	log zerolog.Logger
+	db *pgxpool.Pool
 }
 
 // NewPGRepository creates a new PostgreSQL-backed message repository.
-func NewPGRepository(db *pgxpool.Pool, logger zerolog.Logger) *PGRepository {
-	return &PGRepository{db: db, log: logger}
+func NewPGRepository(db *pgxpool.Pool) *PGRepository {
+	return &PGRepository{db: db}
 }
 
 // Create inserts a new message and returns it with joined author information. When reply_to_id is set, the referenced

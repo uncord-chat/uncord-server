@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/rs/zerolog"
 	"github.com/uncord-chat/uncord-server/internal/postgres"
 )
 
@@ -16,13 +15,12 @@ const selectColumns = `id, name, animated, storage_key, uploader_id, created_at,
 
 // PGRepository implements Repository using PostgreSQL.
 type PGRepository struct {
-	db  *pgxpool.Pool
-	log zerolog.Logger
+	db *pgxpool.Pool
 }
 
 // NewPGRepository creates a new PostgreSQL-backed emoji repository.
-func NewPGRepository(db *pgxpool.Pool, logger zerolog.Logger) *PGRepository {
-	return &PGRepository{db: db, log: logger}
+func NewPGRepository(db *pgxpool.Pool) *PGRepository {
+	return &PGRepository{db: db}
 }
 
 // Create inserts a new custom emoji and returns the created record. Returns ErrNameTaken if the name conflicts with an
