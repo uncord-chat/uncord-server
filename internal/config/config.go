@@ -489,19 +489,15 @@ func (c *Config) validate() error {
 	}
 
 	if c.MFAEncryptionKey.IsSet() {
-		b, err := hex.DecodeString(c.MFAEncryptionKey.Expose())
-		if err != nil || len(b) != 32 {
-			errs = append(errs, fmt.Errorf("MFA_ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes)"))
+		if err := validHexSecret(c.MFAEncryptionKey); err != nil {
+			errs = append(errs, fmt.Errorf("MFA_ENCRYPTION_KEY %w", err))
 		}
 	}
 
 	if !c.ServerSecret.IsSet() {
 		errs = append(errs, fmt.Errorf("SERVER_SECRET is required"))
-	} else {
-		b, err := hex.DecodeString(c.ServerSecret.Expose())
-		if err != nil || len(b) != 32 {
-			errs = append(errs, fmt.Errorf("SERVER_SECRET must be exactly 64 hex characters (32 bytes)"))
-		}
+	} else if err := validHexSecret(c.ServerSecret); err != nil {
+		errs = append(errs, fmt.Errorf("SERVER_SECRET %w", err))
 	}
 
 	if c.MFATicketTTL < time.Second {
@@ -533,6 +529,15 @@ func (c *Config) validate() error {
 	}
 
 	return errors.Join(errs...)
+}
+
+// validHexSecret checks that s decodes to exactly 32 bytes of hex.
+func validHexSecret(s Secret) error {
+	b, err := hex.DecodeString(s.Expose())
+	if err != nil || len(b) != 32 {
+		return fmt.Errorf("must be exactly 64 hex characters (32 bytes)")
+	}
+	return nil
 }
 
 // parser collects parse errors so Load can report all invalid values at once.
