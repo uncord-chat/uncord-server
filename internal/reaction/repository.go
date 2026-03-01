@@ -2,7 +2,6 @@ package reaction
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -10,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
+	"github.com/uncord-chat/uncord-server/internal/postgres"
 )
 
 // PGRepository implements Repository using PostgreSQL.
@@ -34,7 +34,7 @@ func (r *PGRepository) Add(ctx context.Context, messageID, userID uuid.UUID, emo
 	var rxn Reaction
 	err := row.Scan(&rxn.ID, &rxn.MessageID, &rxn.UserID, &rxn.EmojiID, &rxn.EmojiUnicode, &rxn.CreatedAt)
 	if err != nil {
-		if isUniqueViolation(err) {
+		if postgres.IsUniqueViolation(err) {
 			return nil, ErrAlreadyReacted
 		}
 		return nil, fmt.Errorf("add reaction: %w", err)
@@ -205,10 +205,4 @@ func collectReactions(rows pgx.Rows) ([]Reaction, error) {
 		return nil, fmt.Errorf("iterate reactions: %w", err)
 	}
 	return result, nil
-}
-
-// isUniqueViolation reports whether the error is a PostgreSQL unique constraint violation (SQLSTATE 23505).
-func isUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }

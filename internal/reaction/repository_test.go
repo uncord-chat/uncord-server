@@ -11,51 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-func TestIsUniqueViolation(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{
-			name: "unique violation 23505",
-			err:  &pgconn.PgError{Code: "23505"},
-			want: true,
-		},
-		{
-			name: "foreign key violation 23503",
-			err:  &pgconn.PgError{Code: "23503"},
-			want: false,
-		},
-		{
-			name: "generic error",
-			err:  errors.New("something went wrong"),
-			want: false,
-		},
-		{
-			name: "wrapped unique violation",
-			err:  wrappedPgError("insert failed", "23505"),
-			want: true,
-		},
-		{
-			name: "wrapped non-unique pg error",
-			err:  wrappedPgError("insert failed", "23502"),
-			want: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			if got := isUniqueViolation(tt.err); got != tt.want {
-				t.Errorf("isUniqueViolation(%v) = %v, want %v", tt.err, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestSentinelErrors(t *testing.T) {
 	t.Parallel()
 
@@ -248,21 +203,6 @@ func TestCollectReactions_IterationError(t *testing.T) {
 		t.Errorf("error = %v, want wrapped %v", err, iterErr)
 	}
 }
-
-// wrappedPgError returns a PgError wrapped in a fmt.Errorf chain so isUniqueViolation must use errors.As.
-func wrappedPgError(msg, code string) error {
-	pgErr := &pgconn.PgError{Code: code, Message: msg}
-	return wrappedError{msg: "query failed: " + msg, cause: pgErr}
-}
-
-// wrappedError provides a simple error wrapper that supports errors.As unwrapping.
-type wrappedError struct {
-	msg   string
-	cause error
-}
-
-func (e wrappedError) Error() string { return e.msg }
-func (e wrappedError) Unwrap() error { return e.cause }
 
 // fakeRows implements the subset of pgx.Rows used by collectReactions. Each call to Scan returns the next pre-loaded
 // Reaction, or the configured scanErr. After all rows are consumed, Err returns iterErr.

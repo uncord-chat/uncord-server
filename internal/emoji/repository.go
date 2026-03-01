@@ -7,9 +7,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
+	"github.com/uncord-chat/uncord-server/internal/postgres"
 )
 
 const selectColumns = `id, name, animated, storage_key, uploader_id, created_at, updated_at`
@@ -36,7 +36,7 @@ func (r *PGRepository) Create(ctx context.Context, params CreateParams) (*Emoji,
 	)
 	e, err := scanEmoji(row)
 	if err != nil {
-		if isUniqueViolation(err) {
+		if postgres.IsUniqueViolation(err) {
 			return nil, ErrNameTaken
 		}
 		return nil, fmt.Errorf("create emoji: %w", err)
@@ -110,7 +110,7 @@ func (r *PGRepository) UpdateName(ctx context.Context, id uuid.UUID, name string
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
-		if isUniqueViolation(err) {
+		if postgres.IsUniqueViolation(err) {
 			return nil, ErrNameTaken
 		}
 		return nil, fmt.Errorf("update emoji name: %w", err)
@@ -147,10 +147,4 @@ func scanEmoji(row pgx.Row) (*Emoji, error) {
 		return nil, err
 	}
 	return &e, nil
-}
-
-// isUniqueViolation reports whether the error is a PostgreSQL unique constraint violation (SQLSTATE 23505).
-func isUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
