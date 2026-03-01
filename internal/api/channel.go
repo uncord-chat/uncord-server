@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"errors"
 
 	"github.com/gofiber/fiber/v3"
@@ -190,11 +189,7 @@ func (h *ChannelHandler) CreateChannel(c fiber.Ctx) error {
 
 	result := ch.ToModel()
 	if h.gateway != nil {
-		go func() {
-			if err := h.gateway.Publish(context.Background(), events.ChannelCreate, result); err != nil {
-				h.log.Warn().Err(err).Str("channel_id", ch.ID.String()).Msg("Gateway publish failed")
-			}
-		}()
+		h.gateway.Enqueue(events.ChannelCreate, result)
 	}
 
 	return httputil.SuccessStatus(c, fiber.StatusCreated, result)
@@ -268,11 +263,7 @@ func (h *ChannelHandler) UpdateChannel(c fiber.Ctx) error {
 
 	result := ch.ToModel()
 	if h.gateway != nil {
-		go func() {
-			if err := h.gateway.Publish(context.Background(), events.ChannelUpdate, result); err != nil {
-				h.log.Warn().Err(err).Str("channel_id", id.String()).Msg("Gateway publish failed")
-			}
-		}()
+		h.gateway.Enqueue(events.ChannelUpdate, result)
 	}
 
 	return httputil.Success(c, result)
@@ -290,11 +281,7 @@ func (h *ChannelHandler) DeleteChannel(c fiber.Ctx) error {
 	}
 
 	if h.gateway != nil {
-		go func() {
-			if err := h.gateway.Publish(context.Background(), events.ChannelDelete, models.ChannelDeleteData{ID: id.String()}); err != nil {
-				h.log.Warn().Err(err).Str("channel_id", id.String()).Msg("Gateway publish failed")
-			}
-		}()
+		h.gateway.Enqueue(events.ChannelDelete, models.ChannelDeleteData{ID: id.String()})
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)

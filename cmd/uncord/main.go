@@ -294,7 +294,7 @@ func run() error {
 	emojiRepo := emoji.NewPGRepository(db, log.Logger)
 	reactionRepo := reaction.NewPGRepository(db, log.Logger)
 	typesenseIndexer := typesense.NewIndexer(cfg.TypesenseURL, cfg.TypesenseAPIKey.Expose(), cfg.TypesenseTimeout)
-	gatewayPub := gateway.NewPublisher(rdb, log.Logger)
+	gatewayPub := gateway.NewPublisher(rdb, log.Logger, cfg.GatewayPublishWorkers, cfg.GatewayPublishQueueSize, cfg.GatewayPublishTimeout)
 	presenceStore := presence.NewStore(rdb)
 	startPurgeGoroutine(attachmentRepo, storage)
 
@@ -303,6 +303,9 @@ func run() error {
 	thumbWorker.EnsureStream(subCtx)
 	wg.Go(func() {
 		runWithBackoff(subCtx, "thumbnail-worker", thumbWorker.Run)
+	})
+	wg.Go(func() {
+		runWithBackoff(subCtx, "gateway-publisher", gatewayPub.Run)
 	})
 	authService, err := auth.NewService(userRepo, rdb, cfg, blocklist, emailSender, serverRepo, permPublisher, log.Logger)
 	if err != nil {

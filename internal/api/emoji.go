@@ -191,7 +191,8 @@ func (h *EmojiHandler) DeleteEmoji(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-// publishEmojiUpdate sends an EMOJI_UPDATE gateway event with the full current emoji list.
+// publishEmojiUpdate sends an EMOJI_UPDATE gateway event with the full current emoji list. The DB query runs in its own
+// goroutine to avoid blocking the HTTP response; the resulting event is published via the bounded worker pool.
 func (h *EmojiHandler) publishEmojiUpdate() {
 	if h.gateway == nil {
 		return
@@ -206,11 +207,7 @@ func (h *EmojiHandler) publishEmojiUpdate() {
 		for i := range list {
 			emojiModels[i] = list[i].ToModel(h.storage.URL(list[i].StorageKey))
 		}
-		if err := h.gateway.Publish(context.Background(), events.EmojiUpdate, models.EmojiUpdateData{
-			Emoji: emojiModels,
-		}); err != nil {
-			h.log.Warn().Err(err).Msg("Failed to publish emoji update event")
-		}
+		h.gateway.Enqueue(events.EmojiUpdate, models.EmojiUpdateData{Emoji: emojiModels})
 	}()
 }
 

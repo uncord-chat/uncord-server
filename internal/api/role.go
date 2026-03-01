@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"errors"
 
 	"github.com/gofiber/fiber/v3"
@@ -82,11 +81,7 @@ func (h *RoleHandler) CreateRole(c fiber.Ctx) error {
 
 	result := created.ToModel()
 	if h.gateway != nil {
-		go func() {
-			if err := h.gateway.Publish(context.Background(), events.RoleCreate, result); err != nil {
-				h.log.Warn().Err(err).Str("role_id", created.ID.String()).Msg("Gateway publish failed")
-			}
-		}()
+		h.gateway.Enqueue(events.RoleCreate, result)
 	}
 
 	if h.perms != nil {
@@ -165,11 +160,7 @@ func (h *RoleHandler) UpdateRole(c fiber.Ctx) error {
 
 	result := updated.ToModel()
 	if h.gateway != nil {
-		go func() {
-			if err := h.gateway.Publish(context.Background(), events.RoleUpdate, result); err != nil {
-				h.log.Warn().Err(err).Str("role_id", id.String()).Msg("Gateway publish failed")
-			}
-		}()
+		h.gateway.Enqueue(events.RoleUpdate, result)
 	}
 
 	if h.perms != nil {
@@ -214,11 +205,7 @@ func (h *RoleHandler) DeleteRole(c fiber.Ctx) error {
 	}
 
 	if h.gateway != nil {
-		go func() {
-			if err := h.gateway.Publish(context.Background(), events.RoleDelete, models.RoleDeleteData{ID: id.String()}); err != nil {
-				h.log.Warn().Err(err).Str("role_id", id.String()).Msg("Gateway publish failed")
-			}
-		}()
+		h.gateway.Enqueue(events.RoleDelete, models.RoleDeleteData{ID: id.String()})
 	}
 
 	if h.perms != nil {

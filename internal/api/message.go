@@ -213,33 +213,24 @@ func (h *MessageHandler) CreateMessage(c fiber.Ctx) error {
 		}()
 	}
 
-	// Best-effort gateway event publish. Uses context.Background for the same reason as above.
 	if h.gateway != nil {
-		go func() {
-			if err := h.gateway.Publish(context.Background(), events.MessageCreate, result); err != nil {
-				h.log.Warn().Err(err).Str("message_id", msg.ID.String()).Msg("Gateway publish failed")
-			}
-		}()
+		h.gateway.Enqueue(events.MessageCreate, result)
 	}
 
-	// Clear the typing indicator now that the message has been sent. Uses context.Background because Fiber recycles
-	// the request context after the handler returns.
+	// Clear the typing indicator now that the message has been sent. The Valkey ClearTyping call requires its own
+	// goroutine because it must not block the HTTP response, but the subsequent publish uses the bounded worker pool.
 	if h.presence != nil && h.gateway != nil {
 		go func() {
-			ctx := context.Background()
-			existed, cErr := h.presence.ClearTyping(ctx, channelID, userID)
+			existed, cErr := h.presence.ClearTyping(context.Background(), channelID, userID)
 			if cErr != nil {
 				h.log.Warn().Err(cErr).Msg("Failed to clear typing on message send")
 				return
 			}
 			if existed {
-				data := models.TypingStopData{
+				h.gateway.Enqueue(events.TypingStop, models.TypingStopData{
 					ChannelID: channelID.String(),
 					UserID:    userID.String(),
-				}
-				if pErr := h.gateway.Publish(ctx, events.TypingStop, data); pErr != nil {
-					h.log.Warn().Err(pErr).Msg("Failed to publish typing stop on message send")
-				}
+				})
 			}
 		}()
 	}
@@ -313,13 +304,8 @@ func (h *MessageHandler) EditMessage(c fiber.Ctx) error {
 		}()
 	}
 
-	// Best-effort gateway event publish. Uses context.Background for the same reason as above.
 	if h.gateway != nil {
-		go func() {
-			if err := h.gateway.Publish(context.Background(), events.MessageUpdate, result); err != nil {
-				h.log.Warn().Err(err).Str("message_id", msg.ID.String()).Msg("Gateway publish failed")
-			}
-		}()
+		h.gateway.Enqueue(events.MessageUpdate, result)
 	}
 
 	return httputil.Success(c, result)
@@ -369,17 +355,11 @@ func (h *MessageHandler) DeleteMessage(c fiber.Ctx) error {
 		}()
 	}
 
-	// Best-effort gateway event publish. Uses context.Background for the same reason as above.
 	if h.gateway != nil {
-		go func() {
-			deletePayload := models.MessageDeleteData{
-				ID:        messageID.String(),
-				ChannelID: existing.ChannelID.String(),
-			}
-			if err := h.gateway.Publish(context.Background(), events.MessageDelete, deletePayload); err != nil {
-				h.log.Warn().Err(err).Str("message_id", messageID.String()).Msg("Gateway publish failed")
-			}
-		}()
+		h.gateway.Enqueue(events.MessageDelete, models.MessageDeleteData{
+			ID:        messageID.String(),
+			ChannelID: existing.ChannelID.String(),
+		})
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)

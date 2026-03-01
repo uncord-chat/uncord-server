@@ -85,6 +85,9 @@ type Config struct {
 	GatewayReplayBufferSize    int           // Maximum number of events retained for session replay. Default: 1000.
 	GatewayMaxConnections      int           // Maximum concurrent WebSocket connections. Default: 10000.
 	GatewayReadyMemberLimit    int           // Maximum number of members included in the READY payload. Default: 1000.
+	GatewayPublishWorkers      int           // Number of worker goroutines consuming the publish queue. Default: 4.
+	GatewayPublishQueueSize    int           // Buffer size of the publish queue channel. Default: 1024.
+	GatewayPublishTimeout      time.Duration // Per-publish timeout for Valkey operations. Default: 5s.
 
 	// Rate Limiting
 	RateLimitAPIRequests            int
@@ -208,6 +211,9 @@ func Load() (*Config, error) {
 		GatewayReplayBufferSize:    p.int("GATEWAY_REPLAY_BUFFER_SIZE", 1000),
 		GatewayMaxConnections:      p.int("GATEWAY_MAX_CONNECTIONS", 10000),
 		GatewayReadyMemberLimit:    p.int("GATEWAY_READY_MEMBER_LIMIT", 1000),
+		GatewayPublishWorkers:      p.int("GATEWAY_PUBLISH_WORKERS", 4),
+		GatewayPublishQueueSize:    p.int("GATEWAY_PUBLISH_QUEUE_SIZE", 1024),
+		GatewayPublishTimeout:      p.duration("GATEWAY_PUBLISH_TIMEOUT", 5*time.Second),
 
 		RateLimitAPIRequests:            p.int("RATE_LIMIT_API_REQUESTS", 60),
 		RateLimitAPIWindowSeconds:       p.int("RATE_LIMIT_API_WINDOW_SECONDS", 60),
@@ -466,6 +472,15 @@ func (c *Config) validate() error {
 	}
 	if c.GatewayReadyMemberLimit < 1 {
 		errs = append(errs, fmt.Errorf("GATEWAY_READY_MEMBER_LIMIT must be at least 1"))
+	}
+	if c.GatewayPublishWorkers < 1 {
+		errs = append(errs, fmt.Errorf("GATEWAY_PUBLISH_WORKERS must be at least 1"))
+	}
+	if c.GatewayPublishQueueSize < 1 {
+		errs = append(errs, fmt.Errorf("GATEWAY_PUBLISH_QUEUE_SIZE must be at least 1"))
+	}
+	if c.GatewayPublishTimeout < time.Second {
+		errs = append(errs, fmt.Errorf("GATEWAY_PUBLISH_TIMEOUT must be at least 1s"))
 	}
 
 	if c.MFAEncryptionKey.IsSet() {

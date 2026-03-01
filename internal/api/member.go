@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -168,7 +167,7 @@ func (h *MemberHandler) UpdateSelf(c fiber.Ctx) error {
 	}
 
 	result := updated.ToModel()
-	h.publishMemberUpdate(result, userID.String())
+	h.publishMemberUpdate(result)
 	return httputil.Success(c, result)
 }
 
@@ -237,7 +236,7 @@ func (h *MemberHandler) UpdateMember(c fiber.Ctx) error {
 	}
 
 	result := updated.ToModel()
-	h.publishMemberUpdate(result, targetID.String())
+	h.publishMemberUpdate(result)
 	return httputil.Success(c, result)
 }
 
@@ -307,7 +306,7 @@ func (h *MemberHandler) SetTimeout(c fiber.Ctx) error {
 	}
 
 	result := updated.ToModel()
-	h.publishMemberUpdate(result, targetID.String())
+	h.publishMemberUpdate(result)
 	h.invalidateUser(c, targetID)
 	return httputil.Success(c, result)
 }
@@ -325,7 +324,7 @@ func (h *MemberHandler) ClearTimeout(c fiber.Ctx) error {
 	}
 
 	result := updated.ToModel()
-	h.publishMemberUpdate(result, targetID.String())
+	h.publishMemberUpdate(result)
 	h.invalidateUser(c, targetID)
 	return httputil.Success(c, result)
 }
@@ -469,7 +468,7 @@ func (h *MemberHandler) AssignRole(c fiber.Ctx) error {
 	}
 
 	result := updated.ToModel()
-	h.publishMemberUpdate(result, targetID.String())
+	h.publishMemberUpdate(result)
 	return httputil.Success(c, result)
 }
 
@@ -518,7 +517,7 @@ func (h *MemberHandler) RemoveRole(c fiber.Ctx) error {
 
 	if h.gateway != nil {
 		if updated, err := h.members.GetByUserID(c, targetID); err == nil {
-			h.publishMemberUpdate(updated.ToModel(), targetID.String())
+			h.publishMemberUpdate(updated.ToModel())
 		}
 	}
 
@@ -579,27 +578,17 @@ func (h *MemberHandler) mapGuardError(c fiber.Ctx, err error) error {
 	}
 }
 
-// publishMemberUpdate fires a best-effort MEMBER_UPDATE gateway event. Uses context.Background because Fiber recycles
-// the request context after the handler returns.
-func (h *MemberHandler) publishMemberUpdate(m models.Member, userID string) {
+// publishMemberUpdate fires a best-effort MEMBER_UPDATE gateway event via the bounded worker pool.
+func (h *MemberHandler) publishMemberUpdate(m models.Member) {
 	if h.gateway != nil {
-		go func() {
-			if err := h.gateway.Publish(context.Background(), events.MemberUpdate, m); err != nil {
-				h.log.Warn().Err(err).Str("user_id", userID).Msg("Gateway publish failed")
-			}
-		}()
+		h.gateway.Enqueue(events.MemberUpdate, m)
 	}
 }
 
-// publishMemberRemove fires a best-effort MEMBER_REMOVE gateway event. Uses context.Background because Fiber recycles
-// the request context after the handler returns.
+// publishMemberRemove fires a best-effort MEMBER_REMOVE gateway event via the bounded worker pool.
 func (h *MemberHandler) publishMemberRemove(userID string) {
 	if h.gateway != nil {
-		go func() {
-			if err := h.gateway.Publish(context.Background(), events.MemberRemove, models.MemberRemoveData{UserID: userID}); err != nil {
-				h.log.Warn().Err(err).Str("user_id", userID).Msg("Gateway publish failed")
-			}
-		}()
+		h.gateway.Enqueue(events.MemberRemove, models.MemberRemoveData{UserID: userID})
 	}
 }
 

@@ -36,6 +36,7 @@ func TestLoadDefaults(t *testing.T) {
 		"GATEWAY_HEARTBEAT_INTERVAL_MS", "GATEWAY_OFFLINE_DELAY_MS",
 		"GATEWAY_SESSION_TTL_SECONDS",
 		"GATEWAY_REPLAY_BUFFER_SIZE", "GATEWAY_MAX_CONNECTIONS",
+		"GATEWAY_PUBLISH_WORKERS", "GATEWAY_PUBLISH_QUEUE_SIZE", "GATEWAY_PUBLISH_TIMEOUT",
 		"RATE_LIMIT_WS_COUNT", "RATE_LIMIT_WS_WINDOW_SECONDS",
 		"RATE_LIMIT_MSG_COUNT", "RATE_LIMIT_MSG_WINDOW_SECONDS",
 		"RATE_LIMIT_MSG_GLOBAL_COUNT", "RATE_LIMIT_MSG_GLOBAL_WINDOW_SECONDS",
@@ -153,6 +154,15 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.GatewayMaxConnections != 10000 {
 		t.Errorf("GatewayMaxConnections = %d, want 10000", cfg.GatewayMaxConnections)
+	}
+	if cfg.GatewayPublishWorkers != 4 {
+		t.Errorf("GatewayPublishWorkers = %d, want 4", cfg.GatewayPublishWorkers)
+	}
+	if cfg.GatewayPublishQueueSize != 1024 {
+		t.Errorf("GatewayPublishQueueSize = %d, want 1024", cfg.GatewayPublishQueueSize)
+	}
+	if cfg.GatewayPublishTimeout != 5*time.Second {
+		t.Errorf("GatewayPublishTimeout = %v, want 5s", cfg.GatewayPublishTimeout)
 	}
 
 	// Rate limit defaults
@@ -876,6 +886,9 @@ func TestLoadGatewayOverrides(t *testing.T) {
 	t.Setenv("GATEWAY_SESSION_TTL_SECONDS", "600")
 	t.Setenv("GATEWAY_REPLAY_BUFFER_SIZE", "500")
 	t.Setenv("GATEWAY_MAX_CONNECTIONS", "5000")
+	t.Setenv("GATEWAY_PUBLISH_WORKERS", "8")
+	t.Setenv("GATEWAY_PUBLISH_QUEUE_SIZE", "2048")
+	t.Setenv("GATEWAY_PUBLISH_TIMEOUT", "10s")
 	t.Setenv("RATE_LIMIT_WS_COUNT", "60")
 	t.Setenv("RATE_LIMIT_WS_WINDOW_SECONDS", "30")
 
@@ -900,6 +913,15 @@ func TestLoadGatewayOverrides(t *testing.T) {
 	}
 	if cfg.RateLimitWSWindowSeconds != 30 {
 		t.Errorf("RateLimitWSWindowSeconds = %d, want 30", cfg.RateLimitWSWindowSeconds)
+	}
+	if cfg.GatewayPublishWorkers != 8 {
+		t.Errorf("GatewayPublishWorkers = %d, want 8", cfg.GatewayPublishWorkers)
+	}
+	if cfg.GatewayPublishQueueSize != 2048 {
+		t.Errorf("GatewayPublishQueueSize = %d, want 2048", cfg.GatewayPublishQueueSize)
+	}
+	if cfg.GatewayPublishTimeout != 10*time.Second {
+		t.Errorf("GatewayPublishTimeout = %v, want 10s", cfg.GatewayPublishTimeout)
 	}
 }
 
@@ -970,5 +992,47 @@ func TestLoadValidationGatewayMaxConnectionsTooLow(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "GATEWAY_MAX_CONNECTIONS must be at least 1") {
 		t.Errorf("error %q does not mention GATEWAY_MAX_CONNECTIONS", err.Error())
+	}
+}
+
+func TestLoadValidationGatewayPublishWorkersTooLow(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+	t.Setenv("SERVER_SECRET", testServerSecret)
+	t.Setenv("GATEWAY_PUBLISH_WORKERS", "0")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() returned nil error, want validation error for GATEWAY_PUBLISH_WORKERS < 1")
+	}
+	if !strings.Contains(err.Error(), "GATEWAY_PUBLISH_WORKERS must be at least 1") {
+		t.Errorf("error %q does not mention GATEWAY_PUBLISH_WORKERS", err.Error())
+	}
+}
+
+func TestLoadValidationGatewayPublishQueueSizeTooLow(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+	t.Setenv("SERVER_SECRET", testServerSecret)
+	t.Setenv("GATEWAY_PUBLISH_QUEUE_SIZE", "0")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() returned nil error, want validation error for GATEWAY_PUBLISH_QUEUE_SIZE < 1")
+	}
+	if !strings.Contains(err.Error(), "GATEWAY_PUBLISH_QUEUE_SIZE must be at least 1") {
+		t.Errorf("error %q does not mention GATEWAY_PUBLISH_QUEUE_SIZE", err.Error())
+	}
+}
+
+func TestLoadValidationGatewayPublishTimeoutTooLow(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+	t.Setenv("SERVER_SECRET", testServerSecret)
+	t.Setenv("GATEWAY_PUBLISH_TIMEOUT", "500ms")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() returned nil error, want validation error for GATEWAY_PUBLISH_TIMEOUT < 1s")
+	}
+	if !strings.Contains(err.Error(), "GATEWAY_PUBLISH_TIMEOUT must be at least 1s") {
+		t.Errorf("error %q does not mention GATEWAY_PUBLISH_TIMEOUT", err.Error())
 	}
 }

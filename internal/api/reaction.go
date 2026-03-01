@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"errors"
 	"strings"
 
@@ -91,23 +90,19 @@ func (h *ReactionHandler) AddReaction(c fiber.Ctx) error {
 	}
 
 	if h.gateway != nil {
-		go func() {
-			data := models.ReactionAddData{
-				MessageID: messageID.String(),
-				ChannelID: channelID.String(),
-				UserID:    userID.String(),
-			}
-			if emojiID != nil {
-				s := emojiID.String()
-				data.EmojiID = &s
-			}
-			if emojiUnicode != nil {
-				data.EmojiUnicode = emojiUnicode
-			}
-			if err := h.gateway.Publish(context.Background(), events.ReactionAdd, data); err != nil {
-				h.log.Warn().Err(err).Msg("Failed to publish reaction add event")
-			}
-		}()
+		data := models.ReactionAddData{
+			MessageID: messageID.String(),
+			ChannelID: channelID.String(),
+			UserID:    userID.String(),
+		}
+		if emojiID != nil {
+			s := emojiID.String()
+			data.EmojiID = &s
+		}
+		if emojiUnicode != nil {
+			data.EmojiUnicode = emojiUnicode
+		}
+		h.gateway.Enqueue(events.ReactionAdd, data)
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)
@@ -141,23 +136,19 @@ func (h *ReactionHandler) RemoveReaction(c fiber.Ctx) error {
 
 	if h.gateway != nil {
 		channelID, _ := uuid.Parse(c.Params("channelID"))
-		go func() {
-			data := models.ReactionRemoveData{
-				MessageID: messageID.String(),
-				ChannelID: channelID.String(),
-				UserID:    userID.String(),
-			}
-			if emojiID != nil {
-				s := emojiID.String()
-				data.EmojiID = &s
-			}
-			if emojiUnicode != nil {
-				data.EmojiUnicode = emojiUnicode
-			}
-			if err := h.gateway.Publish(context.Background(), events.ReactionRemove, data); err != nil {
-				h.log.Warn().Err(err).Msg("Failed to publish reaction remove event")
-			}
-		}()
+		data := models.ReactionRemoveData{
+			MessageID: messageID.String(),
+			ChannelID: channelID.String(),
+			UserID:    userID.String(),
+		}
+		if emojiID != nil {
+			s := emojiID.String()
+			data.EmojiID = &s
+		}
+		if emojiUnicode != nil {
+			data.EmojiUnicode = emojiUnicode
+		}
+		h.gateway.Enqueue(events.ReactionRemove, data)
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"errors"
 	"time"
 
@@ -187,11 +186,7 @@ func (h *OnboardingHandler) AcceptOnboarding(c fiber.Ctx) error {
 
 	result := m.ToModel()
 	if h.gateway != nil {
-		go func() {
-			if err := h.gateway.Publish(context.Background(), events.MemberAdd, result); err != nil {
-				h.log.Warn().Err(err).Str("user_id", userID.String()).Msg("Gateway publish failed")
-			}
-		}()
+		h.gateway.Enqueue(events.MemberAdd, result)
 	}
 
 	return httputil.Success(c, result)
