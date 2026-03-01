@@ -223,7 +223,7 @@ func TestAssembleReady(t *testing.T) {
 	roleID := uuid.New()
 
 	cfg := testConfig()
-	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
+	sessions := NewSessionStore(rdb, zerolog.Nop(), cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 
 	hub := NewHub(HubDeps{
 		RDB:      rdb,
@@ -281,7 +281,7 @@ func TestHandlePubSubEventBroadcast(t *testing.T) {
 	t.Parallel()
 	_, rdb := newTestRedis(t)
 	cfg := testConfig()
-	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
+	sessions := NewSessionStore(rdb, zerolog.Nop(), cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 
 	hub := NewHub(HubDeps{RDB: rdb, Cfg: cfg, Sessions: sessions, Logger: zerolog.Nop()})
 
@@ -332,7 +332,7 @@ func TestRegisterMultipleConnectionsSameUser(t *testing.T) {
 	t.Parallel()
 	_, rdb := newTestRedis(t)
 	cfg := testConfig()
-	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
+	sessions := NewSessionStore(rdb, zerolog.Nop(), cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 
 	hub := NewHub(HubDeps{RDB: rdb, Cfg: cfg, Sessions: sessions, Logger: zerolog.Nop()})
 
@@ -385,7 +385,7 @@ func TestRegisterMaxConnections(t *testing.T) {
 	_, rdb := newTestRedis(t)
 	cfg := testConfig()
 	cfg.GatewayMaxConnections = 1
-	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
+	sessions := NewSessionStore(rdb, zerolog.Nop(), cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 
 	hub := NewHub(HubDeps{RDB: rdb, Cfg: cfg, Sessions: sessions, Logger: zerolog.Nop()})
 
@@ -567,7 +567,7 @@ func TestAssembleReadyWithPresences(t *testing.T) {
 
 	userID := uuid.New()
 	cfg := testConfig()
-	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
+	sessions := NewSessionStore(rdb, zerolog.Nop(), cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 	presenceStore := presence.NewStore(rdb)
 
 	// Set user as online before assembling READY.
@@ -619,7 +619,7 @@ func TestHandlePubSubEventEphemeral(t *testing.T) {
 			t.Parallel()
 			_, rdb := newTestRedis(t)
 			cfg := testConfig()
-			sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
+			sessions := NewSessionStore(rdb, zerolog.Nop(), cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 
 			hub := NewHub(HubDeps{RDB: rdb, Cfg: cfg, Sessions: sessions, Logger: zerolog.Nop()})
 
@@ -680,7 +680,7 @@ func TestMultiClientDispatch(t *testing.T) {
 	t.Parallel()
 	_, rdb := newTestRedis(t)
 	cfg := testConfig()
-	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
+	sessions := NewSessionStore(rdb, zerolog.Nop(), cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 
 	hub := NewHub(HubDeps{RDB: rdb, Cfg: cfg, Sessions: sessions, Logger: zerolog.Nop()})
 
@@ -735,7 +735,7 @@ func TestUnregisterPartial(t *testing.T) {
 	t.Parallel()
 	_, rdb := newTestRedis(t)
 	cfg := testConfig()
-	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
+	sessions := NewSessionStore(rdb, zerolog.Nop(), cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 
 	hub := NewHub(HubDeps{RDB: rdb, Cfg: cfg, Sessions: sessions, Logger: zerolog.Nop()})
 
@@ -818,7 +818,7 @@ func TestAssembleReadyWithOnboarding(t *testing.T) {
 
 	userID := uuid.New()
 	cfg := testConfig()
-	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
+	sessions := NewSessionStore(rdb, zerolog.Nop(), cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 
 	onboardingCfg := &onboarding.Config{
 		ID:                       uuid.New(),
@@ -863,7 +863,7 @@ func TestHubConcurrentRegisterUnregisterDispatch(t *testing.T) {
 	_, rdb := newTestRedis(t)
 	cfg := testConfig()
 	cfg.GatewayMaxConnections = 200
-	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
+	sessions := NewSessionStore(rdb, zerolog.Nop(), cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 
 	hub := NewHub(HubDeps{RDB: rdb, Cfg: cfg, Sessions: sessions, Logger: zerolog.Nop()})
 
@@ -928,7 +928,7 @@ func TestHubConcurrentMultiClient(t *testing.T) {
 	_, rdb := newTestRedis(t)
 	cfg := testConfig()
 	cfg.GatewayMaxConnections = 200
-	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
+	sessions := NewSessionStore(rdb, zerolog.Nop(), cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 
 	hub := NewHub(HubDeps{RDB: rdb, Cfg: cfg, Sessions: sessions, Logger: zerolog.Nop()})
 
@@ -982,7 +982,7 @@ func benchmarkDispatch(b *testing.B, clientCount int) {
 	_, rdb := newBenchRedis(b)
 	cfg := testConfig()
 	cfg.GatewayMaxConnections = clientCount + 10
-	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
+	sessions := NewSessionStore(rdb, zerolog.Nop(), cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 
 	hub := NewHub(HubDeps{RDB: rdb, Cfg: cfg, Sessions: sessions, Logger: zerolog.Nop()})
 
@@ -1041,7 +1041,7 @@ func TestAssembleReadyNilOnboardingDeps(t *testing.T) {
 
 	userID := uuid.New()
 	cfg := testConfig()
-	sessions := NewSessionStore(rdb, cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
+	sessions := NewSessionStore(rdb, zerolog.Nop(), cfg.GatewaySessionTTL, cfg.GatewayReplayBufferSize)
 
 	hub := NewHub(HubDeps{
 		RDB:      rdb,

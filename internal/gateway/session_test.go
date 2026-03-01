@@ -10,6 +10,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog"
 )
 
 func newTestRedis(t *testing.T) (*miniredis.Miniredis, *redis.Client) {
@@ -23,7 +24,7 @@ func newTestRedis(t *testing.T) (*miniredis.Miniredis, *redis.Client) {
 func TestSessionSaveAndLoad(t *testing.T) {
 	t.Parallel()
 	_, rdb := newTestRedis(t)
-	store := NewSessionStore(rdb, 5*time.Minute, 100)
+	store := NewSessionStore(rdb, zerolog.Nop(), 5*time.Minute, 100)
 	ctx := context.Background()
 
 	userID := uuid.New()
@@ -48,7 +49,7 @@ func TestSessionSaveAndLoad(t *testing.T) {
 func TestSessionLoadNotFound(t *testing.T) {
 	t.Parallel()
 	_, rdb := newTestRedis(t)
-	store := NewSessionStore(rdb, 5*time.Minute, 100)
+	store := NewSessionStore(rdb, zerolog.Nop(), 5*time.Minute, 100)
 
 	_, err := store.Load(context.Background(), "nonexistent")
 	if !errors.Is(err, ErrSessionNotFound) {
@@ -59,7 +60,7 @@ func TestSessionLoadNotFound(t *testing.T) {
 func TestSessionLoadExpired(t *testing.T) {
 	t.Parallel()
 	mr, rdb := newTestRedis(t)
-	store := NewSessionStore(rdb, 5*time.Minute, 100)
+	store := NewSessionStore(rdb, zerolog.Nop(), 5*time.Minute, 100)
 	ctx := context.Background()
 
 	sid := "expiring-session"
@@ -78,7 +79,7 @@ func TestSessionLoadExpired(t *testing.T) {
 func TestSessionDelete(t *testing.T) {
 	t.Parallel()
 	_, rdb := newTestRedis(t)
-	store := NewSessionStore(rdb, 5*time.Minute, 100)
+	store := NewSessionStore(rdb, zerolog.Nop(), 5*time.Minute, 100)
 	ctx := context.Background()
 
 	sid := "delete-me"
@@ -98,7 +99,7 @@ func TestSessionDelete(t *testing.T) {
 func TestSessionReplayAppendAndRetrieve(t *testing.T) {
 	t.Parallel()
 	_, rdb := newTestRedis(t)
-	store := NewSessionStore(rdb, 5*time.Minute, 100)
+	store := NewSessionStore(rdb, zerolog.Nop(), 5*time.Minute, 100)
 	ctx := context.Background()
 
 	sid := "replay-session"
@@ -123,7 +124,7 @@ func TestSessionReplayAppendAndRetrieve(t *testing.T) {
 func TestSessionReplayAfterZero(t *testing.T) {
 	t.Parallel()
 	_, rdb := newTestRedis(t)
-	store := NewSessionStore(rdb, 5*time.Minute, 100)
+	store := NewSessionStore(rdb, zerolog.Nop(), 5*time.Minute, 100)
 	ctx := context.Background()
 
 	sid := "replay-all"
@@ -145,7 +146,7 @@ func TestSessionReplayAfterZero(t *testing.T) {
 func TestSessionReplayBufferCap(t *testing.T) {
 	t.Parallel()
 	_, rdb := newTestRedis(t)
-	store := NewSessionStore(rdb, 5*time.Minute, 3)
+	store := NewSessionStore(rdb, zerolog.Nop(), 5*time.Minute, 3)
 	ctx := context.Background()
 
 	sid := "capped-replay"
@@ -168,7 +169,7 @@ func TestSessionReplayBufferCap(t *testing.T) {
 func TestSessionReplayEmpty(t *testing.T) {
 	t.Parallel()
 	_, rdb := newTestRedis(t)
-	store := NewSessionStore(rdb, 5*time.Minute, 100)
+	store := NewSessionStore(rdb, zerolog.Nop(), 5*time.Minute, 100)
 
 	events, err := store.Replay(context.Background(), "no-such-session", 0)
 	if err != nil {
@@ -182,7 +183,7 @@ func TestSessionReplayEmpty(t *testing.T) {
 func TestSessionDeleteCleansReplayBuffer(t *testing.T) {
 	t.Parallel()
 	_, rdb := newTestRedis(t)
-	store := NewSessionStore(rdb, 5*time.Minute, 100)
+	store := NewSessionStore(rdb, zerolog.Nop(), 5*time.Minute, 100)
 	ctx := context.Background()
 
 	sid := "delete-with-replay"

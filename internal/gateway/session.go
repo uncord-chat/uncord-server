@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog"
 )
 
 // sessionData is the JSON structure persisted in Valkey for a disconnected session.
@@ -24,13 +25,14 @@ type sessionData struct {
 // no longer be resumed.
 type SessionStore struct {
 	rdb       *redis.Client
+	log       zerolog.Logger
 	ttl       time.Duration
 	maxReplay int
 }
 
 // NewSessionStore creates a new session store backed by the given Valkey client.
-func NewSessionStore(rdb *redis.Client, ttl time.Duration, maxReplay int) *SessionStore {
-	return &SessionStore{rdb: rdb, ttl: ttl, maxReplay: maxReplay}
+func NewSessionStore(rdb *redis.Client, logger zerolog.Logger, ttl time.Duration, maxReplay int) *SessionStore {
+	return &SessionStore{rdb: rdb, log: logger, ttl: ttl, maxReplay: maxReplay}
 }
 
 func sessionKey(sessionID string) string { return "gwsession:" + sessionID }
@@ -133,6 +135,7 @@ func (s *SessionStore) Replay(ctx context.Context, sessionID string, afterSeq in
 	for _, item := range raw {
 		var entry replayEntry
 		if err := json.Unmarshal([]byte(item), &entry); err != nil {
+			s.log.Warn().Err(err).Str("session_id", sessionID).Msg("Skipping malformed replay entry")
 			continue
 		}
 		if entry.Seq > afterSeq {
