@@ -102,7 +102,7 @@ func (r *PGRepository) ListByMessage(ctx context.Context, messageID uuid.UUID) (
 // ListByMessages returns attachments for multiple messages in a single query, keyed by message ID.
 func (r *PGRepository) ListByMessages(ctx context.Context, messageIDs []uuid.UUID) (map[uuid.UUID][]Attachment, error) {
 	if len(messageIDs) == 0 {
-		return nil, nil
+		return map[uuid.UUID][]Attachment{}, nil
 	}
 
 	rows, err := r.db.Query(ctx,

@@ -24,8 +24,8 @@ func NewAuthHandler(svc *auth.Service, logger zerolog.Logger) *AuthHandler {
 	return &AuthHandler{auth: svc, log: logger}
 }
 
-// toAuthResponse maps a service AuthResult to the protocol response type.
-func toAuthResponse(result *auth.AuthResult) models.AuthResponse {
+// toAuthResponse maps a service Result to the protocol response type.
+func toAuthResponse(result *auth.Result) models.AuthResponse {
 	return models.AuthResponse{
 		User:         result.User,
 		AccessToken:  result.AccessToken,

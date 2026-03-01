@@ -40,9 +40,9 @@ type Member struct {
 	UpdatedAt    time.Time
 }
 
-// MemberWithProfile combines membership fields with public user data and role assignments. Produced by queries that
-// join across the members, users, and member_roles tables.
-type MemberWithProfile struct {
+// WithProfile combines membership fields with public user data and role assignments. Queries that join the members,
+// users, and member_roles tables produce this type.
+type WithProfile struct {
 	UserID       uuid.UUID
 	Username     string
 	DisplayName  *string
@@ -55,7 +55,7 @@ type MemberWithProfile struct {
 }
 
 // ToModel converts the internal member type to the protocol response type.
-func (m *MemberWithProfile) ToModel() models.Member {
+func (m *WithProfile) ToModel() models.Member {
 	roleIDs := make([]string, len(m.RoleIDs))
 	for i, id := range m.RoleIDs {
 		roleIDs[i] = id.String()
@@ -120,18 +120,18 @@ func ClampLimit(limit int) int {
 // Repository defines the data-access contract for member operations.
 type Repository interface {
 	// Listing
-	List(ctx context.Context, after *uuid.UUID, limit int) ([]MemberWithProfile, error)
-	GetByUserID(ctx context.Context, userID uuid.UUID) (*MemberWithProfile, error)
-	GetByUserIDAnyStatus(ctx context.Context, userID uuid.UUID) (*MemberWithProfile, error)
+	List(ctx context.Context, after *uuid.UUID, limit int) ([]WithProfile, error)
+	GetByUserID(ctx context.Context, userID uuid.UUID) (*WithProfile, error)
+	GetByUserIDAnyStatus(ctx context.Context, userID uuid.UUID) (*WithProfile, error)
 	GetStatus(ctx context.Context, userID uuid.UUID) (string, error)
 
 	// Mutation
-	UpdateNickname(ctx context.Context, userID uuid.UUID, nickname *string) (*MemberWithProfile, error)
+	UpdateNickname(ctx context.Context, userID uuid.UUID, nickname *string) (*WithProfile, error)
 	Delete(ctx context.Context, userID uuid.UUID) error
 
 	// Timeout
-	SetTimeout(ctx context.Context, userID uuid.UUID, until time.Time) (*MemberWithProfile, error)
-	ClearTimeout(ctx context.Context, userID uuid.UUID) (*MemberWithProfile, error)
+	SetTimeout(ctx context.Context, userID uuid.UUID, until time.Time) (*WithProfile, error)
+	ClearTimeout(ctx context.Context, userID uuid.UUID) (*WithProfile, error)
 
 	// Bans
 	Ban(ctx context.Context, userID, bannedBy uuid.UUID, reason *string, expiresAt *time.Time) error
@@ -144,6 +144,6 @@ type Repository interface {
 	RemoveRole(ctx context.Context, userID, roleID uuid.UUID) error
 
 	// Onboarding
-	CreatePending(ctx context.Context, userID uuid.UUID) (*MemberWithProfile, error)
-	Activate(ctx context.Context, userID uuid.UUID, autoRoles []uuid.UUID) (*MemberWithProfile, error)
+	CreatePending(ctx context.Context, userID uuid.UUID) (*WithProfile, error)
+	Activate(ctx context.Context, userID uuid.UUID, autoRoles []uuid.UUID) (*WithProfile, error)
 }

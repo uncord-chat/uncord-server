@@ -119,7 +119,7 @@ func (r *PGRepository) ListByEmoji(ctx context.Context, messageID uuid.UUID, emo
 // message ID with each value containing the distinct emoji counts for that message.
 func (r *PGRepository) SummariesByMessages(ctx context.Context, messageIDs []uuid.UUID) (map[uuid.UUID][]Summary, error) {
 	if len(messageIDs) == 0 {
-		return nil, nil
+		return map[uuid.UUID][]Summary{}, nil
 	}
 
 	rows, err := r.db.Query(ctx,
@@ -155,7 +155,7 @@ func (r *PGRepository) SummariesByMessages(ctx context.Context, messageIDs []uui
 // standard emoji.
 func (r *PGRepository) UserReactionsByMessages(ctx context.Context, messageIDs []uuid.UUID, userID uuid.UUID) (map[uuid.UUID]map[string]bool, error) {
 	if len(messageIDs) == 0 {
-		return nil, nil
+		return map[uuid.UUID]map[string]bool{}, nil
 	}
 
 	rows, err := r.db.Query(ctx,

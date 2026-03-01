@@ -119,7 +119,7 @@ func (idx *Indexer) IndexMessage(ctx context.Context, id, content, authorID, cha
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
-		detail, _ := io.ReadAll(resp.Body)
+		detail, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody))
 		return fmt.Errorf("typesense returned status %d on index: %s", resp.StatusCode, detail)
 	}
 
@@ -150,7 +150,7 @@ func (idx *Indexer) UpdateMessage(ctx context.Context, id, content string) error
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
-		detail, _ := io.ReadAll(resp.Body)
+		detail, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody))
 		return fmt.Errorf("typesense returned status %d on upsert: %s", resp.StatusCode, detail)
 	}
 
@@ -174,7 +174,7 @@ func (idx *Indexer) DeleteMessage(ctx context.Context, id string) error {
 
 	// 404 is acceptable when the document was never indexed or was already removed.
 	if resp.StatusCode >= 400 && resp.StatusCode != http.StatusNotFound {
-		detail, _ := io.ReadAll(resp.Body)
+		detail, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody))
 		return fmt.Errorf("typesense returned status %d on delete: %s", resp.StatusCode, detail)
 	}
 

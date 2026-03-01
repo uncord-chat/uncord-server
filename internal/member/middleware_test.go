@@ -29,23 +29,23 @@ func (f *fakeStatusRepo) GetStatus(_ context.Context, userID uuid.UUID) (string,
 }
 
 // Unused interface methods required by Repository.
-func (f *fakeStatusRepo) List(context.Context, *uuid.UUID, int) ([]MemberWithProfile, error) {
+func (f *fakeStatusRepo) List(context.Context, *uuid.UUID, int) ([]WithProfile, error) {
 	panic("not implemented")
 }
-func (f *fakeStatusRepo) GetByUserID(context.Context, uuid.UUID) (*MemberWithProfile, error) {
+func (f *fakeStatusRepo) GetByUserID(context.Context, uuid.UUID) (*WithProfile, error) {
 	panic("not implemented")
 }
-func (f *fakeStatusRepo) GetByUserIDAnyStatus(context.Context, uuid.UUID) (*MemberWithProfile, error) {
+func (f *fakeStatusRepo) GetByUserIDAnyStatus(context.Context, uuid.UUID) (*WithProfile, error) {
 	panic("not implemented")
 }
-func (f *fakeStatusRepo) UpdateNickname(context.Context, uuid.UUID, *string) (*MemberWithProfile, error) {
+func (f *fakeStatusRepo) UpdateNickname(context.Context, uuid.UUID, *string) (*WithProfile, error) {
 	panic("not implemented")
 }
 func (f *fakeStatusRepo) Delete(context.Context, uuid.UUID) error { panic("not implemented") }
-func (f *fakeStatusRepo) SetTimeout(context.Context, uuid.UUID, time.Time) (*MemberWithProfile, error) {
+func (f *fakeStatusRepo) SetTimeout(context.Context, uuid.UUID, time.Time) (*WithProfile, error) {
 	panic("not implemented")
 }
-func (f *fakeStatusRepo) ClearTimeout(context.Context, uuid.UUID) (*MemberWithProfile, error) {
+func (f *fakeStatusRepo) ClearTimeout(context.Context, uuid.UUID) (*WithProfile, error) {
 	panic("not implemented")
 }
 func (f *fakeStatusRepo) Ban(context.Context, uuid.UUID, uuid.UUID, *string, *time.Time) error {
@@ -62,10 +62,10 @@ func (f *fakeStatusRepo) AssignRole(context.Context, uuid.UUID, uuid.UUID) error
 func (f *fakeStatusRepo) RemoveRole(context.Context, uuid.UUID, uuid.UUID) error {
 	panic("not implemented")
 }
-func (f *fakeStatusRepo) CreatePending(context.Context, uuid.UUID) (*MemberWithProfile, error) {
+func (f *fakeStatusRepo) CreatePending(context.Context, uuid.UUID) (*WithProfile, error) {
 	panic("not implemented")
 }
-func (f *fakeStatusRepo) Activate(context.Context, uuid.UUID, []uuid.UUID) (*MemberWithProfile, error) {
+func (f *fakeStatusRepo) Activate(context.Context, uuid.UUID, []uuid.UUID) (*WithProfile, error) {
 	panic("not implemented")
 }
 

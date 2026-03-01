@@ -203,7 +203,7 @@ func (r *fakeInviteUserRepo) ClearBannerKey(context.Context, uuid.UUID) (*user.U
 
 // fakeInviteMemberRepo implements member.Repository for invite handler tests.
 type fakeInviteMemberRepo struct {
-	members []member.MemberWithProfile
+	members []member.WithProfile
 	bans    []uuid.UUID
 }
 
@@ -218,13 +218,13 @@ func (r *fakeInviteMemberRepo) IsBanned(_ context.Context, userID uuid.UUID) (bo
 	return false, nil
 }
 
-func (r *fakeInviteMemberRepo) CreatePending(_ context.Context, userID uuid.UUID) (*member.MemberWithProfile, error) {
+func (r *fakeInviteMemberRepo) CreatePending(_ context.Context, userID uuid.UUID) (*member.WithProfile, error) {
 	for _, m := range r.members {
 		if m.UserID == userID {
 			return nil, member.ErrAlreadyMember
 		}
 	}
-	m := member.MemberWithProfile{
+	m := member.WithProfile{
 		UserID:   userID,
 		Username: "joined_user",
 		Status:   "pending",
@@ -234,7 +234,7 @@ func (r *fakeInviteMemberRepo) CreatePending(_ context.Context, userID uuid.UUID
 	return &r.members[len(r.members)-1], nil
 }
 
-func (r *fakeInviteMemberRepo) Activate(_ context.Context, userID uuid.UUID, _ []uuid.UUID) (*member.MemberWithProfile, error) {
+func (r *fakeInviteMemberRepo) Activate(_ context.Context, userID uuid.UUID, _ []uuid.UUID) (*member.WithProfile, error) {
 	for i := range r.members {
 		if r.members[i].UserID == userID {
 			if r.members[i].Status != "pending" {
@@ -248,20 +248,20 @@ func (r *fakeInviteMemberRepo) Activate(_ context.Context, userID uuid.UUID, _ [
 }
 
 // Unused methods to satisfy the member.Repository interface.
-func (r *fakeInviteMemberRepo) List(context.Context, *uuid.UUID, int) ([]member.MemberWithProfile, error) {
+func (r *fakeInviteMemberRepo) List(context.Context, *uuid.UUID, int) ([]member.WithProfile, error) {
 	return nil, nil
 }
-func (r *fakeInviteMemberRepo) GetByUserID(context.Context, uuid.UUID) (*member.MemberWithProfile, error) {
+func (r *fakeInviteMemberRepo) GetByUserID(context.Context, uuid.UUID) (*member.WithProfile, error) {
 	return nil, nil
 }
-func (r *fakeInviteMemberRepo) UpdateNickname(context.Context, uuid.UUID, *string) (*member.MemberWithProfile, error) {
+func (r *fakeInviteMemberRepo) UpdateNickname(context.Context, uuid.UUID, *string) (*member.WithProfile, error) {
 	return nil, nil
 }
 func (r *fakeInviteMemberRepo) Delete(context.Context, uuid.UUID) error { return nil }
-func (r *fakeInviteMemberRepo) SetTimeout(context.Context, uuid.UUID, time.Time) (*member.MemberWithProfile, error) {
+func (r *fakeInviteMemberRepo) SetTimeout(context.Context, uuid.UUID, time.Time) (*member.WithProfile, error) {
 	return nil, nil
 }
-func (r *fakeInviteMemberRepo) ClearTimeout(context.Context, uuid.UUID) (*member.MemberWithProfile, error) {
+func (r *fakeInviteMemberRepo) ClearTimeout(context.Context, uuid.UUID) (*member.WithProfile, error) {
 	return nil, nil
 }
 func (r *fakeInviteMemberRepo) Ban(context.Context, uuid.UUID, uuid.UUID, *string, *time.Time) error {
@@ -283,7 +283,7 @@ func (r *fakeInviteMemberRepo) GetStatus(_ context.Context, userID uuid.UUID) (s
 	return "", member.ErrNotFound
 }
 
-func (r *fakeInviteMemberRepo) GetByUserIDAnyStatus(_ context.Context, userID uuid.UUID) (*member.MemberWithProfile, error) {
+func (r *fakeInviteMemberRepo) GetByUserIDAnyStatus(_ context.Context, userID uuid.UUID) (*member.WithProfile, error) {
 	for i := range r.members {
 		if r.members[i].UserID == userID {
 			return &r.members[i], nil
@@ -703,7 +703,7 @@ func TestJoinViaInvite_AlreadyMember(t *testing.T) {
 	repo := newFakeInviteRepo()
 	seedInvite(repo, "abc123", uuid.New())
 	memberRepo := newFakeInviteMemberRepo()
-	memberRepo.members = append(memberRepo.members, member.MemberWithProfile{
+	memberRepo.members = append(memberRepo.members, member.WithProfile{
 		UserID:   callerID,
 		Username: "existing",
 		Status:   "active",

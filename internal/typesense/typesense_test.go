@@ -3,6 +3,7 @@ package typesense
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -170,19 +171,16 @@ func TestGetCollection(t *testing.T) {
 		}
 	})
 
-	t.Run("returns nil on 404", func(t *testing.T) {
+	t.Run("returns errCollectionNotFound on 404", func(t *testing.T) {
 		t.Parallel()
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusNotFound)
 		}))
 		defer srv.Close()
 
-		got, err := getCollection(context.Background(), srv.Client(), srv.URL, "key")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if got != nil {
-			t.Errorf("expected nil collection, got %+v", got)
+		_, err := getCollection(context.Background(), srv.Client(), srv.URL, "key")
+		if !errors.Is(err, errCollectionNotFound) {
+			t.Fatalf("expected errCollectionNotFound, got %v", err)
 		}
 	})
 

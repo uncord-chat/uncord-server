@@ -50,7 +50,7 @@ WHERE 1=1`
 
 // List returns members ordered by (joined_at, user_id) using keyset pagination. The cursor is the user_id from the
 // last item on the previous page.
-func (r *PGRepository) List(ctx context.Context, after *uuid.UUID, limit int) ([]MemberWithProfile, error) {
+func (r *PGRepository) List(ctx context.Context, after *uuid.UUID, limit int) ([]WithProfile, error) {
 	var (
 		rows pgx.Rows
 		err  error
@@ -77,9 +77,9 @@ LIMIT $3`, models.MemberStatusPending, *after, limit)
 	}
 	defer rows.Close()
 
-	var members []MemberWithProfile
+	var members []WithProfile
 	for rows.Next() {
-		m, err := scanMemberWithProfile(rows)
+		m, err := scanWithProfile(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -92,13 +92,13 @@ LIMIT $3`, models.MemberStatusPending, *after, limit)
 }
 
 // GetByUserID returns a single member by user ID.
-func (r *PGRepository) GetByUserID(ctx context.Context, userID uuid.UUID) (*MemberWithProfile, error) {
+func (r *PGRepository) GetByUserID(ctx context.Context, userID uuid.UUID) (*WithProfile, error) {
 	row := r.db.QueryRow(ctx,
 		memberQuery+` AND m.user_id = $2
 GROUP BY m.user_id, u.username, u.display_name, u.avatar_key,
          m.nickname, m.status, m.timeout_until, m.joined_at`, models.MemberStatusPending, userID)
 
-	m, err := scanMemberWithProfile(row)
+	m, err := scanWithProfile(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -109,7 +109,7 @@ GROUP BY m.user_id, u.username, u.display_name, u.avatar_key,
 }
 
 // UpdateNickname sets or clears a member's nickname and returns the updated profile.
-func (r *PGRepository) UpdateNickname(ctx context.Context, userID uuid.UUID, nickname *string) (*MemberWithProfile, error) {
+func (r *PGRepository) UpdateNickname(ctx context.Context, userID uuid.UUID, nickname *string) (*WithProfile, error) {
 	tag, err := r.db.Exec(ctx, "UPDATE members SET nickname = $1 WHERE user_id = $2", nickname, userID)
 	if err != nil {
 		return nil, fmt.Errorf("update nickname: %w", err)
@@ -133,7 +133,7 @@ func (r *PGRepository) Delete(ctx context.Context, userID uuid.UUID) error {
 }
 
 // SetTimeout applies a timeout to a member and returns the updated profile. The timeout must be in the future.
-func (r *PGRepository) SetTimeout(ctx context.Context, userID uuid.UUID, until time.Time) (*MemberWithProfile, error) {
+func (r *PGRepository) SetTimeout(ctx context.Context, userID uuid.UUID, until time.Time) (*WithProfile, error) {
 	if !until.After(time.Now()) {
 		return nil, ErrTimeoutInPast
 	}
@@ -150,7 +150,7 @@ func (r *PGRepository) SetTimeout(ctx context.Context, userID uuid.UUID, until t
 }
 
 // ClearTimeout removes a member's timeout and returns the updated profile.
-func (r *PGRepository) ClearTimeout(ctx context.Context, userID uuid.UUID) (*MemberWithProfile, error) {
+func (r *PGRepository) ClearTimeout(ctx context.Context, userID uuid.UUID) (*WithProfile, error) {
 	tag, err := r.db.Exec(ctx,
 		"UPDATE members SET status = $1, timeout_until = NULL WHERE user_id = $2",
 		models.MemberStatusActive, userID)
@@ -282,7 +282,7 @@ func (r *PGRepository) RemoveRole(ctx context.Context, userID, roleID uuid.UUID)
 
 // CreatePending inserts a member with pending status, assigns the @everyone role, and returns the full profile. Returns
 // ErrAlreadyMember if the user already has a membership record.
-func (r *PGRepository) CreatePending(ctx context.Context, userID uuid.UUID) (*MemberWithProfile, error) {
+func (r *PGRepository) CreatePending(ctx context.Context, userID uuid.UUID) (*WithProfile, error) {
 	err := postgres.WithTx(ctx, r.db, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, "INSERT INTO members (user_id, status) VALUES ($1, $2)", userID, models.MemberStatusPending)
 		if err != nil {
@@ -310,7 +310,7 @@ func (r *PGRepository) CreatePending(ctx context.Context, userID uuid.UUID) (*Me
 
 // Activate transitions a pending member to active status, assigns auto-roles, and returns the updated profile. Returns
 // ErrNotPending if the member is not in pending status.
-func (r *PGRepository) Activate(ctx context.Context, userID uuid.UUID, autoRoles []uuid.UUID) (*MemberWithProfile, error) {
+func (r *PGRepository) Activate(ctx context.Context, userID uuid.UUID, autoRoles []uuid.UUID) (*WithProfile, error) {
 	err := postgres.WithTx(ctx, r.db, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx,
 			"UPDATE members SET status = $1, onboarded_at = NOW() WHERE user_id = $2 AND status = $3",
@@ -354,13 +354,13 @@ func (r *PGRepository) GetStatus(ctx context.Context, userID uuid.UUID) (string,
 }
 
 // GetByUserIDAnyStatus returns a member profile regardless of status, including pending members.
-func (r *PGRepository) GetByUserIDAnyStatus(ctx context.Context, userID uuid.UUID) (*MemberWithProfile, error) {
+func (r *PGRepository) GetByUserIDAnyStatus(ctx context.Context, userID uuid.UUID) (*WithProfile, error) {
 	row := r.db.QueryRow(ctx,
 		memberQueryAnyStatus+` AND m.user_id = $1
 GROUP BY m.user_id, u.username, u.display_name, u.avatar_key,
          m.nickname, m.status, m.timeout_until, m.joined_at`, userID)
 
-	m, err := scanMemberWithProfile(row)
+	m, err := scanWithProfile(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -370,9 +370,9 @@ GROUP BY m.user_id, u.username, u.display_name, u.avatar_key,
 	return m, nil
 }
 
-// scanMemberWithProfile scans a row into a MemberWithProfile.
-func scanMemberWithProfile(row pgx.Row) (*MemberWithProfile, error) {
-	var m MemberWithProfile
+// scanWithProfile scans a row into a WithProfile.
+func scanWithProfile(row pgx.Row) (*WithProfile, error) {
+	var m WithProfile
 	err := row.Scan(
 		&m.UserID, &m.Username, &m.DisplayName, &m.AvatarKey,
 		&m.Nickname, &m.Status, &m.TimeoutUntil, &m.JoinedAt,

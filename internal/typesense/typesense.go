@@ -4,12 +4,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"slices"
 	"time"
 )
+
+// errCollectionNotFound is returned by getCollection when the Typesense server responds with 404, indicating the
+// collection does not exist yet.
+var errCollectionNotFound = errors.New("collection not found")
 
 // field defines a single field in a Typesense collection schema. Only the properties that matter for structural
 // comparison are included; Typesense returns additional metadata that we intentionally ignore.
@@ -32,6 +37,10 @@ var messagesFields = []field{
 const (
 	messagesCollection   = "messages"
 	messagesSortingField = "created_at"
+
+	// maxResponseBody caps the number of bytes read from a Typesense response body. This prevents a misbehaving
+	// instance from exhausting memory with an unbounded response.
+	maxResponseBody = 10 << 10 // 10 KiB
 )
 
 // collectionSchema is the JSON structure sent to Typesense when creating a collection.
@@ -50,6 +59,7 @@ type remoteCollection struct {
 // Result describes what EnsureMessagesCollection did on startup.
 type Result int
 
+// Result values returned by EnsureMessagesCollection.
 const (
 	ResultCreated   Result = iota // Collection was created fresh.
 	ResultUnchanged               // Collection already existed with the correct schema.
@@ -64,11 +74,11 @@ func EnsureMessagesCollection(ctx context.Context, baseURL, apiKey string, timeo
 
 	// Check whether the collection already exists.
 	existing, err := getCollection(ctx, client, baseURL, apiKey)
-	if err != nil {
+	if err != nil && !errors.Is(err, errCollectionNotFound) {
 		return 0, fmt.Errorf("fetch existing collection: %w", err)
 	}
 
-	if existing != nil {
+	if err == nil {
 		if schemasMatch(existing) {
 			return ResultUnchanged, nil
 		}
@@ -114,8 +124,8 @@ func schemasMatch(remote *remoteCollection) bool {
 	return true
 }
 
-// getCollection fetches the messages collection from Typesense. Returns nil (without error) if the collection does not
-// exist (404).
+// getCollection fetches the messages collection from Typesense. Returns errCollectionNotFound if the collection does
+// not exist (404).
 func getCollection(ctx context.Context, client *http.Client, baseURL, apiKey string) (*remoteCollection, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/collections/"+messagesCollection, nil)
 	if err != nil {
@@ -130,15 +140,15 @@ func getCollection(ctx context.Context, client *http.Client, baseURL, apiKey str
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, nil
+		return nil, errCollectionNotFound
 	}
 
 	if resp.StatusCode >= 400 {
-		detail, _ := io.ReadAll(resp.Body)
+		detail, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody))
 		return nil, fmt.Errorf("typesense returned status %d: %s", resp.StatusCode, detail)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody))
 	if err != nil {
 		return nil, fmt.Errorf("read response body: %w", err)
 	}
@@ -166,7 +176,7 @@ func deleteCollection(ctx context.Context, client *http.Client, baseURL, apiKey 
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
-		detail, _ := io.ReadAll(resp.Body)
+		detail, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody))
 		return fmt.Errorf("typesense returned status %d on delete: %s", resp.StatusCode, detail)
 	}
 
@@ -200,7 +210,7 @@ func createCollection(ctx context.Context, client *http.Client, baseURL, apiKey 
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
-		detail, _ := io.ReadAll(resp.Body)
+		detail, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody))
 		return fmt.Errorf("typesense returned status %d on create: %s", resp.StatusCode, detail)
 	}
 

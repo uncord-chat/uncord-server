@@ -21,7 +21,7 @@ import (
 
 // fakeMemberRepo implements member.Repository for handler tests.
 type fakeMemberRepo struct {
-	members []member.MemberWithProfile
+	members []member.WithProfile
 	bans    []member.BanRecord
 	roles   map[uuid.UUID][]uuid.UUID // userID -> roleIDs
 }
@@ -32,7 +32,7 @@ func newFakeMemberRepo() *fakeMemberRepo {
 	}
 }
 
-func (r *fakeMemberRepo) List(_ context.Context, after *uuid.UUID, limit int) ([]member.MemberWithProfile, error) {
+func (r *fakeMemberRepo) List(_ context.Context, after *uuid.UUID, limit int) ([]member.WithProfile, error) {
 	start := 0
 	if after != nil {
 		for i, m := range r.members {
@@ -49,7 +49,7 @@ func (r *fakeMemberRepo) List(_ context.Context, after *uuid.UUID, limit int) ([
 	return r.members[start:end], nil
 }
 
-func (r *fakeMemberRepo) GetByUserID(_ context.Context, userID uuid.UUID) (*member.MemberWithProfile, error) {
+func (r *fakeMemberRepo) GetByUserID(_ context.Context, userID uuid.UUID) (*member.WithProfile, error) {
 	for i := range r.members {
 		if r.members[i].UserID == userID {
 			return &r.members[i], nil
@@ -58,7 +58,7 @@ func (r *fakeMemberRepo) GetByUserID(_ context.Context, userID uuid.UUID) (*memb
 	return nil, member.ErrNotFound
 }
 
-func (r *fakeMemberRepo) UpdateNickname(_ context.Context, userID uuid.UUID, nickname *string) (*member.MemberWithProfile, error) {
+func (r *fakeMemberRepo) UpdateNickname(_ context.Context, userID uuid.UUID, nickname *string) (*member.WithProfile, error) {
 	for i := range r.members {
 		if r.members[i].UserID == userID {
 			r.members[i].Nickname = nickname
@@ -78,7 +78,7 @@ func (r *fakeMemberRepo) Delete(_ context.Context, userID uuid.UUID) error {
 	return member.ErrNotFound
 }
 
-func (r *fakeMemberRepo) SetTimeout(_ context.Context, userID uuid.UUID, until time.Time) (*member.MemberWithProfile, error) {
+func (r *fakeMemberRepo) SetTimeout(_ context.Context, userID uuid.UUID, until time.Time) (*member.WithProfile, error) {
 	for i := range r.members {
 		if r.members[i].UserID == userID {
 			r.members[i].Status = "timed_out"
@@ -89,7 +89,7 @@ func (r *fakeMemberRepo) SetTimeout(_ context.Context, userID uuid.UUID, until t
 	return nil, member.ErrNotFound
 }
 
-func (r *fakeMemberRepo) ClearTimeout(_ context.Context, userID uuid.UUID) (*member.MemberWithProfile, error) {
+func (r *fakeMemberRepo) ClearTimeout(_ context.Context, userID uuid.UUID) (*member.WithProfile, error) {
 	for i := range r.members {
 		if r.members[i].UserID == userID {
 			r.members[i].Status = "active"
@@ -189,13 +189,13 @@ func (r *fakeMemberRepo) RemoveRole(_ context.Context, userID, roleID uuid.UUID)
 	return member.ErrNotFound
 }
 
-func (r *fakeMemberRepo) CreatePending(_ context.Context, userID uuid.UUID) (*member.MemberWithProfile, error) {
+func (r *fakeMemberRepo) CreatePending(_ context.Context, userID uuid.UUID) (*member.WithProfile, error) {
 	for _, m := range r.members {
 		if m.UserID == userID {
 			return nil, member.ErrAlreadyMember
 		}
 	}
-	m := member.MemberWithProfile{
+	m := member.WithProfile{
 		UserID:   userID,
 		Username: "pending",
 		Status:   "pending",
@@ -205,7 +205,7 @@ func (r *fakeMemberRepo) CreatePending(_ context.Context, userID uuid.UUID) (*me
 	return &r.members[len(r.members)-1], nil
 }
 
-func (r *fakeMemberRepo) Activate(_ context.Context, userID uuid.UUID, _ []uuid.UUID) (*member.MemberWithProfile, error) {
+func (r *fakeMemberRepo) Activate(_ context.Context, userID uuid.UUID, _ []uuid.UUID) (*member.WithProfile, error) {
 	for i := range r.members {
 		if r.members[i].UserID == userID {
 			if r.members[i].Status != "pending" {
@@ -227,7 +227,7 @@ func (r *fakeMemberRepo) GetStatus(_ context.Context, userID uuid.UUID) (string,
 	return "", member.ErrNotFound
 }
 
-func (r *fakeMemberRepo) GetByUserIDAnyStatus(_ context.Context, userID uuid.UUID) (*member.MemberWithProfile, error) {
+func (r *fakeMemberRepo) GetByUserIDAnyStatus(_ context.Context, userID uuid.UUID) (*member.WithProfile, error) {
 	for i := range r.members {
 		if r.members[i].UserID == userID {
 			return &r.members[i], nil
@@ -238,8 +238,8 @@ func (r *fakeMemberRepo) GetByUserIDAnyStatus(_ context.Context, userID uuid.UUI
 
 // --- seed helpers ---
 
-func seedMember(repo *fakeMemberRepo, userID uuid.UUID, username string) *member.MemberWithProfile {
-	m := member.MemberWithProfile{
+func seedMember(repo *fakeMemberRepo, userID uuid.UUID, username string) *member.WithProfile {
+	m := member.WithProfile{
 		UserID:   userID,
 		Username: username,
 		Status:   "active",

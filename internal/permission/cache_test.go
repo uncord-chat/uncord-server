@@ -226,8 +226,8 @@ func TestGetManyEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetMany() error = %v", err)
 	}
-	if got != nil {
-		t.Errorf("GetMany(nil) = %v, want nil", got)
+	if len(got) != 0 {
+		t.Errorf("GetMany(nil) = %v, want empty map", got)
 	}
 }
 
@@ -342,8 +342,8 @@ func TestGetManyUsersEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetManyUsers() error = %v", err)
 	}
-	if got != nil {
-		t.Errorf("GetManyUsers(nil) = %v, want nil", got)
+	if len(got) != 0 {
+		t.Errorf("GetManyUsers(nil) = %v, want empty map", got)
 	}
 }
 

@@ -578,7 +578,7 @@ func (h *Hub) assembleReady(ctx context.Context, userID uuid.UUID) (*models.Read
 		srv *servercfg.Config
 		chs []channel.Channel
 		rs  []role.Role
-		ms  []member.MemberWithProfile
+		ms  []member.WithProfile
 	)
 
 	g, gCtx := errgroup.WithContext(ctx)
@@ -730,7 +730,7 @@ func roleSliceToModels(rs []role.Role) []models.Role {
 	return result
 }
 
-func memberSliceToModels(ms []member.MemberWithProfile) []models.Member {
+func memberSliceToModels(ms []member.WithProfile) []models.Member {
 	result := make([]models.Member, len(ms))
 	for i := range ms {
 		result[i] = ms[i].ToModel()

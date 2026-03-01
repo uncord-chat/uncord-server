@@ -159,23 +159,23 @@ func (r *fakeRoleRepo) HighestPosition(context.Context, uuid.UUID) (int, error) 
 
 // fakeMemberRepo implements member.Repository for testing.
 type fakeMemberRepo struct {
-	members []member.MemberWithProfile
+	members []member.WithProfile
 }
 
-func (r *fakeMemberRepo) List(_ context.Context, _ *uuid.UUID, _ int) ([]member.MemberWithProfile, error) {
+func (r *fakeMemberRepo) List(_ context.Context, _ *uuid.UUID, _ int) ([]member.WithProfile, error) {
 	return r.members, nil
 }
-func (r *fakeMemberRepo) GetByUserID(context.Context, uuid.UUID) (*member.MemberWithProfile, error) {
+func (r *fakeMemberRepo) GetByUserID(context.Context, uuid.UUID) (*member.WithProfile, error) {
 	return nil, nil
 }
-func (r *fakeMemberRepo) UpdateNickname(context.Context, uuid.UUID, *string) (*member.MemberWithProfile, error) {
+func (r *fakeMemberRepo) UpdateNickname(context.Context, uuid.UUID, *string) (*member.WithProfile, error) {
 	return nil, nil
 }
 func (r *fakeMemberRepo) Delete(context.Context, uuid.UUID) error { return nil }
-func (r *fakeMemberRepo) SetTimeout(context.Context, uuid.UUID, time.Time) (*member.MemberWithProfile, error) {
+func (r *fakeMemberRepo) SetTimeout(context.Context, uuid.UUID, time.Time) (*member.WithProfile, error) {
 	return nil, nil
 }
-func (r *fakeMemberRepo) ClearTimeout(context.Context, uuid.UUID) (*member.MemberWithProfile, error) {
+func (r *fakeMemberRepo) ClearTimeout(context.Context, uuid.UUID) (*member.WithProfile, error) {
 	return nil, nil
 }
 func (r *fakeMemberRepo) Ban(context.Context, uuid.UUID, uuid.UUID, *string, *time.Time) error {
@@ -188,14 +188,14 @@ func (r *fakeMemberRepo) ListBans(context.Context, *uuid.UUID, int) ([]member.Ba
 func (r *fakeMemberRepo) IsBanned(context.Context, uuid.UUID) (bool, error)      { return false, nil }
 func (r *fakeMemberRepo) AssignRole(context.Context, uuid.UUID, uuid.UUID) error { return nil }
 func (r *fakeMemberRepo) RemoveRole(context.Context, uuid.UUID, uuid.UUID) error { return nil }
-func (r *fakeMemberRepo) CreatePending(context.Context, uuid.UUID) (*member.MemberWithProfile, error) {
+func (r *fakeMemberRepo) CreatePending(context.Context, uuid.UUID) (*member.WithProfile, error) {
 	return nil, nil
 }
-func (r *fakeMemberRepo) Activate(context.Context, uuid.UUID, []uuid.UUID) (*member.MemberWithProfile, error) {
+func (r *fakeMemberRepo) Activate(context.Context, uuid.UUID, []uuid.UUID) (*member.WithProfile, error) {
 	return nil, nil
 }
 func (r *fakeMemberRepo) GetStatus(context.Context, uuid.UUID) (string, error) { return "", nil }
-func (r *fakeMemberRepo) GetByUserIDAnyStatus(context.Context, uuid.UUID) (*member.MemberWithProfile, error) {
+func (r *fakeMemberRepo) GetByUserIDAnyStatus(context.Context, uuid.UUID) (*member.WithProfile, error) {
 	return nil, nil
 }
 
@@ -245,7 +245,7 @@ func TestAssembleReady(t *testing.T) {
 		Roles: &fakeRoleRepo{roles: []role.Role{
 			{ID: roleID, Name: "everyone", IsEveryone: true},
 		}},
-		Members: &fakeMemberRepo{members: []member.MemberWithProfile{
+		Members: &fakeMemberRepo{members: []member.WithProfile{
 			{UserID: userID, Username: "testuser", Status: "active", RoleIDs: []uuid.UUID{roleID}},
 		}},
 		Logger: zerolog.Nop(),
@@ -482,7 +482,7 @@ func TestModelConversions(t *testing.T) {
 	t.Run("MemberWithProfile.ToModel with timeout", func(t *testing.T) {
 		t.Parallel()
 		timeout := time.Now().Add(time.Hour)
-		mp := &member.MemberWithProfile{
+		mp := &member.WithProfile{
 			UserID:       uuid.New(),
 			Username:     "bob",
 			Status:       "active",
@@ -498,7 +498,7 @@ func TestModelConversions(t *testing.T) {
 
 func TestMemberSliceToModels(t *testing.T) {
 	t.Parallel()
-	ms := []member.MemberWithProfile{
+	ms := []member.WithProfile{
 		{UserID: uuid.New(), Username: "a", Status: "active"},
 		{UserID: uuid.New(), Username: "b", Status: "active"},
 	}
@@ -584,7 +584,7 @@ func TestAssembleReadyWithPresences(t *testing.T) {
 		Server:   &fakeServerRepo{cfg: &servercfg.Config{ID: uuid.New(), Name: "S", OwnerID: userID}},
 		Channels: &fakeChannelRepo{},
 		Roles:    &fakeRoleRepo{},
-		Members: &fakeMemberRepo{members: []member.MemberWithProfile{
+		Members: &fakeMemberRepo{members: []member.WithProfile{
 			{UserID: userID, Username: "a", Status: "active"},
 		}},
 		Presence: presenceStore,
@@ -834,7 +834,7 @@ func TestAssembleReadyWithOnboarding(t *testing.T) {
 		Server:   &fakeServerRepo{cfg: &servercfg.Config{ID: uuid.New(), Name: "S", OwnerID: userID}},
 		Channels: &fakeChannelRepo{},
 		Roles:    &fakeRoleRepo{},
-		Members: &fakeMemberRepo{members: []member.MemberWithProfile{
+		Members: &fakeMemberRepo{members: []member.WithProfile{
 			{UserID: userID, Username: "a", Status: "active"},
 		}},
 		OnboardingRepo: &fakeOnboardingRepo{cfg: onboardingCfg},
@@ -1051,7 +1051,7 @@ func TestAssembleReadyNilOnboardingDeps(t *testing.T) {
 		Server:   &fakeServerRepo{cfg: &servercfg.Config{ID: uuid.New(), Name: "S", OwnerID: userID}},
 		Channels: &fakeChannelRepo{},
 		Roles:    &fakeRoleRepo{},
-		Members: &fakeMemberRepo{members: []member.MemberWithProfile{
+		Members: &fakeMemberRepo{members: []member.WithProfile{
 			{UserID: userID, Username: "a", Status: "active"},
 		}},
 		Logger: zerolog.Nop(),

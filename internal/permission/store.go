@@ -15,6 +15,7 @@ var ErrOverrideNotFound = errors.New("permission override not found")
 // TargetType identifies whether a permission override applies to a channel or category.
 type TargetType string
 
+// TargetType values.
 const (
 	TargetChannel  TargetType = "channel"
 	TargetCategory TargetType = "category"
@@ -23,6 +24,7 @@ const (
 // PrincipalType identifies whether a permission override is for a role or user.
 type PrincipalType string
 
+// PrincipalType values.
 const (
 	PrincipalRole PrincipalType = "role"
 	PrincipalUser PrincipalType = "user"

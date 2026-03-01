@@ -17,7 +17,14 @@ func (s Secret) IsSet() bool { return s.value != "" }
 
 const redacted = "[REDACTED]"
 
-func (s Secret) String() string               { return redacted }
-func (s Secret) GoString() string             { return redacted }
+// String returns the redacted placeholder so secrets are never printed in plain text.
+func (s Secret) String() string { return redacted }
+
+// GoString returns the redacted placeholder for fmt %#v output.
+func (s Secret) GoString() string { return redacted }
+
+// MarshalText implements encoding.TextMarshaler, returning the redacted placeholder.
 func (s Secret) MarshalText() ([]byte, error) { return []byte(redacted), nil }
+
+// MarshalJSON implements json.Marshaler, returning a JSON string containing the redacted placeholder.
 func (s Secret) MarshalJSON() ([]byte, error) { return []byte(`"` + redacted + `"`), nil }

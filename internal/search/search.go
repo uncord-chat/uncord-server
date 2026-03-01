@@ -48,7 +48,7 @@ type PermissionFilter interface {
 
 // Searcher performs raw search queries against a search backend.
 type Searcher interface {
-	Search(ctx context.Context, params SearchParams) (*SearchResult, error)
+	Search(ctx context.Context, params Params) (*Result, error)
 }
 
 // Options groups optional query parameters from the handler.
@@ -75,8 +75,8 @@ func ClampPagination(page, perPage int) (int, int) {
 	return page, perPage
 }
 
-// SearchParams groups the parameters sent to the search backend.
-type SearchParams struct {
+// Params groups the parameters sent to the search backend.
+type Params struct {
 	Query      string
 	ChannelIDs []string
 	AuthorID   string
@@ -86,20 +86,20 @@ type SearchParams struct {
 	PerPage    int
 }
 
-// SearchResult holds the raw search backend response.
-type SearchResult struct {
-	Found int         `json:"found"`
-	Hits  []SearchHit `json:"hits"`
+// Result holds the raw search backend response.
+type Result struct {
+	Found int   `json:"found"`
+	Hits  []Hit `json:"hits"`
 }
 
-// SearchHit represents a single search hit from the backend.
-type SearchHit struct {
-	Document   SearchDocument    `json:"document"`
-	Highlights []SearchHighlight `json:"highlights"`
+// Hit represents a single search hit from the backend.
+type Hit struct {
+	Document   Document    `json:"document"`
+	Highlights []Highlight `json:"highlights"`
 }
 
-// SearchDocument holds the indexed message fields.
-type SearchDocument struct {
+// Document holds the indexed message fields.
+type Document struct {
 	ID        string `json:"id"`
 	Content   string `json:"content"`
 	AuthorID  string `json:"author_id"`
@@ -107,8 +107,8 @@ type SearchDocument struct {
 	CreatedAt int64  `json:"created_at"`
 }
 
-// SearchHighlight holds highlight information for a single field.
-type SearchHighlight struct {
+// Highlight holds highlight information for a single field.
+type Highlight struct {
 	Field    string   `json:"field"`
 	Snippets []string `json:"snippets"`
 }
@@ -130,7 +130,7 @@ func NewTypesenseSearcher(baseURL, apiKey string, timeout time.Duration) *Typese
 }
 
 // Search executes a search query against the Typesense messages collection.
-func (ts *TypesenseSearcher) Search(ctx context.Context, params SearchParams) (*SearchResult, error) {
+func (ts *TypesenseSearcher) Search(ctx context.Context, params Params) (*Result, error) {
 	filterParts := []string{
 		"channel_id:[" + strings.Join(params.ChannelIDs, ",") + "]",
 	}
@@ -176,7 +176,7 @@ func (ts *TypesenseSearcher) Search(ctx context.Context, params SearchParams) (*
 		return nil, fmt.Errorf("typesense returned status %d on search: %s", resp.StatusCode, detail)
 	}
 
-	var result SearchResult
+	var result Result
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("decode search response: %w", err)
 	}
@@ -250,7 +250,7 @@ func (s *Service) Search(ctx context.Context, userID uuid.UUID, query string, op
 		return emptyResponse(opts.Page, opts.PerPage), nil
 	}
 
-	result, err := s.searcher.Search(ctx, SearchParams{
+	result, err := s.searcher.Search(ctx, Params{
 		Query:      query,
 		ChannelIDs: allowedIDs,
 		AuthorID:   opts.AuthorID,

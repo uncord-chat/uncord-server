@@ -114,6 +114,7 @@ type UpdateParams struct {
 // TombstoneType identifies the kind of identifier stored in a deletion tombstone.
 type TombstoneType string
 
+// TombstoneType values.
 const (
 	TombstoneEmail    TombstoneType = "email"
 	TombstoneUsername TombstoneType = "username"

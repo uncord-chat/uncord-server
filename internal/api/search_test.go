@@ -18,11 +18,11 @@ import (
 
 // fakeSearcher implements search.Searcher for handler tests.
 type fakeSearcher struct {
-	result *search.SearchResult
+	result *search.Result
 	err    error
 }
 
-func (f *fakeSearcher) Search(_ context.Context, _ search.SearchParams) (*search.SearchResult, error) {
+func (f *fakeSearcher) Search(_ context.Context, _ search.Params) (*search.Result, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -50,18 +50,18 @@ func TestSearchMessages_Success(t *testing.T) {
 	now := time.Now().Unix()
 
 	searcher := &fakeSearcher{
-		result: &search.SearchResult{
+		result: &search.Result{
 			Found: 1,
-			Hits: []search.SearchHit{
+			Hits: []search.Hit{
 				{
-					Document: search.SearchDocument{
+					Document: search.Document{
 						ID:        msgID,
 						ChannelID: ch.ID.String(),
 						AuthorID:  authorID,
 						Content:   "hello world",
 						CreatedAt: now,
 					},
-					Highlights: []search.SearchHighlight{
+					Highlights: []search.Highlight{
 						{Field: "content", Snippets: []string{"<mark>hello</mark> world"}},
 					},
 				},
@@ -247,7 +247,7 @@ func TestSearchMessages_PaginationDefaults(t *testing.T) {
 	repo := newFakeChannelRepo()
 	seedChannel(repo)
 	searcher := &fakeSearcher{
-		result: &search.SearchResult{Found: 0},
+		result: &search.Result{Found: 0},
 	}
 	app := testSearchApp(t, repo, searcher, allowAllResolver(), uuid.New())
 
@@ -276,7 +276,7 @@ func TestSearchMessages_PaginationClamp(t *testing.T) {
 	repo := newFakeChannelRepo()
 	seedChannel(repo)
 	searcher := &fakeSearcher{
-		result: &search.SearchResult{Found: 0},
+		result: &search.Result{Found: 0},
 	}
 	app := testSearchApp(t, repo, searcher, allowAllResolver(), uuid.New())
 
@@ -320,7 +320,7 @@ func TestSearchMessages_EmptyResults(t *testing.T) {
 	repo := newFakeChannelRepo()
 	seedChannel(repo)
 	searcher := &fakeSearcher{
-		result: &search.SearchResult{Found: 0},
+		result: &search.Result{Found: 0},
 	}
 	app := testSearchApp(t, repo, searcher, allowAllResolver(), uuid.New())
 

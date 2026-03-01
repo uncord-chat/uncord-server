@@ -7,6 +7,7 @@ linters:
     - copyloopvar
     - errcheck
     - errorlint
+    - exhaustive
     - goconst
     - gocritic
     - govet
@@ -14,7 +15,9 @@ linters:
     - misspell
     - nakedret
     - nilerr
+    - nilnil
     - noctx
+    - nolintlint
     - revive
     - sqlclosecheck
     - staticcheck
@@ -29,12 +32,17 @@ linters:
       locale: UK
       ignore-rules:
         - fiber
+    nolintlint:
+      require-explanation: true
+      require-specific: true
     revive:
       rules:
         - name: blank-imports
         - name: context-as-argument
         - name: error-return
+        - name: exported
         - name: increment-decrement
+        - name: receiver-naming
         - name: var-declaration
         - name: unexported-return
   exclusions:
@@ -43,6 +51,7 @@ linters:
         linters:
           - bodyclose
           - goconst
+          - nilnil
 
 formatters:
   enable:

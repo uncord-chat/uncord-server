@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Sentinel errors for the attachment package.
+// ErrNotFound is returned when one or more attachments could not be found or are not available for linking.
 var ErrNotFound = errors.New("one or more attachments not found or not available for linking")
 
 // Attachment holds the fields read from the database for a message attachment.

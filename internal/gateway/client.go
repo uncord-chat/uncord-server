@@ -155,7 +155,9 @@ func (c *Client) readPump() {
 		case events.OpcodeResume:
 			identifyTimer.Stop()
 			c.handleResume(frame.Data)
-		default:
+		case events.OpcodeDispatch, events.OpcodeReconnect, events.OpcodeInvalidSession,
+			events.OpcodeHello, events.OpcodeHeartbeatACK:
+			// Server-to-client opcodes are never valid in a client message.
 			c.closeWithCode(CloseUnknownOpcode, "unknown opcode")
 			return
 		}

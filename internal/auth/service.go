@@ -84,8 +84,8 @@ type LoginRequest struct {
 	IP       string
 }
 
-// AuthResult is the output for Register and successful logins (with or without MFA).
-type AuthResult struct {
+// Result holds the tokens and user data produced by a successful registration, login, or email verification.
+type Result struct {
 	User         models.User
 	AccessToken  string
 	RefreshToken string
@@ -96,7 +96,7 @@ type AuthResult struct {
 type LoginResult struct {
 	MFARequired bool
 	Ticket      string
-	Auth        *AuthResult
+	Auth        *Result
 }
 
 // MFASetupResult is the output for BeginMFASetup, containing the TOTP provisioning data the client needs to register
@@ -114,7 +114,7 @@ type TokenPair struct {
 
 // Register validates inputs, creates the user with an email verification token in a single transaction, and returns
 // auth tokens.
-func (s *Service) Register(ctx context.Context, req RegisterRequest) (*AuthResult, error) {
+func (s *Service) Register(ctx context.Context, req RegisterRequest) (*Result, error) {
 	email, domain, err := ValidateEmail(req.Email)
 	if err != nil {
 		return nil, err
@@ -202,7 +202,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*AuthResul
 		return nil, err
 	}
 
-	return &AuthResult{
+	return &Result{
 		User: models.User{
 			ID:            userID.String(),
 			Email:         email,
@@ -276,7 +276,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResult, er
 	}
 
 	return &LoginResult{
-		Auth: &AuthResult{
+		Auth: &Result{
 			User:         u.ToModel(),
 			AccessToken:  tokens.AccessToken,
 			RefreshToken: tokens.RefreshToken,
@@ -312,7 +312,7 @@ func (s *Service) Refresh(ctx context.Context, oldToken string) (*TokenPair, err
 // VerifyEmail consumes a verification token, marks the user as verified, and issues fresh auth tokens with the
 // email_verified claim set to true. Callers that do not need the tokens (e.g. the browser page handler) may discard the
 // result.
-func (s *Service) VerifyEmail(ctx context.Context, token string) (*AuthResult, error) {
+func (s *Service) VerifyEmail(ctx context.Context, token string) (*Result, error) {
 	userID, err := s.users.VerifyEmail(ctx, token)
 	if err != nil {
 		if errors.Is(err, user.ErrInvalidToken) {
@@ -333,7 +333,7 @@ func (s *Service) VerifyEmail(ctx context.Context, token string) (*AuthResult, e
 
 	s.log.Debug().Str("user_id", userID.String()).Msg("User email verified")
 
-	return &AuthResult{
+	return &Result{
 		User:         u.ToModel(),
 		AccessToken:  tokens.AccessToken,
 		RefreshToken: tokens.RefreshToken,
@@ -381,7 +381,7 @@ func (s *Service) ResendVerification(ctx context.Context, userID uuid.UUID) erro
 
 // VerifyMFA consumes an MFA ticket, loads the user's credentials, validates the provided TOTP or recovery code, and
 // issues auth tokens on success.
-func (s *Service) VerifyMFA(ctx context.Context, ticket, code string) (*AuthResult, error) {
+func (s *Service) VerifyMFA(ctx context.Context, ticket, code string) (*Result, error) {
 	userID, err := ConsumeMFATicket(ctx, s.redis, ticket)
 	if err != nil {
 		return nil, err
@@ -698,14 +698,14 @@ func (s *Service) DeleteAccount(ctx context.Context, userID uuid.UUID, password 
 	return nil
 }
 
-// completeMFALogin issues tokens and builds an AuthResult with MFAEnabled set to true.
-func (s *Service) completeMFALogin(ctx context.Context, creds *user.Credentials) (*AuthResult, error) {
+// completeMFALogin issues tokens and builds an Result with MFAEnabled set to true.
+func (s *Service) completeMFALogin(ctx context.Context, creds *user.Credentials) (*Result, error) {
 	tokens, err := s.issueTokens(ctx, creds.ID, creds.EmailVerified)
 	if err != nil {
 		return nil, err
 	}
 
-	return &AuthResult{
+	return &Result{
 		User:         creds.ToModel(),
 		AccessToken:  tokens.AccessToken,
 		RefreshToken: tokens.RefreshToken,

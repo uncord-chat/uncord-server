@@ -57,6 +57,7 @@ func NewValkeyCache(client *redis.Client) *ValkeyCache {
 	return &ValkeyCache{client: client}
 }
 
+// Get retrieves a cached permission for a single user/channel pair. The bool return indicates a cache hit.
 func (c *ValkeyCache) Get(ctx context.Context, userID, channelID uuid.UUID) (permissions.Permission, bool, error) {
 	val, err := c.client.Get(ctx, cacheKey(userID, channelID)).Result()
 	if errors.Is(err, redis.Nil) {
@@ -74,6 +75,7 @@ func (c *ValkeyCache) Get(ctx context.Context, userID, channelID uuid.UUID) (per
 	return permissions.Permission(n), true, nil
 }
 
+// Set stores a resolved permission in the cache with the standard TTL.
 func (c *ValkeyCache) Set(ctx context.Context, userID, channelID uuid.UUID, perm permissions.Permission) error {
 	err := c.client.Set(ctx, cacheKey(userID, channelID), strconv.FormatInt(int64(perm), 10), CacheTTL).Err()
 	if err != nil {
@@ -86,7 +88,7 @@ func (c *ValkeyCache) Set(ctx context.Context, userID, channelID uuid.UUID, perm
 // only the channels that were found in the cache; missing channels are omitted.
 func (c *ValkeyCache) GetMany(ctx context.Context, userID uuid.UUID, channelIDs []uuid.UUID) (map[uuid.UUID]permissions.Permission, error) {
 	if len(channelIDs) == 0 {
-		return nil, nil
+		return map[uuid.UUID]permissions.Permission{}, nil
 	}
 
 	keys := make([]string, len(channelIDs))
@@ -139,7 +141,7 @@ func (c *ValkeyCache) SetMany(ctx context.Context, userID uuid.UUID, perms map[u
 // returned map contains only the users that were found in the cache; missing users are omitted.
 func (c *ValkeyCache) GetManyUsers(ctx context.Context, userIDs []uuid.UUID, channelID uuid.UUID) (map[uuid.UUID]permissions.Permission, error) {
 	if len(userIDs) == 0 {
-		return nil, nil
+		return map[uuid.UUID]permissions.Permission{}, nil
 	}
 
 	keys := make([]string, len(userIDs))
@@ -188,18 +190,22 @@ func (c *ValkeyCache) SetManyUsers(ctx context.Context, channelID uuid.UUID, per
 	return nil
 }
 
+// DeleteByUser removes all cached permissions for the given user across every channel.
 func (c *ValkeyCache) DeleteByUser(ctx context.Context, userID uuid.UUID) error {
 	return c.scanAndDelete(ctx, CachePrefix+":"+userID.String()+":*")
 }
 
+// DeleteByChannel removes all cached permissions for the given channel across every user.
 func (c *ValkeyCache) DeleteByChannel(ctx context.Context, channelID uuid.UUID) error {
 	return c.scanAndDelete(ctx, CachePrefix+":*:"+channelID.String())
 }
 
+// DeleteExact removes the cached permission for exactly one user/channel pair.
 func (c *ValkeyCache) DeleteExact(ctx context.Context, userID, channelID uuid.UUID) error {
 	return c.client.Del(ctx, cacheKey(userID, channelID)).Err()
 }
 
+// DeleteAll removes every cached permission entry.
 func (c *ValkeyCache) DeleteAll(ctx context.Context) error {
 	return c.scanAndDelete(ctx, CachePrefix+":*")
 }

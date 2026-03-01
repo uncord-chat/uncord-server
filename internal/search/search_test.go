@@ -42,12 +42,12 @@ func (f *fakePermissionFilter) FilterPermitted(_ context.Context, _ uuid.UUID, c
 }
 
 type fakeSearcher struct {
-	result *SearchResult
+	result *Result
 	err    error
-	params SearchParams
+	params Params
 }
 
-func (f *fakeSearcher) Search(_ context.Context, params SearchParams) (*SearchResult, error) {
+func (f *fakeSearcher) Search(_ context.Context, params Params) (*Result, error) {
 	f.params = params
 	if f.err != nil {
 		return nil, f.err
@@ -55,7 +55,7 @@ func (f *fakeSearcher) Search(_ context.Context, params SearchParams) (*SearchRe
 	if f.result != nil {
 		return f.result, nil
 	}
-	return &SearchResult{Found: 0, Hits: nil}, nil
+	return &Result{Found: 0, Hits: nil}, nil
 }
 
 func TestService_SearchEmptyQuery(t *testing.T) {

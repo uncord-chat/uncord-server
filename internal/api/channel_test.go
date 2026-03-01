@@ -208,23 +208,23 @@ func (r *fakeChannelMemberRepo) GetStatus(_ context.Context, userID uuid.UUID) (
 	return s, nil
 }
 
-func (r *fakeChannelMemberRepo) GetByUserIDAnyStatus(context.Context, uuid.UUID) (*member.MemberWithProfile, error) {
+func (r *fakeChannelMemberRepo) GetByUserIDAnyStatus(context.Context, uuid.UUID) (*member.WithProfile, error) {
 	return nil, nil
 }
-func (r *fakeChannelMemberRepo) List(context.Context, *uuid.UUID, int) ([]member.MemberWithProfile, error) {
+func (r *fakeChannelMemberRepo) List(context.Context, *uuid.UUID, int) ([]member.WithProfile, error) {
 	return nil, nil
 }
-func (r *fakeChannelMemberRepo) GetByUserID(context.Context, uuid.UUID) (*member.MemberWithProfile, error) {
+func (r *fakeChannelMemberRepo) GetByUserID(context.Context, uuid.UUID) (*member.WithProfile, error) {
 	return nil, nil
 }
-func (r *fakeChannelMemberRepo) UpdateNickname(context.Context, uuid.UUID, *string) (*member.MemberWithProfile, error) {
+func (r *fakeChannelMemberRepo) UpdateNickname(context.Context, uuid.UUID, *string) (*member.WithProfile, error) {
 	return nil, nil
 }
 func (r *fakeChannelMemberRepo) Delete(context.Context, uuid.UUID) error { return nil }
-func (r *fakeChannelMemberRepo) SetTimeout(context.Context, uuid.UUID, time.Time) (*member.MemberWithProfile, error) {
+func (r *fakeChannelMemberRepo) SetTimeout(context.Context, uuid.UUID, time.Time) (*member.WithProfile, error) {
 	return nil, nil
 }
-func (r *fakeChannelMemberRepo) ClearTimeout(context.Context, uuid.UUID) (*member.MemberWithProfile, error) {
+func (r *fakeChannelMemberRepo) ClearTimeout(context.Context, uuid.UUID) (*member.WithProfile, error) {
 	return nil, nil
 }
 func (r *fakeChannelMemberRepo) Ban(context.Context, uuid.UUID, uuid.UUID, *string, *time.Time) error {
@@ -237,10 +237,10 @@ func (r *fakeChannelMemberRepo) ListBans(context.Context, *uuid.UUID, int) ([]me
 func (r *fakeChannelMemberRepo) IsBanned(context.Context, uuid.UUID) (bool, error)      { return false, nil }
 func (r *fakeChannelMemberRepo) AssignRole(context.Context, uuid.UUID, uuid.UUID) error { return nil }
 func (r *fakeChannelMemberRepo) RemoveRole(context.Context, uuid.UUID, uuid.UUID) error { return nil }
-func (r *fakeChannelMemberRepo) CreatePending(context.Context, uuid.UUID) (*member.MemberWithProfile, error) {
+func (r *fakeChannelMemberRepo) CreatePending(context.Context, uuid.UUID) (*member.WithProfile, error) {
 	return nil, nil
 }
-func (r *fakeChannelMemberRepo) Activate(context.Context, uuid.UUID, []uuid.UUID) (*member.MemberWithProfile, error) {
+func (r *fakeChannelMemberRepo) Activate(context.Context, uuid.UUID, []uuid.UUID) (*member.WithProfile, error) {
 	return nil, nil
 }
 
