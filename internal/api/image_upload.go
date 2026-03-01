@@ -58,7 +58,7 @@ func (h *ImageUploadHandler) UploadUserAvatar(c fiber.Ctx) error {
 	}
 
 	buf, err := h.readAndResize(c, h.maxAvatarDim, h.maxAvatarDim)
-	if err != nil {
+	if err != nil || buf == nil {
 		return err
 	}
 
@@ -126,7 +126,7 @@ func (h *ImageUploadHandler) UploadUserBanner(c fiber.Ctx) error {
 	}
 
 	buf, err := h.readAndResize(c, h.maxBannerW, h.maxBannerH)
-	if err != nil {
+	if err != nil || buf == nil {
 		return err
 	}
 
@@ -188,7 +188,7 @@ func (h *ImageUploadHandler) DeleteUserBanner(c fiber.Ctx) error {
 // UploadServerIcon handles PUT /api/v1/server/icon.
 func (h *ImageUploadHandler) UploadServerIcon(c fiber.Ctx) error {
 	buf, err := h.readAndResize(c, h.maxAvatarDim, h.maxAvatarDim)
-	if err != nil {
+	if err != nil || buf == nil {
 		return err
 	}
 
@@ -245,7 +245,7 @@ func (h *ImageUploadHandler) DeleteServerIcon(c fiber.Ctx) error {
 // UploadServerBanner handles PUT /api/v1/server/banner.
 func (h *ImageUploadHandler) UploadServerBanner(c fiber.Ctx) error {
 	buf, err := h.readAndResize(c, h.maxBannerW, h.maxBannerH)
-	if err != nil {
+	if err != nil || buf == nil {
 		return err
 	}
 
@@ -300,7 +300,8 @@ func (h *ImageUploadHandler) DeleteServerBanner(c fiber.Ctx) error {
 }
 
 // readAndResize extracts the multipart file, validates size and content type, decodes and resizes the image, and
-// returns the WebP-encoded result. On any validation failure it writes an error response and returns that error.
+// returns the WebP-encoded result. On validation failure it writes the error response directly and returns (nil, nil);
+// callers must check for a nil buffer before proceeding.
 func (h *ImageUploadHandler) readAndResize(c fiber.Ctx, maxW, maxH int) (*bytes.Buffer, error) {
 	fh, err := c.FormFile("file")
 	if err != nil {
