@@ -13,7 +13,7 @@ import (
 )
 
 const selectColumns = `m.id, m.channel_id, m.author_id, m.content, m.edited_at, m.reply_to_id, m.thread_id,
-m.pinned, m.deleted, m.created_at, m.updated_at,
+m.pinned, m.deleted, m.encrypted, m.created_at, m.updated_at,
 u.username, u.display_name, u.avatar_key`
 
 const baseJoin = "FROM messages m JOIN users u ON u.id = m.author_id"
@@ -48,10 +48,10 @@ func (r *PGRepository) Create(ctx context.Context, params CreateParams) (*Messag
 		}
 
 		row := tx.QueryRow(ctx,
-			`INSERT INTO messages (channel_id, author_id, content, reply_to_id, thread_id)
-			 VALUES ($1, $2, $3, $4, $5)
+			`INSERT INTO messages (channel_id, author_id, content, reply_to_id, thread_id, encrypted)
+			 VALUES ($1, $2, $3, $4, $5, $6)
 			 RETURNING id, created_at, updated_at`,
-			params.ChannelID, params.AuthorID, params.Content, params.ReplyToID, params.ThreadID,
+			params.ChannelID, params.AuthorID, params.Content, params.ReplyToID, params.ThreadID, params.Encrypted,
 		)
 
 		msg.ChannelID = params.ChannelID
@@ -59,6 +59,7 @@ func (r *PGRepository) Create(ctx context.Context, params CreateParams) (*Messag
 		msg.Content = params.Content
 		msg.ReplyToID = params.ReplyToID
 		msg.ThreadID = params.ThreadID
+		msg.Encrypted = params.Encrypted
 		if err := row.Scan(&msg.ID, &msg.CreatedAt, &msg.UpdatedAt); err != nil {
 			return fmt.Errorf("insert message: %w", err)
 		}
@@ -292,7 +293,7 @@ func scanMessage(row pgx.Row) (*Message, error) {
 	var msg Message
 	err := row.Scan(
 		&msg.ID, &msg.ChannelID, &msg.AuthorID, &msg.Content, &msg.EditedAt, &msg.ReplyToID, &msg.ThreadID,
-		&msg.Pinned, &msg.Deleted, &msg.CreatedAt, &msg.UpdatedAt,
+		&msg.Pinned, &msg.Deleted, &msg.Encrypted, &msg.CreatedAt, &msg.UpdatedAt,
 		&msg.AuthorUsername, &msg.AuthorDisplayName, &msg.AuthorAvatarKey,
 	)
 	if err != nil {

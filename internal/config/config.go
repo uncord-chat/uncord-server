@@ -150,6 +150,11 @@ type Config struct {
 	// Data Retention
 	DataCleanupInterval time.Duration // How often the retention cleanup goroutine runs. Default: 12h.
 
+	// E2EE
+	E2EEOPKLowThreshold   int // Number of remaining OPKs that triggers a KEY_BUNDLE_LOW event. Default: 10.
+	E2EEMaxOPKBatch       int // Maximum one-time pre-keys per upload batch. Default: 100.
+	E2EEMaxDevicesPerUser int // Maximum registered devices per user. Default: 5.
+
 	// CORS
 	CORSAllowOrigins string
 }
@@ -265,6 +270,10 @@ func Load() (*Config, error) {
 		DeletionTombstoneRetention: p.duration("DELETION_TOMBSTONE_RETENTION", 0),
 
 		DataCleanupInterval: p.duration("DATA_CLEANUP_INTERVAL", 12*time.Hour),
+
+		E2EEOPKLowThreshold:   p.int("E2EE_OPK_LOW_THRESHOLD", 10),
+		E2EEMaxOPKBatch:       p.int("E2EE_MAX_OPK_BATCH", 100),
+		E2EEMaxDevicesPerUser: p.int("E2EE_MAX_DEVICES_PER_USER", 5),
 
 		CORSAllowOrigins: envStr("CORS_ALLOW_ORIGINS", "*"),
 	}
@@ -512,6 +521,16 @@ func (c *Config) validate() error {
 	}
 	if c.DataCleanupInterval < time.Minute {
 		errs = append(errs, fmt.Errorf("DATA_CLEANUP_INTERVAL must be at least 1m"))
+	}
+
+	if c.E2EEOPKLowThreshold < 1 {
+		errs = append(errs, fmt.Errorf("E2EE_OPK_LOW_THRESHOLD must be at least 1"))
+	}
+	if c.E2EEMaxOPKBatch < 1 {
+		errs = append(errs, fmt.Errorf("E2EE_MAX_OPK_BATCH must be at least 1"))
+	}
+	if c.E2EEMaxDevicesPerUser < 1 {
+		errs = append(errs, fmt.Errorf("E2EE_MAX_DEVICES_PER_USER must be at least 1"))
 	}
 
 	if c.SMTPHost != "" {

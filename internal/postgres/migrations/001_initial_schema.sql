@@ -122,7 +122,7 @@ CREATE INDEX idx_channels_category ON channels (category_id);
 
 CREATE TABLE messages (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    channel_id      UUID NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+    channel_id      UUID NOT NULL,
     author_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     content         TEXT NOT NULL DEFAULT '',
     edited_at       TIMESTAMPTZ,
@@ -130,6 +130,7 @@ CREATE TABLE messages (
     thread_id       UUID,  -- FK added after threads table creation
     pinned          BOOLEAN NOT NULL DEFAULT false,
     deleted         BOOLEAN NOT NULL DEFAULT false,
+    encrypted       BOOLEAN NOT NULL DEFAULT false,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -320,6 +321,67 @@ CREATE TABLE dm_participants (
 
 CREATE INDEX idx_dm_participants_user ON dm_participants (user_id);
 
+-- E2EE: User Devices
+
+CREATE TABLE user_devices (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    device_id    UUID NOT NULL,
+    label        TEXT,
+    identity_key BYTEA NOT NULL,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_device_identity_key_length CHECK (octet_length(identity_key) = 32)
+);
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON user_devices
+    FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
+
+CREATE UNIQUE INDEX idx_user_devices_user_device ON user_devices (user_id, device_id);
+CREATE INDEX idx_user_devices_user ON user_devices (user_id);
+
+-- E2EE: Signed Pre-Keys
+
+CREATE TABLE e2ee_signed_pre_keys (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    device_id  UUID NOT NULL REFERENCES user_devices(id) ON DELETE CASCADE,
+    key_id     INTEGER NOT NULL,
+    public_key BYTEA NOT NULL,
+    signature  BYTEA NOT NULL,
+    active     BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_spk_key_length CHECK (octet_length(public_key) = 32),
+    CONSTRAINT chk_spk_signature_length CHECK (octet_length(signature) = 64)
+);
+
+CREATE UNIQUE INDEX idx_spk_device_key ON e2ee_signed_pre_keys (device_id, key_id);
+CREATE INDEX idx_spk_device_active ON e2ee_signed_pre_keys (device_id) WHERE active = true;
+
+-- E2EE: One-Time Pre-Keys
+
+CREATE TABLE e2ee_one_time_pre_keys (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    device_id  UUID NOT NULL REFERENCES user_devices(id) ON DELETE CASCADE,
+    key_id     INTEGER NOT NULL,
+    public_key BYTEA NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_opk_key_length CHECK (octet_length(public_key) = 32)
+);
+
+CREATE UNIQUE INDEX idx_opk_device_key ON e2ee_one_time_pre_keys (device_id, key_id);
+CREATE INDEX idx_opk_device ON e2ee_one_time_pre_keys (device_id);
+
+-- E2EE: Per-Device Encrypted Message Keys
+
+CREATE TABLE dm_message_keys (
+    message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    device_id  UUID NOT NULL REFERENCES user_devices(id) ON DELETE CASCADE,
+    encrypted_key BYTEA NOT NULL,
+    PRIMARY KEY (message_id, device_id)
+);
+
+CREATE INDEX idx_dm_message_keys_device ON dm_message_keys (device_id);
+
 -- Custom Emoji
 
 CREATE TABLE custom_emoji (
@@ -480,7 +542,7 @@ CREATE TABLE user_ip_log (
 CREATE INDEX idx_ip_log_ip ON user_ip_log (ip_address);
 CREATE INDEX idx_ip_log_user ON user_ip_log (user_id, created_at DESC);
 
-CREATE TABLE user_devices (
+CREATE TABLE device_fingerprints (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     device_fingerprint TEXT NOT NULL,
@@ -491,8 +553,8 @@ CREATE TABLE user_devices (
     last_seen       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_devices_fingerprint ON user_devices (device_fingerprint);
-CREATE INDEX idx_devices_user ON user_devices (user_id);
+CREATE INDEX idx_device_fingerprints_fingerprint ON device_fingerprints (device_fingerprint);
+CREATE INDEX idx_device_fingerprints_user ON device_fingerprints (user_id);
 
 CREATE TABLE abuse_flags (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -586,7 +648,7 @@ DROP TABLE IF EXISTS login_attempts CASCADE;
 DROP TABLE IF EXISTS email_verifications CASCADE;
 DROP TABLE IF EXISTS registered_plugins CASCADE;
 DROP TABLE IF EXISTS abuse_flags CASCADE;
-DROP TABLE IF EXISTS user_devices CASCADE;
+DROP TABLE IF EXISTS device_fingerprints CASCADE;
 DROP TABLE IF EXISTS user_ip_log CASCADE;
 DROP TABLE IF EXISTS onboarding_config CASCADE;
 DROP TABLE IF EXISTS automod_rules CASCADE;
@@ -596,6 +658,10 @@ DROP TABLE IF EXISTS audit_log CASCADE;
 DROP TABLE IF EXISTS webhooks CASCADE;
 DROP TABLE IF EXISTS invites CASCADE;
 DROP TABLE IF EXISTS custom_emoji CASCADE;
+DROP TABLE IF EXISTS dm_message_keys CASCADE;
+DROP TABLE IF EXISTS e2ee_one_time_pre_keys CASCADE;
+DROP TABLE IF EXISTS e2ee_signed_pre_keys CASCADE;
+DROP TABLE IF EXISTS user_devices CASCADE;
 DROP TABLE IF EXISTS dm_participants CASCADE;
 DROP TABLE IF EXISTS dm_channels CASCADE;
 DROP TABLE IF EXISTS permission_overrides CASCADE;

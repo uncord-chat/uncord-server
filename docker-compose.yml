@@ -23,7 +23,7 @@ services:
     cpus: 1.0
 
   postgres:
-    image: postgres:18
+    image: postgres:18.3-alpine3.23
     environment:
       POSTGRES_DB: uncord
       POSTGRES_USER: uncord
@@ -40,7 +40,7 @@ services:
     cpus: 1.0
 
   valkey:
-    image: valkey/valkey:9
+    image: valkey/valkey:9.0-alpine3.23
     command: valkey-server --save 60 1 --loglevel warning
     volumes:
       - valkey_data:/data

@@ -78,6 +78,18 @@
 		{
 			"key": "thread_id",
 			"value": ""
+		},
+		{
+			"key": "dm_channel_id",
+			"value": ""
+		},
+		{
+			"key": "device_id",
+			"value": ""
+		},
+		{
+			"key": "device_row_id",
+			"value": ""
 		}
 	],
 	"item": [
@@ -2620,6 +2632,471 @@
 							]
 						},
 						"description": "Upgrades to a WebSocket connection. Authentication happens inside the WebSocket via Identify (op 2) after the upgrade completes."
+					}
+				}
+			]
+		},
+		{
+			"name": "E2EE Devices & Keys",
+			"item": [
+				{
+					"name": "Register Device",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const data = pm.response.json().data;",
+									"    pm.collectionVariables.set('device_row_id', data.id);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"device_id\": \"{{device_id}}\",\n  \"label\": \"My Laptop\",\n  \"identity_key\": \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/users/@me/devices",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"@me",
+								"devices"
+							]
+						}
+					}
+				},
+				{
+					"name": "List Devices",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/users/@me/devices",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"@me",
+								"devices"
+							]
+						}
+					}
+				},
+				{
+					"name": "Remove Device",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/users/@me/devices/{{device_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"@me",
+								"devices",
+								"{{device_id}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "Update Identity Key",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"identity_key\": \"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/users/@me/devices/{{device_id}}/identity-key",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"@me",
+								"devices",
+								"{{device_id}}",
+								"identity-key"
+							]
+						}
+					}
+				},
+				{
+					"name": "Upload Signed Pre-Key",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"key_id\": 1,\n  \"public_key\": \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\n  \"signature\": \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/users/@me/devices/{{device_id}}/signed-pre-key",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"@me",
+								"devices",
+								"{{device_id}}",
+								"signed-pre-key"
+							]
+						}
+					}
+				},
+				{
+					"name": "Upload One-Time Pre-Keys",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"pre_keys\": [\n    {\"key_id\": 1, \"public_key\": \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"},\n    {\"key_id\": 2, \"public_key\": \"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB\"}\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/users/@me/devices/{{device_id}}/one-time-pre-keys",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"@me",
+								"devices",
+								"{{device_id}}",
+								"one-time-pre-keys"
+							]
+						}
+					}
+				},
+				{
+					"name": "Get OPK Count",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/users/@me/devices/{{device_id}}/one-time-pre-keys/count",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"@me",
+								"devices",
+								"{{device_id}}",
+								"one-time-pre-keys",
+								"count"
+							]
+						}
+					}
+				},
+				{
+					"name": "Fetch Key Bundle",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/users/{{user_id}}/keys",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"{{user_id}}",
+								"keys"
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Direct Messages",
+			"item": [
+				{
+					"name": "Create DM Channel",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const data = pm.response.json().data;",
+									"    pm.collectionVariables.set('dm_channel_id', data.id);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"recipient_id\": \"{{user_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/users/@me/channels",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"@me",
+								"channels"
+							]
+						}
+					}
+				},
+				{
+					"name": "Create Group DM Channel",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const data = pm.response.json().data;",
+									"    pm.collectionVariables.set('dm_channel_id', data.id);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Test Group DM\",\n  \"participant_ids\": [\"{{user_id}}\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/users/@me/channels",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"@me",
+								"channels"
+							]
+						}
+					}
+				},
+				{
+					"name": "List DM Channels",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/users/@me/channels",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"@me",
+								"channels"
+							]
+						}
+					}
+				},
+				{
+					"name": "Get DM Channel",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8080/api/v1/dm/{{dm_channel_id}}",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"v1",
+								"dm",
+								"{{dm_channel_id}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "Add Participant",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"user_id\": \"{{user_id}}\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/v1/dm/{{dm_channel_id}}/participants",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"v1",
+								"dm",
+								"{{dm_channel_id}}",
+								"participants"
+							]
+						}
+					}
+				},
+				{
+					"name": "Remove Participant",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8080/api/v1/dm/{{dm_channel_id}}/participants/{{user_id}}",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"v1",
+								"dm",
+								"{{dm_channel_id}}",
+								"participants",
+								"{{user_id}}"
+							]
+						}
+					}
+				},
+				{
+					"name": "List DM Messages",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-Device-ID",
+								"value": "{{device_id}}"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8080/api/v1/dm/{{dm_channel_id}}/messages",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"v1",
+								"dm",
+								"{{dm_channel_id}}",
+								"messages"
+							]
+						}
+					}
+				},
+				{
+					"name": "Send DM Message",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const data = pm.response.json().data;",
+									"    pm.collectionVariables.set('message_id', data.id);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-Device-ID",
+								"value": "{{device_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"content\": \"base64-encoded-ciphertext-here\",\n  \"message_keys\": [\n    {\"device_id\": \"device-uuid-here\", \"encrypted_key\": \"base64-encoded-key-here\"}\n  ]\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/v1/dm/{{dm_channel_id}}/messages",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"v1",
+								"dm",
+								"{{dm_channel_id}}",
+								"messages"
+							]
+						}
 					}
 				}
 			]

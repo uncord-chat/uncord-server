@@ -497,12 +497,32 @@ func (h *Hub) handlePubSubEvent(ctx context.Context, payload string) {
 		}
 	}
 
+	// When the envelope carries target user IDs, deliver only to those users. Otherwise broadcast to all identified
+	// clients and apply channel-scoped permission filtering.
 	h.mu.RLock()
-	targets := make([]*Client, 0, h.totalClientsLocked())
-	for _, cs := range h.clients {
-		for _, c := range cs {
-			if c.IsIdentified() {
-				targets = append(targets, c)
+	var targets []*Client
+	if len(env.Targets) > 0 {
+		targetSet := make(map[uuid.UUID]struct{}, len(env.Targets))
+		for _, t := range env.Targets {
+			targetSet[t] = struct{}{}
+		}
+		for uid, cs := range h.clients {
+			if _, ok := targetSet[uid]; !ok {
+				continue
+			}
+			for _, c := range cs {
+				if c.IsIdentified() {
+					targets = append(targets, c)
+				}
+			}
+		}
+	} else {
+		targets = make([]*Client, 0, h.totalClientsLocked())
+		for _, cs := range h.clients {
+			for _, c := range cs {
+				if c.IsIdentified() {
+					targets = append(targets, c)
+				}
 			}
 		}
 	}
@@ -512,10 +532,10 @@ func (h *Hub) handlePubSubEvent(ctx context.Context, payload string) {
 		return
 	}
 
-	// For channel-scoped events, filter by ViewChannels permission. If the resolver is unavailable, skip filtering
-	// and deliver to all identified clients rather than silently dropping the event. Permission results are cached
-	// per user so that multiple connections from the same user do not trigger redundant resolver calls.
-	if isChannelScoped && h.resolver != nil {
+	// For channel-scoped events, filter by ViewChannels permission. Targeted events bypass permission filtering
+	// because the sender already determined the recipient set. Permission results are cached per user so that
+	// multiple connections from the same user do not trigger redundant resolver calls.
+	if isChannelScoped && h.resolver != nil && len(env.Targets) == 0 {
 		permCache := make(map[uuid.UUID]bool)
 		permitted := make([]*Client, 0, len(targets))
 		for _, c := range targets {

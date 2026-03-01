@@ -430,6 +430,7 @@ func buildMessageModel(m *message.Message, attachments []attachment.Attachment, 
 		ReplyToID:   replyToID,
 		ThreadID:    threadID,
 		Pinned:      m.Pinned,
+		Encrypted:   m.Encrypted,
 		EditedAt:    editedAt,
 		CreatedAt:   m.CreatedAt.Format(time.RFC3339),
 	}

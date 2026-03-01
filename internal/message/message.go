@@ -39,6 +39,7 @@ type Message struct {
 	ThreadID  *uuid.UUID
 	Pinned    bool
 	Deleted   bool
+	Encrypted bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
 
@@ -55,6 +56,7 @@ type CreateParams struct {
 	Content   string
 	ReplyToID *uuid.UUID
 	ThreadID  *uuid.UUID
+	Encrypted bool
 }
 
 // ValidateContent checks that content is non-empty after trimming and does not exceed the given maximum rune count.

@@ -37,6 +37,8 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/channel"
 	"github.com/uncord-chat/uncord-server/internal/config"
 	"github.com/uncord-chat/uncord-server/internal/disposable"
+	"github.com/uncord-chat/uncord-server/internal/dm"
+	"github.com/uncord-chat/uncord-server/internal/e2ee"
 	"github.com/uncord-chat/uncord-server/internal/email"
 	"github.com/uncord-chat/uncord-server/internal/emoji"
 	"github.com/uncord-chat/uncord-server/internal/gateway"
@@ -90,6 +92,8 @@ type server struct {
 	attachmentRepo   attachment.Repository
 	emojiRepo        emoji.Repository
 	reactionRepo     reaction.Repository
+	dmRepo           dm.Repository
+	e2eeRepo         e2ee.Repository
 	storage          media.StorageProvider
 	permStore        permission.OverrideStore
 	permReadStore    permission.Store
@@ -297,6 +301,8 @@ func run() error {
 	attachmentRepo := attachment.NewPGRepository(db)
 	emojiRepo := emoji.NewPGRepository(db)
 	reactionRepo := reaction.NewPGRepository(db)
+	dmRepo := dm.NewPGRepository(db)
+	e2eeRepo := e2ee.NewPGRepository(db, cfg.E2EEMaxDevicesPerUser)
 	typesenseIndexer := typesense.NewIndexer(cfg.TypesenseURL, cfg.TypesenseAPIKey.Expose(), cfg.TypesenseTimeout)
 	gatewayPub := gateway.NewPublisher(rdb, log.Logger, cfg.GatewayPublishWorkers, cfg.GatewayPublishQueueSize, cfg.GatewayPublishTimeout)
 	presenceStore := presence.NewStore(rdb)
@@ -359,6 +365,8 @@ func run() error {
 		attachmentRepo:   attachmentRepo,
 		emojiRepo:        emojiRepo,
 		reactionRepo:     reactionRepo,
+		dmRepo:           dmRepo,
+		e2eeRepo:         e2eeRepo,
 		storage:          storage,
 		authService:      authService,
 		permStore:        permStore,
@@ -482,6 +490,30 @@ func (s *server) registerRoutes(app *fiber.App) {
 	mfaGroup.Post("/confirm", mfaHandler.Confirm)
 	mfaGroup.Post("/disable", mfaHandler.Disable)
 	mfaGroup.Post("/recovery-codes", mfaHandler.RegenerateCodes)
+
+	// E2EE device and key management (under /api/v1/users, inherits auth + verified)
+	e2eeHandler := api.NewE2EEHandler(s.e2eeRepo, s.dmRepo, s.gatewayPublisher, s.cfg.E2EEOPKLowThreshold, log.Logger)
+	userGroup.Post("/@me/devices", e2eeHandler.RegisterDevice)
+	userGroup.Get("/@me/devices", e2eeHandler.ListDevices)
+	userGroup.Delete("/@me/devices/:deviceID", e2eeHandler.RemoveDevice)
+	userGroup.Put("/@me/devices/:deviceID/identity-key", e2eeHandler.UpdateIdentityKey)
+	userGroup.Put("/@me/devices/:deviceID/signed-pre-key", e2eeHandler.UploadSignedPreKey)
+	userGroup.Post("/@me/devices/:deviceID/one-time-pre-keys", e2eeHandler.UploadOneTimePreKeys)
+	userGroup.Get("/@me/devices/:deviceID/one-time-pre-keys/count", e2eeHandler.GetKeyCount)
+	userGroup.Get("/:userID/keys", e2eeHandler.FetchKeyBundle)
+
+	// DM channel management (under /api/v1/users/@me/channels)
+	dmHandler := api.NewDMHandler(s.dmRepo, s.messageRepo, s.e2eeRepo, s.gatewayPublisher, s.cfg.MaxMessageLength, log.Logger)
+	userGroup.Post("/@me/channels", dmHandler.CreateDMChannel)
+	userGroup.Get("/@me/channels", dmHandler.ListDMChannels)
+
+	// DM channel routes (under /api/v1/dm, auth + verified + participant check)
+	dmGroup := app.Group("/api/v1/dm", requireAuth, requireVerified)
+	dmGroup.Get("/:channelID", dmHandler.RequireParticipant, dmHandler.GetDMChannel)
+	dmGroup.Post("/:channelID/participants", dmHandler.RequireParticipant, dmHandler.AddParticipant)
+	dmGroup.Delete("/:channelID/participants/:userID", dmHandler.RequireParticipant, dmHandler.RemoveParticipant)
+	dmGroup.Get("/:channelID/messages", dmHandler.RequireParticipant, dmHandler.ListMessages)
+	dmGroup.Post("/:channelID/messages", dmHandler.RequireParticipant, dmHandler.SendMessage)
 
 	// Server config routes (authenticated + verified email)
 	serverHandler := api.NewServerHandler(s.serverRepo, log.Logger)
