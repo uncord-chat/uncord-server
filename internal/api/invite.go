@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"strconv"
 	"time"
@@ -11,6 +12,7 @@ import (
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 	"github.com/uncord-chat/uncord-protocol/models"
 
+	"github.com/uncord-chat/uncord-server/internal/audit"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 	"github.com/uncord-chat/uncord-server/internal/invite"
 	"github.com/uncord-chat/uncord-server/internal/member"
@@ -20,16 +22,17 @@ import (
 
 // InviteHandler serves invite endpoints.
 type InviteHandler struct {
-	invites    invite.Repository
-	onboarding onboarding.Repository
-	members    member.Repository
-	users      user.Repository
-	log        zerolog.Logger
+	invites     invite.Repository
+	onboarding  onboarding.Repository
+	members     member.Repository
+	users       user.Repository
+	auditLogger *audit.Logger
+	log         zerolog.Logger
 }
 
 // NewInviteHandler creates a new invite handler.
-func NewInviteHandler(invites invite.Repository, onboardingRepo onboarding.Repository, members member.Repository, users user.Repository, logger zerolog.Logger) *InviteHandler {
-	return &InviteHandler{invites: invites, onboarding: onboardingRepo, members: members, users: users, log: logger}
+func NewInviteHandler(invites invite.Repository, onboardingRepo onboarding.Repository, members member.Repository, users user.Repository, auditLogger *audit.Logger, logger zerolog.Logger) *InviteHandler {
+	return &InviteHandler{invites: invites, onboarding: onboardingRepo, members: members, users: users, auditLogger: auditLogger, log: logger}
 }
 
 // CreateInvite handles POST /api/v1/server/invites.
@@ -65,6 +68,13 @@ func (h *InviteHandler) CreateInvite(c fiber.Ctx) error {
 		return h.mapInviteError(c, err)
 	}
 
+	if h.auditLogger != nil {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.InviteCreate,
+			TargetType: audit.Ptr("invite"), TargetID: audit.UUIDPtr(inv.ID),
+		})
+	}
+
 	return httputil.SuccessStatus(c, fiber.StatusCreated, toInviteModel(inv))
 }
 
@@ -97,10 +107,24 @@ func (h *InviteHandler) ListInvites(c fiber.Ctx) error {
 
 // DeleteInvite handles DELETE /api/v1/invites/:code.
 func (h *InviteHandler) DeleteInvite(c fiber.Ctx) error {
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
+
 	code := c.Params("code")
 	if err := h.invites.Delete(c, code); err != nil {
 		return h.mapInviteError(c, err)
 	}
+
+	if h.auditLogger != nil {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.InviteDelete,
+			TargetType: audit.Ptr("invite"),
+			Changes:    audit.MarshalChanges(map[string]string{"code": code}),
+		})
+	}
+
 	return c.SendStatus(fiber.StatusNoContent)
 }
 

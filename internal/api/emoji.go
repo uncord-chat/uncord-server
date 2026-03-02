@@ -12,6 +12,7 @@ import (
 	"github.com/uncord-chat/uncord-protocol/events"
 	"github.com/uncord-chat/uncord-protocol/models"
 
+	"github.com/uncord-chat/uncord-server/internal/audit"
 	"github.com/uncord-chat/uncord-server/internal/emoji"
 	"github.com/uncord-chat/uncord-server/internal/gateway"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
@@ -20,13 +21,14 @@ import (
 
 // EmojiHandler serves custom emoji endpoints.
 type EmojiHandler struct {
-	emoji   emoji.Repository
-	storage media.StorageProvider
-	gateway *gateway.Publisher
-	maxSize int64
-	maxDim  int
-	limit   int
-	log     zerolog.Logger
+	emoji       emoji.Repository
+	storage     media.StorageProvider
+	gateway     *gateway.Publisher
+	maxSize     int64
+	maxDim      int
+	limit       int
+	auditLogger *audit.Logger
+	log         zerolog.Logger
 }
 
 // NewEmojiHandler creates a new emoji handler.
@@ -37,16 +39,18 @@ func NewEmojiHandler(
 	maxSize int64,
 	maxDim int,
 	limit int,
+	auditLogger *audit.Logger,
 	logger zerolog.Logger,
 ) *EmojiHandler {
 	return &EmojiHandler{
-		emoji:   emojiRepo,
-		storage: storage,
-		gateway: gw,
-		maxSize: maxSize,
-		maxDim:  maxDim,
-		limit:   limit,
-		log:     logger,
+		emoji:       emojiRepo,
+		storage:     storage,
+		gateway:     gw,
+		maxSize:     maxSize,
+		maxDim:      maxDim,
+		limit:       limit,
+		auditLogger: auditLogger,
+		log:         logger,
 	}
 }
 
@@ -135,6 +139,13 @@ func (h *EmojiHandler) CreateEmoji(c fiber.Ctx) error {
 		return h.mapEmojiError(c, err)
 	}
 
+	if h.auditLogger != nil {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.EmojiCreate,
+			TargetType: audit.Ptr("emoji"), TargetID: audit.UUIDPtr(created.ID),
+		})
+	}
+
 	h.publishEmojiUpdate()
 
 	return httputil.SuccessStatus(c, fiber.StatusCreated, created.ToModel(h.storage.URL(created.StorageKey)))
@@ -142,6 +153,11 @@ func (h *EmojiHandler) CreateEmoji(c fiber.Ctx) error {
 
 // UpdateEmoji handles PATCH /api/v1/server/emoji/:emojiID.
 func (h *EmojiHandler) UpdateEmoji(c fiber.Ctx) error {
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
+
 	emojiID, err := uuid.Parse(c.Params("emojiID"))
 	if err != nil {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid emoji ID format")
@@ -161,6 +177,13 @@ func (h *EmojiHandler) UpdateEmoji(c fiber.Ctx) error {
 		return h.mapEmojiError(c, err)
 	}
 
+	if h.auditLogger != nil {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.EmojiUpdate,
+			TargetType: audit.Ptr("emoji"), TargetID: audit.UUIDPtr(emojiID),
+		})
+	}
+
 	h.publishEmojiUpdate()
 
 	return httputil.Success(c, updated.ToModel(h.storage.URL(updated.StorageKey)))
@@ -168,6 +191,11 @@ func (h *EmojiHandler) UpdateEmoji(c fiber.Ctx) error {
 
 // DeleteEmoji handles DELETE /api/v1/server/emoji/:emojiID.
 func (h *EmojiHandler) DeleteEmoji(c fiber.Ctx) error {
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
+
 	emojiID, err := uuid.Parse(c.Params("emojiID"))
 	if err != nil {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid emoji ID format")
@@ -180,6 +208,13 @@ func (h *EmojiHandler) DeleteEmoji(c fiber.Ctx) error {
 
 	if err := h.emoji.Delete(c, emojiID); err != nil {
 		return h.mapEmojiError(c, err)
+	}
+
+	if h.auditLogger != nil {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.EmojiDelete,
+			TargetType: audit.Ptr("emoji"), TargetID: audit.UUIDPtr(emojiID),
+		})
 	}
 
 	if delErr := h.storage.Delete(c.Context(), existing.StorageKey); delErr != nil {

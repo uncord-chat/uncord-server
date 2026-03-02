@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 	"github.com/uncord-chat/uncord-protocol/models"
 
+	"github.com/uncord-chat/uncord-server/internal/audit"
 	"github.com/uncord-chat/uncord-server/internal/category"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 )
@@ -18,12 +20,13 @@ import (
 type CategoryHandler struct {
 	categories    category.Repository
 	maxCategories int
+	auditLogger   *audit.Logger
 	log           zerolog.Logger
 }
 
 // NewCategoryHandler creates a new category handler.
-func NewCategoryHandler(categories category.Repository, maxCategories int, logger zerolog.Logger) *CategoryHandler {
-	return &CategoryHandler{categories: categories, maxCategories: maxCategories, log: logger}
+func NewCategoryHandler(categories category.Repository, maxCategories int, auditLogger *audit.Logger, logger zerolog.Logger) *CategoryHandler {
+	return &CategoryHandler{categories: categories, maxCategories: maxCategories, auditLogger: auditLogger, log: logger}
 }
 
 // ListCategories handles GET /api/v1/server/categories.
@@ -43,6 +46,11 @@ func (h *CategoryHandler) ListCategories(c fiber.Ctx) error {
 
 // CreateCategory handles POST /api/v1/server/categories.
 func (h *CategoryHandler) CreateCategory(c fiber.Ctx) error {
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
+
 	var body models.CreateCategoryRequest
 	if err := c.Bind().Body(&body); err != nil {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "Invalid request body")
@@ -58,11 +66,23 @@ func (h *CategoryHandler) CreateCategory(c fiber.Ctx) error {
 		return h.mapCategoryError(c, err)
 	}
 
+	if h.auditLogger != nil {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.CategoryCreate,
+			TargetType: audit.Ptr("category"), TargetID: audit.UUIDPtr(cat.ID),
+		})
+	}
+
 	return httputil.SuccessStatus(c, fiber.StatusCreated, toCategoryModel(cat))
 }
 
 // UpdateCategory handles PATCH /api/v1/categories/:categoryID.
 func (h *CategoryHandler) UpdateCategory(c fiber.Ctx) error {
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
+
 	id, err := uuid.Parse(c.Params("categoryID"))
 	if err != nil {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid category ID format")
@@ -88,11 +108,23 @@ func (h *CategoryHandler) UpdateCategory(c fiber.Ctx) error {
 		return h.mapCategoryError(c, err)
 	}
 
+	if h.auditLogger != nil {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.CategoryUpdate,
+			TargetType: audit.Ptr("category"), TargetID: audit.UUIDPtr(id),
+		})
+	}
+
 	return httputil.Success(c, toCategoryModel(cat))
 }
 
 // DeleteCategory handles DELETE /api/v1/categories/:categoryID.
 func (h *CategoryHandler) DeleteCategory(c fiber.Ctx) error {
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
+
 	id, err := uuid.Parse(c.Params("categoryID"))
 	if err != nil {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid category ID format")
@@ -100,6 +132,13 @@ func (h *CategoryHandler) DeleteCategory(c fiber.Ctx) error {
 
 	if err := h.categories.Delete(c, id); err != nil {
 		return h.mapCategoryError(c, err)
+	}
+
+	if h.auditLogger != nil {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.CategoryDelete,
+			TargetType: audit.Ptr("category"), TargetID: audit.UUIDPtr(id),
+		})
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)

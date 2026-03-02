@@ -31,6 +31,7 @@ import (
 
 	"github.com/uncord-chat/uncord-server/internal/api"
 	"github.com/uncord-chat/uncord-server/internal/attachment"
+	"github.com/uncord-chat/uncord-server/internal/audit"
 	"github.com/uncord-chat/uncord-server/internal/auth"
 	"github.com/uncord-chat/uncord-server/internal/bootstrap"
 	"github.com/uncord-chat/uncord-server/internal/category"
@@ -103,6 +104,8 @@ type server struct {
 	gatewayPublisher *gateway.Publisher
 	gatewayHub       *gateway.Hub
 	presenceStore    *presence.Store
+	auditRepo        audit.Repository
+	auditLogger      *audit.Logger
 	verifyPageTmpl   *template.Template
 }
 
@@ -306,6 +309,8 @@ func run() error {
 	typesenseIndexer := typesense.NewIndexer(cfg.TypesenseURL, cfg.TypesenseAPIKey.Expose(), cfg.TypesenseTimeout)
 	gatewayPub := gateway.NewPublisher(rdb, log.Logger, cfg.GatewayPublishWorkers, cfg.GatewayPublishQueueSize, cfg.GatewayPublishTimeout)
 	presenceStore := presence.NewStore(rdb)
+	auditRepo := audit.NewPGRepository(db)
+	auditLogger := audit.NewLogger(auditRepo, log.Logger)
 	startPurgeGoroutine(attachmentRepo, storage)
 
 	// Start thumbnail worker with reconnection.
@@ -377,6 +382,8 @@ func run() error {
 		gatewayPublisher: gatewayPub,
 		gatewayHub:       gatewayHub,
 		presenceStore:    presenceStore,
+		auditRepo:        auditRepo,
+		auditLogger:      auditLogger,
 		verifyPageTmpl:   verifyPageTmpl,
 	}
 	srv.registerRoutes(app)
@@ -516,7 +523,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 	dmGroup.Post("/:channelID/messages", dmHandler.RequireParticipant, dmHandler.SendMessage)
 
 	// Server config routes (authenticated + verified email)
-	serverHandler := api.NewServerHandler(s.serverRepo, log.Logger)
+	serverHandler := api.NewServerHandler(s.serverRepo, s.auditLogger, log.Logger)
 	app.Get("/api/v1/server/info", serverHandler.GetPublicInfo)
 	serverGroup := app.Group("/api/v1/server", requireAuth, requireVerified)
 	serverGroup.Get("/", serverHandler.Get)
@@ -535,9 +542,15 @@ func (s *server) registerRoutes(app *fiber.App) {
 		permission.RequireServerPermission(s.permResolver, permissions.ManageServer),
 		imageHandler.DeleteServerBanner)
 
+	// Audit log route (requires active membership and ViewAuditLog permission)
+	auditHandler := api.NewAuditHandler(s.auditRepo, log.Logger)
+	serverGroup.Get("/audit-log", requireActive,
+		permission.RequireServerPermission(s.permResolver, permissions.ViewAuditLog),
+		auditHandler.List)
+
 	// Emoji routes (under /api/v1/server/emoji, all require active membership)
 	emojiHandler := api.NewEmojiHandler(s.emojiRepo, s.storage, s.gatewayPublisher,
-		s.cfg.MaxEmojiSizeBytes(), 128, s.cfg.MaxEmojiPerServer, log.Logger)
+		s.cfg.MaxEmojiSizeBytes(), 128, s.cfg.MaxEmojiPerServer, s.auditLogger, log.Logger)
 	serverGroup.Get("/emoji", requireActive, emojiHandler.ListEmoji)
 	serverGroup.Post("/emoji", requireActive,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageEmoji),
@@ -550,7 +563,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 		emojiHandler.DeleteEmoji)
 
 	// Channel routes (server group: list is open to pending, create requires active)
-	channelHandler := api.NewChannelHandler(s.channelRepo, s.memberRepo, s.onboardingRepo, s.permResolver, s.gatewayPublisher, s.cfg.MaxChannels, log.Logger)
+	channelHandler := api.NewChannelHandler(s.channelRepo, s.memberRepo, s.onboardingRepo, s.permResolver, s.gatewayPublisher, s.cfg.MaxChannels, s.auditLogger, log.Logger)
 	serverGroup.Get("/channels", channelHandler.ListChannels)
 	serverGroup.Post("/channels", requireActive,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageChannels),
@@ -569,7 +582,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 		channelHandler.DeleteChannel)
 
 	// Permission override routes
-	permHandler := api.NewPermissionHandler(s.permStore, s.permResolver, s.permPublisher, log.Logger)
+	permHandler := api.NewPermissionHandler(s.permStore, s.permResolver, s.permPublisher, s.auditLogger, log.Logger)
 	channelGroup.Put("/:channelID/overrides/:targetID",
 		permission.RequireServerPermission(s.permResolver, permissions.ManageRoles),
 		permHandler.SetOverride)
@@ -595,7 +608,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 	// Message routes (nested under channels for list and create, inherits active requirement)
 	messageHandler := api.NewMessageHandler(
 		s.messageRepo, s.attachmentRepo, s.reactionRepo, s.storage, s.permResolver, s.typesenseIndexer,
-		s.gatewayPublisher, s.presenceStore, s.cfg.MaxMessageLength, s.cfg.MaxAttachmentsPerMessage, log.Logger)
+		s.gatewayPublisher, s.presenceStore, s.cfg.MaxMessageLength, s.cfg.MaxAttachmentsPerMessage, s.auditLogger, log.Logger)
 	channelGroup.Get("/:channelID/messages",
 		permission.RequirePermission(s.permResolver, permissions.ViewChannels|permissions.ReadMessageHistory),
 		messageHandler.ListMessages)
@@ -661,7 +674,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 	// Pinned messages (under /api/v1/channels, ViewChannels via middleware)
 	pinHandler := api.NewPinHandler(
 		s.messageRepo, s.attachmentRepo, s.reactionRepo, s.storage,
-		s.permResolver, s.gatewayPublisher, log.Logger)
+		s.permResolver, s.gatewayPublisher, s.auditLogger, log.Logger)
 	channelGroup.Get("/:channelID/pins",
 		permission.RequirePermission(s.permResolver, permissions.ViewChannels),
 		pinHandler.ListPins)
@@ -692,7 +705,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 		searchHandler.SearchMessages)
 
 	// Category routes (server group routes need per-route active, standalone group requires active)
-	categoryHandler := api.NewCategoryHandler(s.categoryRepo, s.cfg.MaxCategories, log.Logger)
+	categoryHandler := api.NewCategoryHandler(s.categoryRepo, s.cfg.MaxCategories, s.auditLogger, log.Logger)
 	serverGroup.Get("/categories", requireActive, categoryHandler.ListCategories)
 	serverGroup.Post("/categories", requireActive,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageCategories),
@@ -707,7 +720,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 		categoryHandler.DeleteCategory)
 
 	// Role routes (all require active membership)
-	roleHandler := api.NewRoleHandler(s.roleRepo, s.permPublisher, s.gatewayPublisher, s.cfg.MaxRoles, log.Logger)
+	roleHandler := api.NewRoleHandler(s.roleRepo, s.permPublisher, s.gatewayPublisher, s.cfg.MaxRoles, s.auditLogger, log.Logger)
 	serverGroup.Get("/roles", requireActive, roleHandler.ListRoles)
 	serverGroup.Post("/roles", requireActive,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageRoles),
@@ -720,7 +733,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 		roleHandler.DeleteRole)
 
 	// Invite management routes (under /api/v1/server, require active membership)
-	inviteHandler := api.NewInviteHandler(s.inviteRepo, s.onboardingRepo, s.memberRepo, s.userRepo, log.Logger)
+	inviteHandler := api.NewInviteHandler(s.inviteRepo, s.onboardingRepo, s.memberRepo, s.userRepo, s.auditLogger, log.Logger)
 	serverGroup.Post("/invites", requireActive,
 		permission.RequireServerPermission(s.permResolver, permissions.CreateInvites),
 		inviteHandler.CreateInvite)
@@ -737,7 +750,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 	inviteGroup.Post("/:code/join", inviteHandler.JoinViaInvite)
 
 	// Onboarding routes
-	onboardingHandler := api.NewOnboardingHandler(s.onboardingRepo, s.documentStore, s.memberRepo, s.userRepo, s.serverRepo, s.gatewayPublisher, log.Logger)
+	onboardingHandler := api.NewOnboardingHandler(s.onboardingRepo, s.documentStore, s.memberRepo, s.userRepo, s.serverRepo, s.gatewayPublisher, s.auditLogger, log.Logger)
 	app.Get("/api/v1/onboarding/status", requireAuth, onboardingHandler.GetOnboardingStatus)
 	app.Get("/api/v1/onboarding", requireAuth, onboardingHandler.GetOnboarding)
 	app.Patch("/api/v1/onboarding", requireAuth, requireVerified, requireActive, onboardingHandler.UpdateOnboarding)
@@ -745,7 +758,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 	serverGroup.Post("/join", onboardingHandler.JoinServer)
 
 	// Member routes (mixed: some require active, some do not)
-	memberHandler := api.NewMemberHandler(s.memberRepo, s.roleRepo, s.permReadStore, s.permResolver, s.permPublisher, s.gatewayPublisher, log.Logger)
+	memberHandler := api.NewMemberHandler(s.memberRepo, s.roleRepo, s.permReadStore, s.permResolver, s.permPublisher, s.gatewayPublisher, s.auditLogger, log.Logger)
 
 	// Channel member listing (which server members can see this channel)
 	channelGroup.Get("/:channelID/members",

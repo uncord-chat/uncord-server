@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 
 	"github.com/gofiber/fiber/v3"
@@ -10,6 +11,7 @@ import (
 	"github.com/uncord-chat/uncord-protocol/events"
 	"github.com/uncord-chat/uncord-protocol/models"
 
+	"github.com/uncord-chat/uncord-server/internal/audit"
 	"github.com/uncord-chat/uncord-server/internal/gateway"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 	"github.com/uncord-chat/uncord-server/internal/permission"
@@ -18,16 +20,17 @@ import (
 
 // RoleHandler serves role endpoints.
 type RoleHandler struct {
-	roles    role.Repository
-	perms    *permission.Publisher
-	gateway  *gateway.Publisher
-	maxRoles int
-	log      zerolog.Logger
+	roles       role.Repository
+	perms       *permission.Publisher
+	gateway     *gateway.Publisher
+	maxRoles    int
+	auditLogger *audit.Logger
+	log         zerolog.Logger
 }
 
 // NewRoleHandler creates a new role handler.
-func NewRoleHandler(roles role.Repository, perms *permission.Publisher, gw *gateway.Publisher, maxRoles int, logger zerolog.Logger) *RoleHandler {
-	return &RoleHandler{roles: roles, perms: perms, gateway: gw, maxRoles: maxRoles, log: logger}
+func NewRoleHandler(roles role.Repository, perms *permission.Publisher, gw *gateway.Publisher, maxRoles int, auditLogger *audit.Logger, logger zerolog.Logger) *RoleHandler {
+	return &RoleHandler{roles: roles, perms: perms, gateway: gw, maxRoles: maxRoles, auditLogger: auditLogger, log: logger}
 }
 
 // ListRoles handles GET /api/v1/server/roles.
@@ -47,6 +50,11 @@ func (h *RoleHandler) ListRoles(c fiber.Ctx) error {
 
 // CreateRole handles POST /api/v1/server/roles.
 func (h *RoleHandler) CreateRole(c fiber.Ctx) error {
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
+
 	var body models.CreateRoleRequest
 	if err := c.Bind().Body(&body); err != nil {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "Invalid request body")
@@ -77,6 +85,13 @@ func (h *RoleHandler) CreateRole(c fiber.Ctx) error {
 	created, err := h.roles.Create(c, params, h.maxRoles)
 	if err != nil {
 		return h.mapRoleError(c, err)
+	}
+
+	if h.auditLogger != nil {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.RoleCreate,
+			TargetType: audit.Ptr("role"), TargetID: audit.UUIDPtr(created.ID),
+		})
 	}
 
 	result := created.ToModel()
@@ -158,6 +173,13 @@ func (h *RoleHandler) UpdateRole(c fiber.Ctx) error {
 		return h.mapRoleError(c, err)
 	}
 
+	if h.auditLogger != nil {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.RoleUpdate,
+			TargetType: audit.Ptr("role"), TargetID: audit.UUIDPtr(id),
+		})
+	}
+
 	result := updated.ToModel()
 	if h.gateway != nil {
 		h.gateway.Enqueue(events.RoleUpdate, result)
@@ -202,6 +224,13 @@ func (h *RoleHandler) DeleteRole(c fiber.Ctx) error {
 
 	if err := h.roles.Delete(c, id); err != nil {
 		return h.mapRoleError(c, err)
+	}
+
+	if h.auditLogger != nil {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.RoleDelete,
+			TargetType: audit.Ptr("role"), TargetID: audit.UUIDPtr(id),
+		})
 	}
 
 	if h.gateway != nil {

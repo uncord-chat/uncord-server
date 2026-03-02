@@ -95,7 +95,7 @@ func seedCategory(repo *fakeCategoryRepo) *category.Category {
 
 func testCategoryApp(t *testing.T, repo category.Repository, userID uuid.UUID) *fiber.App {
 	t.Helper()
-	handler := NewCategoryHandler(repo, 50, zerolog.Nop())
+	handler := NewCategoryHandler(repo, 50, nil, zerolog.Nop())
 	app := fiber.New()
 
 	app.Use(fakeAuth(userID))

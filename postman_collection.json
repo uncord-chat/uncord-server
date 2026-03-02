@@ -978,6 +978,54 @@
 							]
 						}
 					}
+				},
+				{
+					"name": "Get Audit Log",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/server/audit-log?limit=50",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"server",
+								"audit-log"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "50",
+									"description": "Number of entries to return (1-100, default 50)"
+								},
+								{
+									"key": "before",
+									"value": "",
+									"description": "Cursor for pagination (audit log entry ID)",
+									"disabled": true
+								},
+								{
+									"key": "actor_id",
+									"value": "",
+									"description": "Filter by the user who performed the action",
+									"disabled": true
+								},
+								{
+									"key": "action_type",
+									"value": "",
+									"description": "Filter by action type (e.g. role.create, member.ban)",
+									"disabled": true
+								},
+								{
+									"key": "target_id",
+									"value": "",
+									"description": "Filter by target entity ID",
+									"disabled": true
+								}
+							]
+						}
+					}
 				}
 			]
 		},

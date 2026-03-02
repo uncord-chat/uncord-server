@@ -16,6 +16,7 @@ import (
 	"github.com/uncord-chat/uncord-protocol/permissions"
 
 	"github.com/uncord-chat/uncord-server/internal/attachment"
+	"github.com/uncord-chat/uncord-server/internal/audit"
 	"github.com/uncord-chat/uncord-server/internal/gateway"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 	"github.com/uncord-chat/uncord-server/internal/media"
@@ -38,6 +39,7 @@ type MessageHandler struct {
 	presence       *presence.Store
 	maxContent     int
 	maxAttachments int
+	auditLogger    *audit.Logger
 	log            zerolog.Logger
 }
 
@@ -53,6 +55,7 @@ func NewMessageHandler(
 	presenceStore *presence.Store,
 	maxContent int,
 	maxAttachments int,
+	auditLogger *audit.Logger,
 	logger zerolog.Logger,
 ) *MessageHandler {
 	return &MessageHandler{
@@ -66,6 +69,7 @@ func NewMessageHandler(
 		presence:       presenceStore,
 		maxContent:     maxContent,
 		maxAttachments: maxAttachments,
+		auditLogger:    auditLogger,
 		log:            logger,
 	}
 }
@@ -343,6 +347,14 @@ func (h *MessageHandler) DeleteMessage(c fiber.Ctx) error {
 
 	if err := h.messages.SoftDelete(c, messageID); err != nil {
 		return h.mapMessageError(c, err)
+	}
+
+	// Audit log only for moderator deletions (when the actor is not the author).
+	if h.auditLogger != nil && existing.AuthorID != userID {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.MessageDelete,
+			TargetType: audit.Ptr("message"), TargetID: audit.UUIDPtr(messageID),
+		})
 	}
 
 	// Best-effort Typesense deletion. Uses context.Background because Fiber recycles the request context after the

@@ -64,7 +64,7 @@ func (s *fakeOverrideStore) Delete(_ context.Context, targetType permission.Targ
 
 func testPermissionApp(t *testing.T, overrides permission.OverrideStore, resolver *permission.Resolver, userID uuid.UUID) *fiber.App {
 	t.Helper()
-	handler := NewPermissionHandler(overrides, resolver, nil, zerolog.Nop())
+	handler := NewPermissionHandler(overrides, resolver, nil, nil, zerolog.Nop())
 	app := fiber.New()
 
 	app.Use(fakeAuth(userID))

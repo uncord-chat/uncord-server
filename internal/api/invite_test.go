@@ -311,7 +311,7 @@ func seedInvite(repo *fakeInviteRepo, code string, channelID uuid.UUID) *invite.
 
 func testInviteApp(t *testing.T, inviteRepo *fakeInviteRepo, onboardingRepo *fakeInviteOnboardingRepo, memberRepo *fakeInviteMemberRepo, userRepo *fakeInviteUserRepo, callerID uuid.UUID) *fiber.App {
 	t.Helper()
-	handler := NewInviteHandler(inviteRepo, onboardingRepo, memberRepo, userRepo, zerolog.Nop())
+	handler := NewInviteHandler(inviteRepo, onboardingRepo, memberRepo, userRepo, nil, zerolog.Nop())
 	app := fiber.New()
 	app.Use(fakeAuth(callerID))
 

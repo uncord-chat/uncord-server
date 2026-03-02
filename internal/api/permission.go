@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -11,25 +12,32 @@ import (
 	"github.com/uncord-chat/uncord-protocol/models"
 	"github.com/uncord-chat/uncord-protocol/permissions"
 
+	"github.com/uncord-chat/uncord-server/internal/audit"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 	"github.com/uncord-chat/uncord-server/internal/permission"
 )
 
 // PermissionHandler serves permission override endpoints.
 type PermissionHandler struct {
-	overrides permission.OverrideStore
-	resolver  *permission.Resolver
-	perms     *permission.Publisher
-	log       zerolog.Logger
+	overrides   permission.OverrideStore
+	resolver    *permission.Resolver
+	perms       *permission.Publisher
+	auditLogger *audit.Logger
+	log         zerolog.Logger
 }
 
 // NewPermissionHandler creates a new permission handler.
-func NewPermissionHandler(overrides permission.OverrideStore, resolver *permission.Resolver, perms *permission.Publisher, logger zerolog.Logger) *PermissionHandler {
-	return &PermissionHandler{overrides: overrides, resolver: resolver, perms: perms, log: logger}
+func NewPermissionHandler(overrides permission.OverrideStore, resolver *permission.Resolver, perms *permission.Publisher, auditLogger *audit.Logger, logger zerolog.Logger) *PermissionHandler {
+	return &PermissionHandler{overrides: overrides, resolver: resolver, perms: perms, auditLogger: auditLogger, log: logger}
 }
 
 // SetOverride handles PUT /api/v1/channels/:channelID/overrides/:targetID.
 func (h *PermissionHandler) SetOverride(c fiber.Ctx) error {
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
+
 	channelID, err := uuid.Parse(c.Params("channelID"))
 	if err != nil {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
@@ -60,6 +68,17 @@ func (h *PermissionHandler) SetOverride(c fiber.Ctx) error {
 		return h.mapOverrideError(c, err)
 	}
 
+	if h.auditLogger != nil {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.OverrideSet,
+			TargetType: audit.Ptr("channel"), TargetID: audit.UUIDPtr(channelID),
+			Changes: audit.MarshalChanges(map[string]any{
+				"target_id": targetID.String(), "type": string(principalType),
+				"allow": body.Allow, "deny": body.Deny,
+			}),
+		})
+	}
+
 	if h.perms != nil {
 		if err := h.perms.InvalidateChannel(c, channelID); err != nil {
 			h.log.Warn().Err(err).Msg("failed to invalidate permission cache after override upsert")
@@ -71,6 +90,11 @@ func (h *PermissionHandler) SetOverride(c fiber.Ctx) error {
 
 // DeleteOverride handles DELETE /api/v1/channels/:channelID/overrides/:targetID.
 func (h *PermissionHandler) DeleteOverride(c fiber.Ctx) error {
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
+
 	channelID, err := uuid.Parse(c.Params("channelID"))
 	if err != nil {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
@@ -88,6 +112,16 @@ func (h *PermissionHandler) DeleteOverride(c fiber.Ctx) error {
 
 	if err := h.overrides.Delete(c, permission.TargetChannel, channelID, principalType, targetID); err != nil {
 		return h.mapOverrideError(c, err)
+	}
+
+	if h.auditLogger != nil {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.OverrideDelete,
+			TargetType: audit.Ptr("channel"), TargetID: audit.UUIDPtr(channelID),
+			Changes: audit.MarshalChanges(map[string]any{
+				"target_id": targetID.String(), "type": string(principalType),
+			}),
+		})
 	}
 
 	if h.perms != nil {

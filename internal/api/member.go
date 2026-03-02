@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/uncord-chat/uncord-protocol/permissions"
 
+	"github.com/uncord-chat/uncord-server/internal/audit"
 	"github.com/uncord-chat/uncord-server/internal/gateway"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 	"github.com/uncord-chat/uncord-server/internal/member"
@@ -24,18 +26,19 @@ import (
 
 // MemberHandler serves member and ban endpoints.
 type MemberHandler struct {
-	members  member.Repository
-	roles    role.Repository
-	perms    permission.Store
-	resolver *permission.Resolver
-	pub      *permission.Publisher
-	gateway  *gateway.Publisher
-	log      zerolog.Logger
+	members     member.Repository
+	roles       role.Repository
+	perms       permission.Store
+	resolver    *permission.Resolver
+	pub         *permission.Publisher
+	gateway     *gateway.Publisher
+	auditLogger *audit.Logger
+	log         zerolog.Logger
 }
 
 // NewMemberHandler creates a new member handler.
-func NewMemberHandler(members member.Repository, roles role.Repository, perms permission.Store, resolver *permission.Resolver, pub *permission.Publisher, gw *gateway.Publisher, logger zerolog.Logger) *MemberHandler {
-	return &MemberHandler{members: members, roles: roles, perms: perms, resolver: resolver, pub: pub, gateway: gw, log: logger}
+func NewMemberHandler(members member.Repository, roles role.Repository, perms permission.Store, resolver *permission.Resolver, pub *permission.Publisher, gw *gateway.Publisher, auditLogger *audit.Logger, logger zerolog.Logger) *MemberHandler {
+	return &MemberHandler{members: members, roles: roles, perms: perms, resolver: resolver, pub: pub, gateway: gw, auditLogger: auditLogger, log: logger}
 }
 
 // ListMembers handles GET /api/v1/server/members.
@@ -263,6 +266,13 @@ func (h *MemberHandler) KickMember(c fiber.Ctx) error {
 		return h.mapMemberError(c, err)
 	}
 
+	if h.auditLogger != nil {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.MemberKick,
+			TargetType: audit.Ptr("user"), TargetID: audit.UUIDPtr(targetID),
+		})
+	}
+
 	h.publishMemberRemove(targetID.String())
 	h.invalidateUser(c, targetID)
 	return c.SendStatus(fiber.StatusNoContent)
@@ -305,6 +315,13 @@ func (h *MemberHandler) SetTimeout(c fiber.Ctx) error {
 		return h.mapMemberError(c, err)
 	}
 
+	if h.auditLogger != nil {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.MemberTimeout,
+			TargetType: audit.Ptr("user"), TargetID: audit.UUIDPtr(targetID),
+		})
+	}
+
 	result := updated.ToModel()
 	h.publishMemberUpdate(result)
 	h.invalidateUser(c, targetID)
@@ -313,6 +330,11 @@ func (h *MemberHandler) SetTimeout(c fiber.Ctx) error {
 
 // ClearTimeout handles DELETE /api/v1/server/members/:userID/timeout.
 func (h *MemberHandler) ClearTimeout(c fiber.Ctx) error {
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
+
 	targetID, err := uuid.Parse(c.Params("userID"))
 	if err != nil {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid user ID format")
@@ -321,6 +343,13 @@ func (h *MemberHandler) ClearTimeout(c fiber.Ctx) error {
 	updated, err := h.members.ClearTimeout(c, targetID)
 	if err != nil {
 		return h.mapMemberError(c, err)
+	}
+
+	if h.auditLogger != nil {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.MemberTimeoutClear,
+			TargetType: audit.Ptr("user"), TargetID: audit.UUIDPtr(targetID),
+		})
 	}
 
 	result := updated.ToModel()
@@ -366,6 +395,14 @@ func (h *MemberHandler) BanMember(c fiber.Ctx) error {
 		return h.mapMemberError(c, err)
 	}
 
+	if h.auditLogger != nil {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.MemberBan,
+			TargetType: audit.Ptr("user"), TargetID: audit.UUIDPtr(targetID),
+			Reason: body.Reason,
+		})
+	}
+
 	h.publishMemberRemove(targetID.String())
 	h.invalidateUser(c, targetID)
 	return c.SendStatus(fiber.StatusNoContent)
@@ -373,6 +410,11 @@ func (h *MemberHandler) BanMember(c fiber.Ctx) error {
 
 // UnbanMember handles DELETE /api/v1/server/bans/:userID.
 func (h *MemberHandler) UnbanMember(c fiber.Ctx) error {
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
+
 	targetID, err := uuid.Parse(c.Params("userID"))
 	if err != nil {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid user ID format")
@@ -381,6 +423,14 @@ func (h *MemberHandler) UnbanMember(c fiber.Ctx) error {
 	if err := h.members.Unban(c, targetID); err != nil {
 		return h.mapMemberError(c, err)
 	}
+
+	if h.auditLogger != nil {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.MemberUnban,
+			TargetType: audit.Ptr("user"), TargetID: audit.UUIDPtr(targetID),
+		})
+	}
+
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
@@ -460,6 +510,14 @@ func (h *MemberHandler) AssignRole(c fiber.Ctx) error {
 		return h.mapMemberError(c, err)
 	}
 
+	if h.auditLogger != nil {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.MemberRoleAssign,
+			TargetType: audit.Ptr("user"), TargetID: audit.UUIDPtr(targetID),
+			Changes: audit.MarshalChanges(map[string]string{"role_id": roleID.String()}),
+		})
+	}
+
 	h.invalidateUser(c, targetID)
 
 	updated, err := h.members.GetByUserID(c, targetID)
@@ -513,6 +571,14 @@ func (h *MemberHandler) RemoveRole(c fiber.Ctx) error {
 
 	if err := h.members.RemoveRole(c, targetID, roleID); err != nil {
 		return h.mapMemberError(c, err)
+	}
+
+	if h.auditLogger != nil {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.MemberRoleRemove,
+			TargetType: audit.Ptr("user"), TargetID: audit.UUIDPtr(targetID),
+			Changes: audit.MarshalChanges(map[string]string{"role_id": roleID.String()}),
+		})
 	}
 
 	if h.gateway != nil {

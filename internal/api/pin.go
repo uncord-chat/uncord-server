@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 
 	"github.com/gofiber/fiber/v3"
@@ -12,6 +13,7 @@ import (
 	"github.com/uncord-chat/uncord-protocol/permissions"
 
 	"github.com/uncord-chat/uncord-server/internal/attachment"
+	"github.com/uncord-chat/uncord-server/internal/audit"
 	"github.com/uncord-chat/uncord-server/internal/gateway"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 	"github.com/uncord-chat/uncord-server/internal/media"
@@ -28,6 +30,7 @@ type PinHandler struct {
 	storage     media.StorageProvider
 	resolver    *permission.Resolver
 	gateway     *gateway.Publisher
+	auditLogger *audit.Logger
 	log         zerolog.Logger
 }
 
@@ -39,6 +42,7 @@ func NewPinHandler(
 	storage media.StorageProvider,
 	resolver *permission.Resolver,
 	gw *gateway.Publisher,
+	auditLogger *audit.Logger,
 	logger zerolog.Logger,
 ) *PinHandler {
 	return &PinHandler{
@@ -48,6 +52,7 @@ func NewPinHandler(
 		storage:     storage,
 		resolver:    resolver,
 		gateway:     gw,
+		auditLogger: auditLogger,
 		log:         logger,
 	}
 }
@@ -82,6 +87,13 @@ func (h *PinHandler) PinMessage(c fiber.Ctx) error {
 	msg, err := h.messages.Pin(c, messageID)
 	if err != nil {
 		return mapPinError(c, h.log, err)
+	}
+
+	if h.auditLogger != nil {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.MessagePin,
+			TargetType: audit.Ptr("message"), TargetID: audit.UUIDPtr(messageID),
+		})
 	}
 
 	result, err := h.fullMessageModel(c, msg, userID)
@@ -126,6 +138,13 @@ func (h *PinHandler) UnpinMessage(c fiber.Ctx) error {
 	msg, err := h.messages.Unpin(c, messageID)
 	if err != nil {
 		return mapPinError(c, h.log, err)
+	}
+
+	if h.auditLogger != nil {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.MessageUnpin,
+			TargetType: audit.Ptr("message"), TargetID: audit.UUIDPtr(messageID),
+		})
 	}
 
 	result, err := h.fullMessageModel(c, msg, userID)

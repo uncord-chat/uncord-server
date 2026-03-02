@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 
 	"github.com/gofiber/fiber/v3"
@@ -11,6 +12,7 @@ import (
 	"github.com/uncord-chat/uncord-protocol/models"
 	"github.com/uncord-chat/uncord-protocol/permissions"
 
+	"github.com/uncord-chat/uncord-server/internal/audit"
 	"github.com/uncord-chat/uncord-server/internal/channel"
 	"github.com/uncord-chat/uncord-server/internal/gateway"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
@@ -27,6 +29,7 @@ type ChannelHandler struct {
 	resolver    *permission.Resolver
 	gateway     *gateway.Publisher
 	maxChannels int
+	auditLogger *audit.Logger
 	log         zerolog.Logger
 }
 
@@ -38,6 +41,7 @@ func NewChannelHandler(
 	resolver *permission.Resolver,
 	gw *gateway.Publisher,
 	maxChannels int,
+	auditLogger *audit.Logger,
 	logger zerolog.Logger,
 ) *ChannelHandler {
 	return &ChannelHandler{
@@ -47,6 +51,7 @@ func NewChannelHandler(
 		resolver:    resolver,
 		gateway:     gw,
 		maxChannels: maxChannels,
+		auditLogger: auditLogger,
 		log:         logger,
 	}
 }
@@ -128,6 +133,11 @@ func (h *ChannelHandler) listWelcomeChannel(c fiber.Ctx) error {
 
 // CreateChannel handles POST /api/v1/server/channels.
 func (h *ChannelHandler) CreateChannel(c fiber.Ctx) error {
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
+
 	var body models.CreateChannelRequest
 	if err := c.Bind().Body(&body); err != nil {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "Invalid request body")
@@ -187,6 +197,13 @@ func (h *ChannelHandler) CreateChannel(c fiber.Ctx) error {
 		return h.mapChannelError(c, err)
 	}
 
+	if h.auditLogger != nil {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.ChannelCreate,
+			TargetType: audit.Ptr("channel"), TargetID: audit.UUIDPtr(ch.ID),
+		})
+	}
+
 	result := ch.ToModel()
 	if h.gateway != nil {
 		h.gateway.Enqueue(events.ChannelCreate, result)
@@ -212,6 +229,11 @@ func (h *ChannelHandler) GetChannel(c fiber.Ctx) error {
 
 // UpdateChannel handles PATCH /api/v1/channels/:channelID.
 func (h *ChannelHandler) UpdateChannel(c fiber.Ctx) error {
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
+
 	id, err := uuid.Parse(c.Params("channelID"))
 	if err != nil {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
@@ -261,6 +283,13 @@ func (h *ChannelHandler) UpdateChannel(c fiber.Ctx) error {
 		return h.mapChannelError(c, err)
 	}
 
+	if h.auditLogger != nil {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.ChannelUpdate,
+			TargetType: audit.Ptr("channel"), TargetID: audit.UUIDPtr(id),
+		})
+	}
+
 	result := ch.ToModel()
 	if h.gateway != nil {
 		h.gateway.Enqueue(events.ChannelUpdate, result)
@@ -271,6 +300,11 @@ func (h *ChannelHandler) UpdateChannel(c fiber.Ctx) error {
 
 // DeleteChannel handles DELETE /api/v1/channels/:channelID.
 func (h *ChannelHandler) DeleteChannel(c fiber.Ctx) error {
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
+
 	id, err := uuid.Parse(c.Params("channelID"))
 	if err != nil {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
@@ -278,6 +312,13 @@ func (h *ChannelHandler) DeleteChannel(c fiber.Ctx) error {
 
 	if err := h.channels.Delete(c, id); err != nil {
 		return h.mapChannelError(c, err)
+	}
+
+	if h.auditLogger != nil {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.ChannelDelete,
+			TargetType: audit.Ptr("channel"), TargetID: audit.UUIDPtr(id),
+		})
 	}
 
 	if h.gateway != nil {

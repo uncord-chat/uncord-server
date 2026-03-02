@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/uncord-chat/uncord-protocol/events"
 	"github.com/uncord-chat/uncord-protocol/models"
 
+	"github.com/uncord-chat/uncord-server/internal/audit"
 	"github.com/uncord-chat/uncord-server/internal/gateway"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 	"github.com/uncord-chat/uncord-server/internal/member"
@@ -21,13 +23,14 @@ import (
 
 // OnboardingHandler serves onboarding endpoints.
 type OnboardingHandler struct {
-	onboarding onboarding.Repository
-	documents  *onboarding.DocumentStore
-	members    member.Repository
-	users      user.Repository
-	servers    server.Repository
-	gateway    *gateway.Publisher
-	log        zerolog.Logger
+	onboarding  onboarding.Repository
+	documents   *onboarding.DocumentStore
+	members     member.Repository
+	users       user.Repository
+	servers     server.Repository
+	gateway     *gateway.Publisher
+	auditLogger *audit.Logger
+	log         zerolog.Logger
 }
 
 // NewOnboardingHandler creates a new onboarding handler.
@@ -38,16 +41,18 @@ func NewOnboardingHandler(
 	users user.Repository,
 	servers server.Repository,
 	gw *gateway.Publisher,
+	auditLogger *audit.Logger,
 	logger zerolog.Logger,
 ) *OnboardingHandler {
 	return &OnboardingHandler{
-		onboarding: onboardingRepo,
-		documents:  documents,
-		members:    members,
-		users:      users,
-		servers:    servers,
-		gateway:    gw,
-		log:        logger,
+		onboarding:  onboardingRepo,
+		documents:   documents,
+		members:     members,
+		users:       users,
+		servers:     servers,
+		gateway:     gw,
+		auditLogger: auditLogger,
+		log:         logger,
 	}
 }
 
@@ -118,6 +123,13 @@ func (h *OnboardingHandler) UpdateOnboarding(c fiber.Ctx) error {
 	cfg, err := h.onboarding.Update(c, params)
 	if err != nil {
 		return h.mapOnboardingError(c, err)
+	}
+
+	if h.auditLogger != nil {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.OnboardingUpdate,
+			TargetType: audit.Ptr("onboarding"),
+		})
 	}
 
 	return httputil.Success(c, cfg.ToModel(h.documents.ToModels()))

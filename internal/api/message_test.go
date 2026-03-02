@@ -332,7 +332,7 @@ func testMessageAppWithAttachments(
 		t.Fatalf("NewLocalStorage() error: %v", err)
 	}
 	t.Cleanup(func() { _ = storage.Close() })
-	handler := NewMessageHandler(repo, attachRepo, &fakeReactionRepo{}, storage, resolver, nil, nil, nil, testMaxContent, 10, zerolog.Nop())
+	handler := NewMessageHandler(repo, attachRepo, &fakeReactionRepo{}, storage, resolver, nil, nil, nil, testMaxContent, 10, nil, zerolog.Nop())
 	app := fiber.New()
 
 	app.Use(fakeAuth(userID))

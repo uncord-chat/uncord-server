@@ -22,7 +22,7 @@ func testPinApp(t *testing.T, repo message.Repository, resolver *permission.Reso
 		t.Fatalf("NewLocalStorage() error: %v", err)
 	}
 	t.Cleanup(func() { _ = storage.Close() })
-	handler := NewPinHandler(repo, newFakeAttachmentRepo(), &fakeReactionRepo{}, storage, resolver, nil, zerolog.Nop())
+	handler := NewPinHandler(repo, newFakeAttachmentRepo(), &fakeReactionRepo{}, storage, resolver, nil, nil, zerolog.Nop())
 	app := fiber.New()
 	app.Use(fakeAuth(userID))
 

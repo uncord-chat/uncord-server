@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 
 	"github.com/gofiber/fiber/v3"
@@ -8,19 +9,21 @@ import (
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 	"github.com/uncord-chat/uncord-protocol/models"
 
+	"github.com/uncord-chat/uncord-server/internal/audit"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 	"github.com/uncord-chat/uncord-server/internal/server"
 )
 
 // ServerHandler serves server configuration endpoints.
 type ServerHandler struct {
-	servers server.Repository
-	log     zerolog.Logger
+	servers     server.Repository
+	auditLogger *audit.Logger
+	log         zerolog.Logger
 }
 
 // NewServerHandler creates a new server handler.
-func NewServerHandler(servers server.Repository, logger zerolog.Logger) *ServerHandler {
-	return &ServerHandler{servers: servers, log: logger}
+func NewServerHandler(servers server.Repository, auditLogger *audit.Logger, logger zerolog.Logger) *ServerHandler {
+	return &ServerHandler{servers: servers, auditLogger: auditLogger, log: logger}
 }
 
 // Get handles GET /api/v1/server.
@@ -49,6 +52,11 @@ func (h *ServerHandler) GetPublicInfo(c fiber.Ctx) error {
 
 // Update handles PATCH /api/v1/server.
 func (h *ServerHandler) Update(c fiber.Ctx) error {
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
+
 	var body models.UpdateServerConfigRequest
 	if err := c.Bind().Body(&body); err != nil {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "Invalid request body")
@@ -67,6 +75,13 @@ func (h *ServerHandler) Update(c fiber.Ctx) error {
 	})
 	if err != nil {
 		return h.mapServerError(c, err)
+	}
+
+	if h.auditLogger != nil {
+		go h.auditLogger.Record(context.Background(), audit.Entry{
+			ActorID: userID, Action: audit.ServerUpdate,
+			TargetType: audit.Ptr("server"),
+		})
 	}
 
 	return httputil.Success(c, cfg.ToModel())
