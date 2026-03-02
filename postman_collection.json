@@ -1150,6 +1150,33 @@
 					}
 				},
 				{
+					"name": "Acknowledge Messages",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"message_id\": \"{{message_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/channels/{{channel_id}}/ack",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"channels",
+								"{{channel_id}}",
+								"ack"
+							]
+						}
+					}
+				},
+				{
 					"name": "List Channel Members",
 					"request": {
 						"method": "GET",

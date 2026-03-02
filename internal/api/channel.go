@@ -189,6 +189,7 @@ func (h *ChannelHandler) CreateChannel(c fiber.Ctx) error {
 		Name:            name,
 		Type:            chType,
 		CategoryID:      categoryID,
+		CreatedBy:       &userID,
 		Topic:           topic,
 		SlowmodeSeconds: slowmode,
 		NSFW:            nsfw,

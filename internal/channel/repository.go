@@ -12,7 +12,7 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/postgres"
 )
 
-const selectColumns = "id, category_id, name, type, topic, position, slowmode_seconds, nsfw, created_at, updated_at"
+const selectColumns = "id, category_id, created_by, name, type, topic, position, slowmode_seconds, nsfw, created_at, updated_at"
 
 // PGRepository implements Repository using PostgreSQL.
 type PGRepository struct {
@@ -89,10 +89,10 @@ func (r *PGRepository) Create(ctx context.Context, params CreateParams, maxChann
 
 		row := tx.QueryRow(ctx,
 			fmt.Sprintf(
-				`INSERT INTO channels (name, type, category_id, topic, slowmode_seconds, nsfw, position)
-				 VALUES ($1, $2, $3, $4, $5, $6, COALESCE((SELECT MAX(position) FROM channels), -1) + 1)
+				`INSERT INTO channels (name, type, category_id, created_by, topic, slowmode_seconds, nsfw, position)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE((SELECT MAX(position) FROM channels), -1) + 1)
 				 RETURNING %s`, selectColumns),
-			params.Name, params.Type, params.CategoryID, params.Topic, params.SlowmodeSeconds, params.NSFW,
+			params.Name, params.Type, params.CategoryID, params.CreatedBy, params.Topic, params.SlowmodeSeconds, params.NSFW,
 		)
 		var err error
 		ch, err = scanChannel(row)
@@ -178,7 +178,7 @@ func (r *PGRepository) Delete(ctx context.Context, id uuid.UUID) error {
 func scanChannel(row pgx.Row) (*Channel, error) {
 	var ch Channel
 	err := row.Scan(
-		&ch.ID, &ch.CategoryID, &ch.Name, &ch.Type, &ch.Topic,
+		&ch.ID, &ch.CategoryID, &ch.CreatedBy, &ch.Name, &ch.Type, &ch.Topic,
 		&ch.Position, &ch.SlowmodeSeconds, &ch.NSFW, &ch.CreatedAt, &ch.UpdatedAt,
 	)
 	if err != nil {

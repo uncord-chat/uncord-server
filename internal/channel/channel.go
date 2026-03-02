@@ -36,6 +36,7 @@ var (
 type Channel struct {
 	ID              uuid.UUID
 	CategoryID      *uuid.UUID
+	CreatedBy       *uuid.UUID
 	Name            string
 	Type            string
 	Topic           string
@@ -53,9 +54,15 @@ func (ch *Channel) ToModel() models.Channel {
 		s := ch.CategoryID.String()
 		categoryID = &s
 	}
+	var createdBy *string
+	if ch.CreatedBy != nil {
+		s := ch.CreatedBy.String()
+		createdBy = &s
+	}
 	return models.Channel{
 		ID:              ch.ID.String(),
 		CategoryID:      categoryID,
+		CreatedBy:       createdBy,
 		Name:            ch.Name,
 		Type:            ch.Type,
 		Topic:           ch.Topic,
@@ -72,6 +79,7 @@ type CreateParams struct {
 	Name            string
 	Type            string
 	CategoryID      *uuid.UUID
+	CreatedBy       *uuid.UUID
 	Topic           string
 	SlowmodeSeconds int
 	NSFW            bool

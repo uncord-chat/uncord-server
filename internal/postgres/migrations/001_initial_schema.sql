@@ -102,6 +102,7 @@ CREATE UNIQUE INDEX idx_categories_position ON categories (position);
 CREATE TABLE channels (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     category_id     UUID REFERENCES categories(id) ON DELETE SET NULL,
+    created_by      UUID REFERENCES users(id) ON DELETE SET NULL,
     name            TEXT NOT NULL,
     type            TEXT NOT NULL DEFAULT 'text',  -- text, voice, announcement, forum, stage
     topic           TEXT NOT NULL DEFAULT '',
@@ -206,6 +207,19 @@ CREATE TABLE reactions (
 CREATE UNIQUE INDEX idx_reactions_unique
     ON reactions (message_id, user_id, COALESCE(emoji_id, '00000000-0000-0000-0000-000000000000'), COALESCE(emoji_unicode, ''));
 CREATE INDEX idx_reactions_user ON reactions (user_id);
+
+-- Channel Read States
+
+CREATE TABLE channel_read_states (
+    user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    channel_id      UUID NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+    last_message_id UUID REFERENCES messages(id) ON DELETE SET NULL,
+    mention_count   INTEGER NOT NULL DEFAULT 0,
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, channel_id)
+);
+
+CREATE INDEX idx_read_states_user ON channel_read_states (user_id);
 
 -- Roles
 
@@ -667,6 +681,7 @@ DROP TABLE IF EXISTS dm_channels CASCADE;
 DROP TABLE IF EXISTS permission_overrides CASCADE;
 DROP TABLE IF EXISTS member_roles CASCADE;
 DROP TABLE IF EXISTS roles CASCADE;
+DROP TABLE IF EXISTS channel_read_states CASCADE;
 DROP TABLE IF EXISTS reactions CASCADE;
 DROP TABLE IF EXISTS threads CASCADE;
 DROP TABLE IF EXISTS message_attachments CASCADE;

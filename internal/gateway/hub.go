@@ -23,6 +23,7 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/onboarding"
 	"github.com/uncord-chat/uncord-server/internal/permission"
 	"github.com/uncord-chat/uncord-server/internal/presence"
+	"github.com/uncord-chat/uncord-server/internal/readstate"
 	"github.com/uncord-chat/uncord-server/internal/role"
 	servercfg "github.com/uncord-chat/uncord-server/internal/server"
 	"github.com/uncord-chat/uncord-server/internal/user"
@@ -39,6 +40,7 @@ type HubDeps struct {
 	Channels       channel.Repository
 	Roles          role.Repository
 	Members        member.Repository
+	ReadStates     readstate.Repository
 	Presence       *presence.Store
 	Publisher      *Publisher
 	OnboardingRepo onboarding.Repository
@@ -61,6 +63,7 @@ type Hub struct {
 	channels       channel.Repository
 	roles          role.Repository
 	members        member.Repository
+	readStates     readstate.Repository
 	presence       *presence.Store
 	publisher      *Publisher
 	onboardingRepo onboarding.Repository
@@ -81,6 +84,7 @@ func NewHub(d HubDeps) *Hub {
 		channels:       d.Channels,
 		roles:          d.Roles,
 		members:        d.Members,
+		readStates:     d.ReadStates,
 		presence:       d.Presence,
 		publisher:      d.Publisher,
 		onboardingRepo: d.OnboardingRepo,
@@ -594,11 +598,12 @@ func (h *Hub) handlePubSubEvent(ctx context.Context, payload string) {
 // concurrently to reduce latency; presence lookup runs afterwards because it depends on the member list.
 func (h *Hub) assembleReady(ctx context.Context, userID uuid.UUID) (*models.ReadyData, error) {
 	var (
-		u   *user.User
-		srv *servercfg.Config
-		chs []channel.Channel
-		rs  []role.Role
-		ms  []member.WithProfile
+		u          *user.User
+		srv        *servercfg.Config
+		chs        []channel.Channel
+		rs         []role.Role
+		ms         []member.WithProfile
+		readStates []readstate.ReadState
 	)
 
 	g, gCtx := errgroup.WithContext(ctx)
@@ -648,6 +653,17 @@ func (h *Hub) assembleReady(ctx context.Context, userID uuid.UUID) (*models.Read
 		return nil
 	})
 
+	if h.readStates != nil {
+		g.Go(func() error {
+			var err error
+			readStates, err = h.readStates.ListByUser(gCtx, userID)
+			if err != nil {
+				return fmt.Errorf("list read states: %w", err)
+			}
+			return nil
+		})
+	}
+
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
@@ -688,6 +704,7 @@ func (h *Hub) assembleReady(ctx context.Context, userID uuid.UUID) (*models.Read
 		Roles:      roleSliceToModels(rs),
 		Members:    memberSliceToModels(ms),
 		Presences:  presences,
+		ReadStates: readStateSliceToModels(readStates),
 		Onboarding: onboardingCfg,
 	}, nil
 }
@@ -754,6 +771,14 @@ func memberSliceToModels(ms []member.WithProfile) []models.Member {
 	result := make([]models.Member, len(ms))
 	for i := range ms {
 		result[i] = ms[i].ToModel()
+	}
+	return result
+}
+
+func readStateSliceToModels(states []readstate.ReadState) []models.ReadState {
+	result := make([]models.ReadState, len(states))
+	for i := range states {
+		result[i] = states[i].ToModel()
 	}
 	return result
 }

@@ -54,6 +54,7 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/postgres"
 	"github.com/uncord-chat/uncord-server/internal/presence"
 	"github.com/uncord-chat/uncord-server/internal/reaction"
+	"github.com/uncord-chat/uncord-server/internal/readstate"
 	"github.com/uncord-chat/uncord-server/internal/role"
 	"github.com/uncord-chat/uncord-server/internal/search"
 	servercfg "github.com/uncord-chat/uncord-server/internal/server"
@@ -93,6 +94,7 @@ type server struct {
 	attachmentRepo   attachment.Repository
 	emojiRepo        emoji.Repository
 	reactionRepo     reaction.Repository
+	readStateRepo    readstate.Repository
 	dmRepo           dm.Repository
 	e2eeRepo         e2ee.Repository
 	storage          media.StorageProvider
@@ -304,6 +306,7 @@ func run() error {
 	attachmentRepo := attachment.NewPGRepository(db)
 	emojiRepo := emoji.NewPGRepository(db)
 	reactionRepo := reaction.NewPGRepository(db)
+	readStateRepo := readstate.NewPGRepository(db)
 	dmRepo := dm.NewPGRepository(db)
 	e2eeRepo := e2ee.NewPGRepository(db, cfg.E2EEMaxDevicesPerUser)
 	typesenseIndexer := typesense.NewIndexer(cfg.TypesenseURL, cfg.TypesenseAPIKey.Expose(), cfg.TypesenseTimeout)
@@ -339,6 +342,7 @@ func run() error {
 		Channels:       channelRepo,
 		Roles:          roleRepo,
 		Members:        memberRepo,
+		ReadStates:     readStateRepo,
 		Presence:       presenceStore,
 		Publisher:      gatewayPub,
 		OnboardingRepo: onboardingRepo,
@@ -370,6 +374,7 @@ func run() error {
 		attachmentRepo:   attachmentRepo,
 		emojiRepo:        emojiRepo,
 		reactionRepo:     reactionRepo,
+		readStateRepo:    readStateRepo,
 		dmRepo:           dmRepo,
 		e2eeRepo:         e2eeRepo,
 		storage:          storage,
@@ -580,6 +585,12 @@ func (s *server) registerRoutes(app *fiber.App) {
 	channelGroup.Delete("/:channelID",
 		permission.RequirePermission(s.permResolver, permissions.ManageChannels),
 		channelHandler.DeleteChannel)
+
+	// Read state routes (acknowledge read position in a channel)
+	readStateHandler := api.NewReadStateHandler(s.readStateRepo, s.gatewayPublisher, log.Logger)
+	channelGroup.Post("/:channelID/ack",
+		permission.RequirePermission(s.permResolver, permissions.ViewChannels),
+		readStateHandler.Ack)
 
 	// Permission override routes
 	permHandler := api.NewPermissionHandler(s.permStore, s.permResolver, s.permPublisher, s.auditLogger, log.Logger)

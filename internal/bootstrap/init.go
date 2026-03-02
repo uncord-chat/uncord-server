@@ -131,8 +131,8 @@ func RunFirstInit(ctx context.Context, db *pgxpool.Pool, cfg *config.Config, log
 
 		// Insert #general channel
 		_, err = tx.Exec(ctx,
-			`INSERT INTO channels (name, type, position) VALUES ('general', 'text', $1)`,
-			positionGeneral,
+			`INSERT INTO channels (name, type, position, created_by) VALUES ('general', 'text', $1, $2)`,
+			positionGeneral, ownerID,
 		)
 		if err != nil {
 			return fmt.Errorf("insert #general channel: %w", err)
@@ -141,8 +141,8 @@ func RunFirstInit(ctx context.Context, db *pgxpool.Pool, cfg *config.Config, log
 		// Insert #welcome channel
 		var welcomeChannelID uuid.UUID
 		err = tx.QueryRow(ctx,
-			`INSERT INTO channels (name, type, position) VALUES ('welcome', 'text', $1) RETURNING id`,
-			positionWelcome,
+			`INSERT INTO channels (name, type, position, created_by) VALUES ('welcome', 'text', $1, $2) RETURNING id`,
+			positionWelcome, ownerID,
 		).Scan(&welcomeChannelID)
 		if err != nil {
 			return fmt.Errorf("insert #welcome channel: %w", err)
