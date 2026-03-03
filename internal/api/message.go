@@ -128,7 +128,11 @@ func (h *MessageHandler) ListMessages(c fiber.Ctx) error {
 
 	result := make([]models.Message, len(messages))
 	for i := range messages {
-		result[i] = buildMessageModel(&messages[i], attachmentMap[messages[i].ID], reactionMap[messages[i].ID], userReactions[messages[i].ID], h.storage)
+		result[i] = buildMessageModel(&messages[i], messageEnrichment{
+			Attachments: attachmentMap[messages[i].ID],
+			Summaries:   reactionMap[messages[i].ID],
+			MyReactions: userReactions[messages[i].ID],
+		}, h.storage)
 	}
 	return httputil.Success(c, result)
 }
@@ -207,7 +211,7 @@ func (h *MessageHandler) CreateMessage(c fiber.Ctx) error {
 	}
 
 	// Newly created messages have no reactions yet.
-	result := buildMessageModel(msg, linked, nil, nil, h.storage)
+	result := buildMessageModel(msg, messageEnrichment{Attachments: linked}, h.storage)
 
 	// Best-effort Typesense indexing. Uses context.Background because Fiber recycles the request context after the
 	// handler returns.
@@ -301,7 +305,11 @@ func (h *MessageHandler) EditMessage(c fiber.Ctx) error {
 		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
 	}
 
-	result := buildMessageModel(msg, attachments, reactionMap[msg.ID], userReactions[msg.ID], h.storage)
+	result := buildMessageModel(msg, messageEnrichment{
+		Attachments: attachments,
+		Summaries:   reactionMap[msg.ID],
+		MyReactions: userReactions[msg.ID],
+	}, h.storage)
 
 	// Best-effort Typesense upsert. Uses context.Background because Fiber recycles the request context after the
 	// handler returns.
@@ -382,9 +390,17 @@ func (h *MessageHandler) DeleteMessage(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
+// messageEnrichment bundles the per-message lookup results (attachments, reaction summaries, and the current user's
+// own reactions) that are loaded separately from the core message row.
+type messageEnrichment struct {
+	Attachments []attachment.Attachment
+	Summaries   []reaction.Summary
+	MyReactions map[string]bool
+}
+
 // buildMessageModel converts an internal message to a protocol response model. This is a package-level function so
 // that multiple handlers (MessageHandler, ThreadHandler, PinHandler) can reuse the same conversion logic.
-func buildMessageModel(m *message.Message, attachments []attachment.Attachment, summaries []reaction.Summary, myReactions map[string]bool, storage media.StorageProvider) models.Message {
+func buildMessageModel(m *message.Message, e messageEnrichment, storage media.StorageProvider) models.Message {
 	var replyToID *string
 	if m.ReplyToID != nil {
 		s := m.ReplyToID.String()
@@ -401,13 +417,13 @@ func buildMessageModel(m *message.Message, attachments []attachment.Attachment, 
 		editedAt = &s
 	}
 
-	modelAttachments := make([]models.Attachment, len(attachments))
-	for i := range attachments {
-		modelAttachments[i] = toAttachmentModel(&attachments[i], storage)
+	modelAttachments := make([]models.Attachment, len(e.Attachments))
+	for i := range e.Attachments {
+		modelAttachments[i] = toAttachmentModel(&e.Attachments[i], storage)
 	}
 
-	modelReactions := make([]models.ReactionSummary, len(summaries))
-	for i, s := range summaries {
+	modelReactions := make([]models.ReactionSummary, len(e.Summaries))
+	for i, s := range e.Summaries {
 		var emojiID *string
 		var reactionKey string
 		if s.EmojiID != nil {
@@ -421,7 +437,7 @@ func buildMessageModel(m *message.Message, attachments []attachment.Attachment, 
 			EmojiID:      emojiID,
 			EmojiUnicode: s.EmojiUnicode,
 			Count:        s.Count,
-			Me:           myReactions[reactionKey],
+			Me:           e.MyReactions[reactionKey],
 		}
 	}
 

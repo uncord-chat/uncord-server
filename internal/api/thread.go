@@ -306,7 +306,11 @@ func (h *ThreadHandler) ListThreadMessages(c fiber.Ctx) error {
 
 	result := make([]models.Message, len(messages))
 	for i := range messages {
-		result[i] = buildMessageModel(&messages[i], attachmentMap[messages[i].ID], reactionMap[messages[i].ID], userReactions[messages[i].ID], h.storage)
+		result[i] = buildMessageModel(&messages[i], messageEnrichment{
+			Attachments: attachmentMap[messages[i].ID],
+			Summaries:   reactionMap[messages[i].ID],
+			MyReactions: userReactions[messages[i].ID],
+		}, h.storage)
 	}
 	return httputil.Success(c, result)
 }
@@ -403,7 +407,7 @@ func (h *ThreadHandler) CreateThreadMessage(c fiber.Ctx) error {
 		}
 	}
 
-	result := buildMessageModel(msg, linked, nil, nil, h.storage)
+	result := buildMessageModel(msg, messageEnrichment{Attachments: linked}, h.storage)
 
 	if h.gateway != nil {
 		h.gateway.Enqueue(events.MessageCreate, result)

@@ -199,7 +199,11 @@ func (h *PinHandler) ListPins(c fiber.Ctx) error {
 
 	result := make([]models.Message, len(messages))
 	for i := range messages {
-		result[i] = buildMessageModel(&messages[i], attachmentMap[messages[i].ID], reactionMap[messages[i].ID], userReactions[messages[i].ID], h.storage)
+		result[i] = buildMessageModel(&messages[i], messageEnrichment{
+			Attachments: attachmentMap[messages[i].ID],
+			Summaries:   reactionMap[messages[i].ID],
+			MyReactions: userReactions[messages[i].ID],
+		}, h.storage)
 	}
 	return httputil.Success(c, result)
 }
@@ -224,7 +228,11 @@ func (h *PinHandler) fullMessageModel(c fiber.Ctx, msg *message.Message, userID 
 		return models.Message{}, httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
 	}
 
-	return buildMessageModel(msg, attachments, reactionMap[msg.ID], userReactions[msg.ID], h.storage), nil
+	return buildMessageModel(msg, messageEnrichment{
+		Attachments: attachments,
+		Summaries:   reactionMap[msg.ID],
+		MyReactions: userReactions[msg.ID],
+	}, h.storage), nil
 }
 
 // mapPinError converts pin-layer errors to appropriate HTTP responses.
