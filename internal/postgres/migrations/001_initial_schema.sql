@@ -427,7 +427,6 @@ CREATE TABLE invites (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_invites_code ON invites (code);
 CREATE INDEX idx_invites_channel ON invites (channel_id);
 CREATE INDEX idx_invites_creator ON invites (creator_id);
 
