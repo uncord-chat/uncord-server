@@ -70,10 +70,11 @@ func (r *Resolver) ResolveServer(ctx context.Context, userID uuid.UUID) (permiss
 		return perm, nil
 	}
 
-	perm, _, err = r.basePermissions(ctx, userID)
+	br, err := r.basePermissions(ctx, userID)
 	if err != nil {
 		return 0, err
 	}
+	perm = br.perm
 
 	if cacheErr := r.cache.Set(ctx, userID, serverPermKey, perm); cacheErr != nil {
 		r.log.Warn().Err(cacheErr).Msg("Server permission cache set failed")
@@ -95,7 +96,7 @@ func (r *Resolver) HasServerPermission(ctx context.Context, userID uuid.UUID, pe
 // for. Each element corresponds to the channel at the same index in the input slice. The owner check and role union are
 // performed once, then channel/category overrides are applied per channel.
 func (r *Resolver) FilterPermitted(ctx context.Context, userID uuid.UUID, channelIDs []uuid.UUID, perm permissions.Permission) ([]bool, error) {
-	base, roleIDs, err := r.basePermissions(ctx, userID)
+	br, err := r.basePermissions(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +104,7 @@ func (r *Resolver) FilterPermitted(ctx context.Context, userID uuid.UUID, channe
 	result := make([]bool, len(channelIDs))
 
 	// Admin (owner or ManageServer) has all permissions in every channel.
-	if roleIDs == nil {
+	if br.admin {
 		for i := range result {
 			result[i] = true
 		}
@@ -125,7 +126,7 @@ func (r *Resolver) FilterPermitted(ctx context.Context, userID uuid.UUID, channe
 			continue
 		}
 
-		effective, computeErr := r.channelOverrides(ctx, base, roleIDs, userID, chID)
+		effective, computeErr := r.channelOverrides(ctx, br.perm, br.roleIDs, userID, chID)
 		if computeErr != nil {
 			return nil, computeErr
 		}
@@ -182,21 +183,27 @@ func (r *Resolver) FilterUsersPermitted(ctx context.Context, userIDs []uuid.UUID
 	return result, nil
 }
 
-// basePermissions performs steps 1 (owner bypass) and 2 (role union) of the permission algorithm. If the user is an
-// owner or has ManageServer, it returns AllPermissions with a nil roleIDs map as a signal that no further override
-// checks are needed.
-func (r *Resolver) basePermissions(ctx context.Context, userID uuid.UUID) (permissions.Permission, map[uuid.UUID]struct{}, error) {
+// baseResult holds the output of the base permission computation (steps 1 and 2 of the algorithm).
+type baseResult struct {
+	perm    permissions.Permission
+	roleIDs map[uuid.UUID]struct{}
+	admin   bool
+}
+
+// basePermissions performs steps 1 (owner bypass) and 2 (role union) of the permission algorithm. When the user is the
+// server owner or holds ManageServer, admin is true and no further override checks are needed.
+func (r *Resolver) basePermissions(ctx context.Context, userID uuid.UUID) (baseResult, error) {
 	isOwner, err := r.store.IsOwner(ctx, userID)
 	if err != nil {
-		return 0, nil, fmt.Errorf("check owner: %w", err)
+		return baseResult{}, fmt.Errorf("check owner: %w", err)
 	}
 	if isOwner {
-		return permissions.AllPermissions, nil, nil
+		return baseResult{perm: permissions.AllPermissions, admin: true}, nil
 	}
 
 	roleEntries, err := r.store.RolePermissions(ctx, userID)
 	if err != nil {
-		return 0, nil, fmt.Errorf("get role permissions: %w", err)
+		return baseResult{}, fmt.Errorf("get role permissions: %w", err)
 	}
 
 	var base permissions.Permission
@@ -207,25 +214,25 @@ func (r *Resolver) basePermissions(ctx context.Context, userID uuid.UUID) (permi
 	}
 
 	if base.Has(permissions.ManageServer) {
-		return permissions.AllPermissions, nil, nil
+		return baseResult{perm: permissions.AllPermissions, admin: true}, nil
 	}
 
-	return base, roleIDs, nil
+	return baseResult{perm: base, roleIDs: roleIDs}, nil
 }
 
 // compute runs the 4-step permission algorithm for a single channel.
 func (r *Resolver) compute(ctx context.Context, userID, channelID uuid.UUID) (permissions.Permission, error) {
-	base, roleIDs, err := r.basePermissions(ctx, userID)
+	br, err := r.basePermissions(ctx, userID)
 	if err != nil {
 		return 0, err
 	}
 
 	// Admin (owner or ManageServer) bypasses all overrides.
-	if roleIDs == nil {
-		return base, nil
+	if br.admin {
+		return br.perm, nil
 	}
 
-	return r.channelOverrides(ctx, base, roleIDs, userID, channelID)
+	return r.channelOverrides(ctx, br.perm, br.roleIDs, userID, channelID)
 }
 
 // channelOverrides applies steps 3 (category overrides) and 4 (channel overrides) to a base permission set.
