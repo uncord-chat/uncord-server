@@ -81,9 +81,16 @@ func NewService(users user.Repository, rdb *redis.Client, cfg *config.Config, bl
 	}, nil
 }
 
-// Redis returns the Redis client used by this service. Handlers that need direct access for operations like revoking
-// all refresh tokens or creating gateway tickets use this rather than receiving the client separately.
-func (s *Service) Redis() *redis.Client { return s.redis }
+// RevokeAllUserTokens revokes all refresh tokens belonging to the given user. This is used during logout to invalidate
+// every active session.
+func (s *Service) RevokeAllUserTokens(ctx context.Context, userID uuid.UUID) error {
+	return RevokeAllRefreshTokens(ctx, s.redis, userID)
+}
+
+// IssueGatewayTicket creates a single-use gateway ticket that web clients present in the WebSocket Identify frame.
+func (s *Service) IssueGatewayTicket(ctx context.Context, userID uuid.UUID) (string, error) {
+	return CreateGatewayTicket(ctx, s.redis, userID)
+}
 
 // RegisterRequest is the input for Service.Register.
 type RegisterRequest struct {

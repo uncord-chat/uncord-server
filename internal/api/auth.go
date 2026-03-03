@@ -192,7 +192,7 @@ func (h *AuthHandler) Logout(c fiber.Ctx) error {
 		return err
 	}
 
-	if err := auth.RevokeAllRefreshTokens(c, h.auth.Redis(), userID); err != nil {
+	if err := h.auth.RevokeAllUserTokens(c, userID); err != nil {
 		h.log.Error().Err(err).Stringer("user_id", userID).Msg("Failed to revoke refresh tokens on logout")
 	}
 
@@ -208,7 +208,7 @@ func (h *AuthHandler) GatewayTicket(c fiber.Ctx) error {
 		return err
 	}
 
-	ticket, err := auth.CreateGatewayTicket(c, h.auth.Redis(), userID)
+	ticket, err := h.auth.IssueGatewayTicket(c, userID)
 	if err != nil {
 		h.log.Error().Err(err).Stringer("user_id", userID).Msg("Failed to create gateway ticket")
 		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
