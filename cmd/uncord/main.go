@@ -494,7 +494,11 @@ func newFiberApp(cfg *config.Config) *fiber.App {
 		// origins by echoing the request's Origin header.
 		corsConfig.AllowOriginsFunc = func(string) bool { return true }
 	} else {
-		corsConfig.AllowOrigins = strings.Split(cfg.CORSAllowOrigins, ",")
+		origins := strings.Split(cfg.CORSAllowOrigins, ",")
+		for i := range origins {
+			origins[i] = strings.TrimSpace(origins[i])
+		}
+		corsConfig.AllowOrigins = origins
 	}
 	app.Use(cors.New(corsConfig))
 
