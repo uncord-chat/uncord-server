@@ -196,11 +196,12 @@ func (h *Hub) unregister(client *Client) {
 		h.clients[userID] = cs
 	}
 	hasRemaining := len(cs) > 0
+	identified := client.IsIdentified()
 	h.mu.Unlock()
 
 	client.closeSend()
 
-	if client.IsIdentified() {
+	if identified {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := h.sessions.Save(ctx, client.SessionID(), userID, client.currentSeq()); err != nil {

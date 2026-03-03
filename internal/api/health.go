@@ -53,6 +53,7 @@ func (h *HealthHandler) Health(c fiber.Ctx) error {
 		status = fiber.StatusServiceUnavailable
 	}
 
+	// Bypass httputil.Success: health checks return a flat JSON body without the standard envelope.
 	return c.Status(status).JSON(healthResponse{
 		Status:   overall,
 		Postgres: pgStatus,
