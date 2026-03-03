@@ -1082,6 +1082,41 @@ func TestLoadValidationGatewayPublishTimeoutTooLow(t *testing.T) {
 	}
 }
 
+func TestLoadValidationInitOwnerPartial(t *testing.T) {
+	tests := []struct {
+		name     string
+		email    string
+		username string
+		password string
+	}{
+		{"email only", "owner@example.com", "", ""},
+		{"username only", "", "owner", ""},
+		{"password only", "", "", "secret-password"},
+		{"email and username", "owner@example.com", "owner", ""},
+		{"email and password", "owner@example.com", "", "secret-password"},
+		{"username and password", "", "owner", "secret-password"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+			t.Setenv("SERVER_SECRET", testServerSecret)
+			t.Setenv("TYPESENSE_API_KEY", "test-typesense-key")
+			t.Setenv("CORS_ALLOW_ORIGINS", "https://app.example.com")
+			t.Setenv("INIT_OWNER_EMAIL", tt.email)
+			t.Setenv("INIT_OWNER_USERNAME", tt.username)
+			t.Setenv("INIT_OWNER_PASSWORD", tt.password)
+
+			_, err := Load()
+			if err == nil {
+				t.Fatal("Load() returned nil error, want validation error for partial INIT_OWNER fields")
+			}
+			if !strings.Contains(err.Error(), "INIT_OWNER_EMAIL, INIT_OWNER_USERNAME, and INIT_OWNER_PASSWORD must all be set or all be empty") {
+				t.Errorf("error %q does not mention INIT_OWNER fields", err.Error())
+			}
+		})
+	}
+}
+
 func TestLoadValidationCORSEmptyInProduction(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
 	t.Setenv("SERVER_SECRET", testServerSecret)

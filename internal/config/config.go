@@ -520,6 +520,22 @@ func (c *Config) validate() error {
 		errs = append(errs, fmt.Errorf("GATEWAY_PUBLISH_TIMEOUT must be at least 1s"))
 	}
 
+	// First-run owner fields must be all set or all empty. Partial configuration would cause a confusing bootstrap
+	// failure at startup rather than a clear validation error here.
+	ownerFieldsSet := 0
+	if c.InitOwnerEmail != "" {
+		ownerFieldsSet++
+	}
+	if c.InitOwnerUsername != "" {
+		ownerFieldsSet++
+	}
+	if c.InitOwnerPassword.IsSet() {
+		ownerFieldsSet++
+	}
+	if ownerFieldsSet > 0 && ownerFieldsSet < 3 {
+		errs = append(errs, fmt.Errorf("INIT_OWNER_EMAIL, INIT_OWNER_USERNAME, and INIT_OWNER_PASSWORD must all be set or all be empty"))
+	}
+
 	if c.MFAEncryptionKey.IsSet() {
 		if err := validHexSecret(c.MFAEncryptionKey); err != nil {
 			errs = append(errs, fmt.Errorf("MFA_ENCRYPTION_KEY %w", err))
