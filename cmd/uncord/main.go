@@ -240,7 +240,7 @@ func run() error {
 	// Load external templates from DATA_DIR (nil means use compiled-in defaults).
 	verificationTmpl, verifyPageTmpl, err := loadTemplates(cfg.DataDir)
 	if err != nil {
-		return err
+		return fmt.Errorf("load templates: %w", err)
 	}
 
 	// Load onboarding documents from DATA_DIR.
