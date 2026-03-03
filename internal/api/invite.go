@@ -167,13 +167,8 @@ func (h *InviteHandler) JoinViaInvite(c fiber.Ctx) error {
 		return httputil.Fail(c, fiber.StatusForbidden, apierrors.EmailNotVerified, "Email verification is required")
 	}
 
-	// Atomically consume the invite. The invite may have become invalid between the validation above and this call
-	// (e.g. another user consumed the last use), which is handled correctly by Use.
-	if _, err := h.invites.Use(c, code); err != nil {
-		return h.mapInviteError(c, err)
-	}
-
-	// Check minimum account age requirement.
+	// Check minimum account age requirement before consuming the invite so that a rejected join does not waste an
+	// invite use.
 	cfg, err := h.onboarding.Get(c)
 	if err != nil {
 		h.log.Error().Err(err).Str("handler", "invite").Msg("get onboarding config failed")
@@ -186,6 +181,12 @@ func (h *InviteHandler) JoinViaInvite(c fiber.Ctx) error {
 			return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError,
 				"Your account is too new to join this server")
 		}
+	}
+
+	// Atomically consume the invite. The invite may have become invalid between the validation above and this call
+	// (e.g. another user consumed the last use), which is handled correctly by Use.
+	if _, err := h.invites.Use(c, code); err != nil {
+		return h.mapInviteError(c, err)
 	}
 
 	m, err := h.members.CreatePending(c, userID)
