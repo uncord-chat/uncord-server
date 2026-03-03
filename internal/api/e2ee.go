@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/base64"
 	"errors"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -364,7 +365,7 @@ func deviceToModel(d *e2ee.Device) models.Device {
 		ID:          d.ID.String(),
 		DeviceID:    d.DeviceID.String(),
 		IdentityKey: base64.RawStdEncoding.EncodeToString(d.IdentityKey),
-		CreatedAt:   d.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		CreatedAt:   d.CreatedAt.Format(time.RFC3339),
 	}
 	if d.Label != nil {
 		m.Label = *d.Label

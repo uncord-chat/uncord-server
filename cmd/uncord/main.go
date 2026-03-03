@@ -98,8 +98,7 @@ type server struct {
 	dmRepo           dm.Repository
 	e2eeRepo         e2ee.Repository
 	storage          media.StorageProvider
-	permStore        permission.OverrideStore
-	permReadStore    permission.Store
+	permStore *permission.PGStore
 	permResolver     *permission.Resolver
 	permPublisher    *permission.Publisher
 	typesenseIndexer *typesense.Indexer
@@ -380,7 +379,6 @@ func run() error {
 		storage:          storage,
 		authService:      authService,
 		permStore:        permStore,
-		permReadStore:    permStore,
 		permResolver:     permResolver,
 		permPublisher:    permPublisher,
 		typesenseIndexer: typesenseIndexer,
@@ -720,8 +718,8 @@ func (s *server) registerRoutes(app *fiber.App) {
 	messageGroup.Delete("/:messageID/pin", pinHandler.UnpinMessage)
 
 	// Search routes (require active membership)
-	searchSearcher := search.NewTypesenseSearcher(s.cfg.TypesenseURL, s.cfg.TypesenseAPIKey.Expose(), s.cfg.TypesenseTimeout)
-	searchService := search.NewService(s.channelRepo, s.permResolver, searchSearcher, log.Logger)
+	searcher := search.NewTypesenseSearcher(s.cfg.TypesenseURL, s.cfg.TypesenseAPIKey.Expose(), s.cfg.TypesenseTimeout)
+	searchService := search.NewService(s.channelRepo, s.permResolver, searcher, log.Logger)
 	searchHandler := api.NewSearchHandler(searchService, log.Logger)
 	app.Get("/api/v1/search/messages", requireAuth, requireVerified, requireActive,
 		searchHandler.SearchMessages)
@@ -780,7 +778,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 	serverGroup.Post("/join", onboardingHandler.JoinServer)
 
 	// Member routes (mixed: some require active, some do not)
-	memberHandler := api.NewMemberHandler(s.memberRepo, s.roleRepo, s.permReadStore, s.permResolver, s.permPublisher, s.gatewayPublisher, s.auditLogger, log.Logger)
+	memberHandler := api.NewMemberHandler(s.memberRepo, s.roleRepo, s.permStore, s.permResolver, s.permPublisher, s.gatewayPublisher, s.auditLogger, log.Logger)
 
 	// Channel member listing (which server members can see this channel)
 	channelGroup.Get("/:channelID/members",
