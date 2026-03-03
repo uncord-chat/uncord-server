@@ -136,8 +136,15 @@ func (w *ThumbnailWorker) processJob(ctx context.Context, msg redis.XMessage) {
 		return
 	}
 
+	rawStr, ok := raw.(string)
+	if !ok {
+		w.log.Warn().Str("message_id", msg.ID).Msg("Thumbnail job 'job' field is not a string")
+		w.ack(ctx, msg.ID)
+		return
+	}
+
 	var job ThumbnailJob
-	if err := json.Unmarshal([]byte(raw.(string)), &job); err != nil {
+	if err := json.Unmarshal([]byte(rawStr), &job); err != nil {
 		w.log.Warn().Err(err).Str("message_id", msg.ID).Msg("Failed to unmarshal thumbnail job")
 		w.ack(ctx, msg.ID)
 		return
