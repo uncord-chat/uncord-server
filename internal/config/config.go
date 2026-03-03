@@ -551,6 +551,10 @@ func (c *Config) validate() error {
 		errs = append(errs, fmt.Errorf("E2EE_MAX_DEVICES_PER_USER must be at least 1"))
 	}
 
+	if c.CORSAllowOrigins == "*" && !c.IsDevelopment() {
+		errs = append(errs, fmt.Errorf("CORS_ALLOW_ORIGINS must specify explicit origins in production"))
+	}
+
 	if c.SMTPHost != "" {
 		if c.SMTPPort < 1 || c.SMTPPort > 65535 {
 			errs = append(errs, fmt.Errorf("SMTP_PORT must be between 1 and 65535"))

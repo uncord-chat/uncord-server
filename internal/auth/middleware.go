@@ -10,23 +10,39 @@ import (
 
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 
+	"github.com/uncord-chat/uncord-server/internal/config"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 )
 
-// RequireAuth returns Fiber middleware that validates a JWT Bearer token from the Authorization header and stores the
-// user ID in c.Locals("userID").
-func RequireAuth(secret, issuer string) fiber.Handler {
-	return func(c fiber.Ctx) error {
-		header := c.Get("Authorization")
-		if header == "" {
-			return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing authorization header")
-		}
+// Authentication source values stored in c.Locals("authSource"). Downstream middleware (e.g. CSRF enforcement) reads
+// this value to determine whether the request was authenticated via the Authorization header or a cookie.
+const (
+	AuthSourceHeader = "header"
+	AuthSourceCookie = "cookie"
+)
 
-		const prefix = "Bearer "
-		if len(header) <= len(prefix) || !strings.EqualFold(header[:len(prefix)], prefix) {
-			return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Invalid authorization format")
+// RequireAuth returns Fiber middleware that validates a JWT access token and stores the user ID in c.Locals("userID").
+// Credentials are checked in order: first the Authorization header (Bearer token), then the access token cookie. The
+// authentication source is stored in c.Locals("authSource") as "header" or "cookie" for downstream middleware (e.g.
+// CSRF enforcement) to inspect.
+func RequireAuth(secret, issuer string, cfg *config.Config) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		var tokenStr string
+		var authSource string
+
+		if header := c.Get("Authorization"); header != "" {
+			const prefix = "Bearer "
+			if len(header) <= len(prefix) || !strings.EqualFold(header[:len(prefix)], prefix) {
+				return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Invalid authorization format")
+			}
+			tokenStr = header[len(prefix):]
+			authSource = AuthSourceHeader
+		} else if cookie := c.Cookies(AccessCookieName(cfg)); cookie != "" {
+			tokenStr = cookie
+			authSource = AuthSourceCookie
+		} else {
+			return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Missing authentication credentials")
 		}
-		tokenStr := header[len(prefix):]
 
 		claims, err := ValidateAccessToken(tokenStr, secret, issuer)
 		if err != nil {
@@ -48,6 +64,7 @@ func RequireAuth(secret, issuer string) fiber.Handler {
 
 		c.Locals("userID", userID)
 		c.Locals("emailVerified", claims.EmailVerified)
+		c.Locals("authSource", authSource)
 		return c.Next()
 	}
 }

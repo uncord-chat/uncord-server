@@ -81,6 +81,10 @@ func NewService(users user.Repository, rdb *redis.Client, cfg *config.Config, bl
 	}, nil
 }
 
+// Redis returns the Redis client used by this service. Handlers that need direct access for operations like revoking
+// all refresh tokens or creating gateway tickets use this rather than receiving the client separately.
+func (s *Service) Redis() *redis.Client { return s.redis }
+
 // RegisterRequest is the input for Service.Register.
 type RegisterRequest struct {
 	Email    string

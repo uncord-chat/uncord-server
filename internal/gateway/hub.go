@@ -241,23 +241,34 @@ func (h *Hub) delayedOffline(userID uuid.UUID) {
 	h.publishPresence(ctx, userID, presence.StatusOffline)
 }
 
-// handleIdentify authenticates a client using a JWT token, assembles the READY payload, and registers the client.
+// authenticateToken resolves a user ID from a token string. It first tries to consume the token as a single-use gateway
+// ticket (used by web clients). If that fails, it falls back to standard JWT access token validation (used by native
+// clients).
+func (h *Hub) authenticateToken(ctx context.Context, token string) (uuid.UUID, error) {
+	userID, err := auth.ConsumeGatewayTicket(ctx, h.rdb, token)
+	if err == nil {
+		return userID, nil
+	}
+
+	claims, jwtErr := auth.ValidateAccessToken(token, h.cfg.JWTSecret.Expose(), h.cfg.ServerURL)
+	if jwtErr != nil {
+		return uuid.Nil, jwtErr
+	}
+	return uuid.Parse(claims.Subject)
+}
+
+// handleIdentify authenticates a client using a gateway ticket or JWT token, assembles the READY payload, and registers
+// the client.
 func (h *Hub) handleIdentify(client *Client, token string) {
-	claims, err := auth.ValidateAccessToken(token, h.cfg.JWTSecret.Expose(), h.cfg.ServerURL)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	userID, err := h.authenticateToken(ctx, token)
 	if err != nil {
 		h.log.Debug().Err(err).Msg("Identify token validation failed")
 		client.closeWithCode(CloseAuthFailed, "invalid token")
 		return
 	}
-
-	userID, err := uuid.Parse(claims.Subject)
-	if err != nil {
-		client.closeWithCode(CloseAuthFailed, "invalid token subject")
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
 
 	readyData, err := h.assembleReady(ctx, userID)
 	if err != nil {
@@ -310,21 +321,15 @@ func (h *Hub) handleIdentify(client *Client, token string) {
 
 // handleResume restores a client's session from Valkey and replays missed events.
 func (h *Hub) handleResume(client *Client, data models.ResumeData) {
-	claims, err := auth.ValidateAccessToken(data.Token, h.cfg.JWTSecret.Expose(), h.cfg.ServerURL)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	tokenUserID, err := h.authenticateToken(ctx, data.Token)
 	if err != nil {
 		h.log.Debug().Err(err).Msg("Resume token validation failed")
 		client.closeWithCode(CloseAuthFailed, "invalid token")
 		return
 	}
-
-	tokenUserID, err := uuid.Parse(claims.Subject)
-	if err != nil {
-		client.closeWithCode(CloseAuthFailed, "invalid token subject")
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
 
 	session, err := h.sessions.Load(ctx, data.SessionID)
 	if err != nil {

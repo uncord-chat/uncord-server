@@ -76,6 +76,10 @@
 			"value": ""
 		},
 		{
+			"key": "gateway_ticket",
+			"value": ""
+		},
+		{
 			"key": "thread_id",
 			"value": ""
 		},
@@ -366,6 +370,54 @@
 							"path": [
 								"auth",
 								"verify-password"
+							]
+						}
+					}
+				},
+				{
+					"name": "Logout",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/auth/logout",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"logout"
+							]
+						}
+					}
+				},
+				{
+					"name": "Gateway Ticket",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const data = pm.response.json().data;",
+									"    pm.collectionVariables.set('gateway_ticket', data.ticket);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/auth/gateway-ticket",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"gateway-ticket"
 							]
 						}
 					}

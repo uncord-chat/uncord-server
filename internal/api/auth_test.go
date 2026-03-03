@@ -244,7 +244,7 @@ func testAuthHandler(t *testing.T) *fiber.App {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	handler := NewAuthHandler(svc, zerolog.Nop())
+	handler := NewAuthHandler(svc, testAuthConfig(), zerolog.Nop())
 
 	app := fiber.New()
 	app.Post("/register", handler.Register)
@@ -686,7 +686,7 @@ func testVerifyPasswordApp(t *testing.T) *fiber.App {
 		t.Fatalf("Parse user ID: %v", err)
 	}
 
-	handler := NewAuthHandler(svc, zerolog.Nop())
+	handler := NewAuthHandler(svc, testAuthConfig(), zerolog.Nop())
 
 	app := fiber.New()
 	app.Use(func(c fiber.Ctx) error {
@@ -840,7 +840,7 @@ func testResendVerificationApp(t *testing.T) (*fiber.App, uuid.UUID) {
 		t.Fatalf("Parse user ID: %v", err)
 	}
 
-	handler := NewAuthHandler(svc, zerolog.Nop())
+	handler := NewAuthHandler(svc, testAuthConfig(), zerolog.Nop())
 
 	app := fiber.New()
 	app.Post("/resend-verification", fakeAuth(userID), handler.ResendVerification)
@@ -901,7 +901,7 @@ func TestResendVerificationHandler_AlreadyVerified(t *testing.T) {
 	// Mark user as verified.
 	repo.users["verified@example.com"].EmailVerified = true
 
-	handler := NewAuthHandler(svc, zerolog.Nop())
+	handler := NewAuthHandler(svc, testAuthConfig(), zerolog.Nop())
 	app := fiber.New()
 	app.Post("/resend-verification", fakeAuth(userID), handler.ResendVerification)
 
@@ -930,7 +930,7 @@ func TestResendVerificationHandler_NoAuth(t *testing.T) {
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	handler := NewAuthHandler(svc, zerolog.Nop())
+	handler := NewAuthHandler(svc, testAuthConfig(), zerolog.Nop())
 	app := fiber.New()
 	app.Post("/resend-verification", fakeAuth(uuid.Nil), handler.ResendVerification)
 

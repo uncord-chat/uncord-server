@@ -448,7 +448,8 @@ func run() error {
 }
 
 func (s *server) registerRoutes(app *fiber.App) {
-	requireAuth := auth.RequireAuth(s.cfg.JWTSecret.Expose(), s.cfg.ServerURL)
+	requireAuth := auth.RequireAuth(s.cfg.JWTSecret.Expose(), s.cfg.ServerURL, s.cfg)
+	requireCSRF := auth.RequireCSRF(s.cfg)
 	requireVerified := auth.RequireVerifiedEmail()
 	requireActive := member.RequireActiveMember(s.memberRepo)
 
@@ -463,7 +464,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 	health := api.NewHealthHandler(s.db, redisPinger{client: s.rdb})
 	app.Get("/api/v1/health", health.Health)
 
-	authHandler := api.NewAuthHandler(s.authService, log.Logger)
+	authHandler := api.NewAuthHandler(s.authService, s.cfg, log.Logger)
 
 	// Auth routes with stricter rate limiting (public, no email/member checks)
 	authGroup := app.Group("/api/v1/auth")
@@ -476,13 +477,15 @@ func (s *server) registerRoutes(app *fiber.App) {
 	authGroup.Post("/login", authHandler.Login)
 	authGroup.Post("/refresh", authHandler.Refresh)
 	authGroup.Post("/verify-email", authHandler.VerifyEmail)
-	authGroup.Post("/resend-verification", requireAuth, authHandler.ResendVerification)
+	authGroup.Post("/resend-verification", requireAuth, requireCSRF, authHandler.ResendVerification)
 	authGroup.Post("/mfa/verify", authHandler.MFAVerify)
-	authGroup.Post("/verify-password", requireAuth, authHandler.VerifyPassword)
+	authGroup.Post("/verify-password", requireAuth, requireCSRF, authHandler.VerifyPassword)
+	authGroup.Post("/logout", requireAuth, requireCSRF, authHandler.Logout)
+	authGroup.Post("/gateway-ticket", requireAuth, requireCSRF, authHandler.GatewayTicket)
 
 	// User profile routes (authenticated + verified email, no member check required)
 	userHandler := api.NewUserHandler(s.userRepo, s.authService, log.Logger)
-	userGroup := app.Group("/api/v1/users", requireAuth, requireVerified)
+	userGroup := app.Group("/api/v1/users", requireAuth, requireCSRF, requireVerified)
 	userGroup.Get("/@me", userHandler.GetMe)
 	userGroup.Patch("/@me", userHandler.UpdateMe)
 	userGroup.Delete("/@me", userHandler.DeleteMe)
@@ -529,7 +532,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 	userGroup.Get("/@me/channels", dmHandler.ListDMChannels)
 
 	// DM channel routes (under /api/v1/dm, auth + verified + participant check)
-	dmGroup := app.Group("/api/v1/dm", requireAuth, requireVerified)
+	dmGroup := app.Group("/api/v1/dm", requireAuth, requireCSRF, requireVerified)
 	dmGroup.Get("/:channelID", dmHandler.RequireParticipant, dmHandler.GetDMChannel)
 	dmGroup.Post("/:channelID/participants", dmHandler.RequireParticipant, dmHandler.AddParticipant)
 	dmGroup.Delete("/:channelID/participants/:userID", dmHandler.RequireParticipant, dmHandler.RemoveParticipant)
@@ -539,7 +542,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 	// Server config routes (authenticated + verified email)
 	serverHandler := api.NewServerHandler(s.serverRepo, s.auditLogger, log.Logger)
 	app.Get("/api/v1/server/info", serverHandler.GetPublicInfo)
-	serverGroup := app.Group("/api/v1/server", requireAuth, requireVerified)
+	serverGroup := app.Group("/api/v1/server", requireAuth, requireCSRF, requireVerified)
 	serverGroup.Get("/", serverHandler.Get)
 	serverGroup.Patch("/", requireActive,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageServer), serverHandler.Update)
@@ -584,7 +587,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 		channelHandler.CreateChannel)
 
 	// Channel routes (standalone group: all routes require active membership)
-	channelGroup := app.Group("/api/v1/channels", requireAuth, requireVerified, requireActive)
+	channelGroup := app.Group("/api/v1/channels", requireAuth, requireCSRF, requireVerified, requireActive)
 	channelGroup.Get("/:channelID",
 		permission.RequirePermission(s.permResolver, permissions.ViewChannels),
 		channelHandler.GetChannel)
@@ -673,7 +676,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 		reactionHandler.ListReactionUsers)
 
 	// Message routes (standalone for edit and delete, require active membership)
-	messageGroup := app.Group("/api/v1/messages", requireAuth, requireVerified, requireActive)
+	messageGroup := app.Group("/api/v1/messages", requireAuth, requireCSRF, requireVerified, requireActive)
 	messageGroup.Patch("/:messageID", messageHandler.EditMessage)
 	messageGroup.Delete("/:messageID", messageHandler.DeleteMessage)
 
@@ -700,7 +703,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 		pinHandler.ListPins)
 
 	// Thread-scoped routes (standalone group)
-	threadGroup := app.Group("/api/v1/threads", requireAuth, requireVerified, requireActive)
+	threadGroup := app.Group("/api/v1/threads", requireAuth, requireCSRF, requireVerified, requireActive)
 	threadGroup.Get("/:threadID", threadHandler.GetThread)
 	threadGroup.Patch("/:threadID", threadHandler.UpdateThread)
 	threadGroup.Get("/:threadID/messages", threadHandler.ListThreadMessages)
@@ -721,7 +724,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 	searcher := search.NewTypesenseSearcher(s.cfg.TypesenseURL, s.cfg.TypesenseAPIKey.Expose(), s.cfg.TypesenseTimeout)
 	searchService := search.NewService(s.channelRepo, s.permResolver, searcher, log.Logger)
 	searchHandler := api.NewSearchHandler(searchService, log.Logger)
-	app.Get("/api/v1/search/messages", requireAuth, requireVerified, requireActive,
+	app.Get("/api/v1/search/messages", requireAuth, requireCSRF, requireVerified, requireActive,
 		searchHandler.SearchMessages)
 
 	// Category routes (server group routes need per-route active, standalone group requires active)
@@ -731,7 +734,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 		permission.RequireServerPermission(s.permResolver, permissions.ManageCategories),
 		categoryHandler.CreateCategory)
 
-	categoryGroup := app.Group("/api/v1/categories", requireAuth, requireVerified, requireActive)
+	categoryGroup := app.Group("/api/v1/categories", requireAuth, requireCSRF, requireVerified, requireActive)
 	categoryGroup.Patch("/:categoryID",
 		permission.RequireServerPermission(s.permResolver, permissions.ManageCategories),
 		categoryHandler.UpdateCategory)
@@ -763,7 +766,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 
 	// Invite action routes (under /api/v1/invites, authenticated). The join endpoint handles email verification
 	// after invite validation so that clients can distinguish invalid codes from unverified accounts.
-	inviteGroup := app.Group("/api/v1/invites", requireAuth)
+	inviteGroup := app.Group("/api/v1/invites", requireAuth, requireCSRF)
 	inviteGroup.Delete("/:code", requireVerified, requireActive,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageInvites),
 		inviteHandler.DeleteInvite)
@@ -771,10 +774,10 @@ func (s *server) registerRoutes(app *fiber.App) {
 
 	// Onboarding routes
 	onboardingHandler := api.NewOnboardingHandler(s.onboardingRepo, s.documentStore, s.memberRepo, s.userRepo, s.serverRepo, s.gatewayPublisher, s.auditLogger, log.Logger)
-	app.Get("/api/v1/onboarding/status", requireAuth, onboardingHandler.GetOnboardingStatus)
-	app.Get("/api/v1/onboarding", requireAuth, onboardingHandler.GetOnboarding)
-	app.Patch("/api/v1/onboarding", requireAuth, requireVerified, requireActive, onboardingHandler.UpdateOnboarding)
-	app.Post("/api/v1/onboarding/accept", requireAuth, requireVerified, onboardingHandler.AcceptOnboarding)
+	app.Get("/api/v1/onboarding/status", requireAuth, requireCSRF, onboardingHandler.GetOnboardingStatus)
+	app.Get("/api/v1/onboarding", requireAuth, requireCSRF, onboardingHandler.GetOnboarding)
+	app.Patch("/api/v1/onboarding", requireAuth, requireCSRF, requireVerified, requireActive, onboardingHandler.UpdateOnboarding)
+	app.Post("/api/v1/onboarding/accept", requireAuth, requireCSRF, requireVerified, onboardingHandler.AcceptOnboarding)
 	serverGroup.Post("/join", onboardingHandler.JoinServer)
 
 	// Member routes (mixed: some require active, some do not)
@@ -875,12 +878,20 @@ func newFiberApp(cfg *config.Config) *fiber.App {
 		app.Use(httputil.RequestLogger(log.Logger, "/api/v1/health"))
 	}
 	// CORS runs before the timeout so that preflight OPTIONS responses are not subject to the request deadline.
-	app.Use(cors.New(cors.Config{
-		AllowOrigins:  strings.Split(cfg.CORSAllowOrigins, ","),
-		AllowMethods:  []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:  []string{"Origin", "Content-Type", "Accept", "Authorization"},
-		ExposeHeaders: []string{"X-Request-ID"},
-	}))
+	corsConfig := cors.Config{
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-CSRF-Token"},
+		ExposeHeaders:    []string{"X-Request-ID"},
+		AllowCredentials: true,
+	}
+	if cfg.IsDevelopment() && cfg.CORSAllowOrigins == "*" {
+		// AllowCredentials with a literal "*" origin causes Fiber to panic. In development, dynamically allow all
+		// origins by echoing the request's Origin header.
+		corsConfig.AllowOriginsFunc = func(string) bool { return true }
+	} else {
+		corsConfig.AllowOrigins = strings.Split(cfg.CORSAllowOrigins, ",")
+	}
+	app.Use(cors.New(corsConfig))
 
 	// Enforce a per-request timeout on all REST handlers. WebSocket upgrade requests are excluded because the gateway
 	// manages its own connection lifecycle. The timeout middleware runs the remaining handler chain in a goroutine and

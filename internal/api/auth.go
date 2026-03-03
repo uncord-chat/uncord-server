@@ -9,18 +9,20 @@ import (
 	"github.com/uncord-chat/uncord-protocol/models"
 
 	"github.com/uncord-chat/uncord-server/internal/auth"
+	"github.com/uncord-chat/uncord-server/internal/config"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 )
 
 // AuthHandler serves authentication endpoints.
 type AuthHandler struct {
 	auth *auth.Service
+	cfg  *config.Config
 	log  zerolog.Logger
 }
 
 // NewAuthHandler creates a new authentication handler.
-func NewAuthHandler(svc *auth.Service, logger zerolog.Logger) *AuthHandler {
-	return &AuthHandler{auth: svc, log: logger}
+func NewAuthHandler(svc *auth.Service, cfg *config.Config, logger zerolog.Logger) *AuthHandler {
+	return &AuthHandler{auth: svc, cfg: cfg, log: logger}
 }
 
 // toAuthResponse maps a service Result to the protocol response type.
@@ -48,6 +50,7 @@ func (h *AuthHandler) Register(c fiber.Ctx) error {
 		return h.mapAuthError(c, err)
 	}
 
+	auth.SetAuthCookies(c, h.cfg, result.AccessToken, result.RefreshToken)
 	return httputil.SuccessStatus(c, fiber.StatusCreated, toAuthResponse(result))
 }
 
@@ -74,6 +77,7 @@ func (h *AuthHandler) Login(c fiber.Ctx) error {
 		})
 	}
 
+	auth.SetAuthCookies(c, h.cfg, result.Auth.AccessToken, result.Auth.RefreshToken)
 	return httputil.Success(c, toAuthResponse(result.Auth))
 }
 
@@ -92,6 +96,7 @@ func (h *AuthHandler) MFAVerify(c fiber.Ctx) error {
 		return h.mapAuthError(c, err)
 	}
 
+	auth.SetAuthCookies(c, h.cfg, result.AccessToken, result.RefreshToken)
 	return httputil.Success(c, toAuthResponse(result))
 }
 
@@ -101,15 +106,21 @@ func (h *AuthHandler) Refresh(c fiber.Ctx) error {
 	if err := c.Bind().Body(&body); err != nil {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "Invalid request body")
 	}
-	if body.RefreshToken == "" {
+
+	refreshToken := body.RefreshToken
+	if refreshToken == "" {
+		refreshToken = c.Cookies(auth.RefreshCookieName(h.cfg))
+	}
+	if refreshToken == "" {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidBody, "refresh_token is required")
 	}
 
-	tokens, err := h.auth.Refresh(c, body.RefreshToken)
+	tokens, err := h.auth.Refresh(c, refreshToken)
 	if err != nil {
 		return h.mapAuthError(c, err)
 	}
 
+	auth.SetAuthCookies(c, h.cfg, tokens.AccessToken, tokens.RefreshToken)
 	return httputil.Success(c, models.TokenPairResponse{
 		AccessToken:  tokens.AccessToken,
 		RefreshToken: tokens.RefreshToken,
@@ -131,6 +142,7 @@ func (h *AuthHandler) VerifyEmail(c fiber.Ctx) error {
 		return h.mapAuthError(c, err)
 	}
 
+	auth.SetAuthCookies(c, h.cfg, result.AccessToken, result.RefreshToken)
 	return httputil.Success(c, toAuthResponse(result))
 }
 
@@ -170,6 +182,39 @@ func (h *AuthHandler) ResendVerification(c fiber.Ctx) error {
 	return httputil.Success(c, models.MessageResponse{
 		Message: "Verification email sent",
 	})
+}
+
+// Logout handles POST /api/v1/auth/logout. It revokes all refresh tokens for the authenticated user and clears auth
+// cookies from the response.
+func (h *AuthHandler) Logout(c fiber.Ctx) error {
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
+
+	if err := auth.RevokeAllRefreshTokens(c, h.auth.Redis(), userID); err != nil {
+		h.log.Error().Err(err).Stringer("user_id", userID).Msg("Failed to revoke refresh tokens on logout")
+	}
+
+	auth.ClearAuthCookies(c, h.cfg)
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// GatewayTicket handles POST /api/v1/auth/gateway-ticket. It creates a single-use ticket that web clients present in
+// the WebSocket Identify frame instead of a JWT access token.
+func (h *AuthHandler) GatewayTicket(c fiber.Ctx) error {
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
+
+	ticket, err := auth.CreateGatewayTicket(c, h.auth.Redis(), userID)
+	if err != nil {
+		h.log.Error().Err(err).Stringer("user_id", userID).Msg("Failed to create gateway ticket")
+		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
+	}
+
+	return httputil.Success(c, models.GatewayTicketResponse{Ticket: ticket})
 }
 
 // mapAuthError converts auth-layer errors to appropriate HTTP responses.

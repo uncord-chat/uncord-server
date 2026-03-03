@@ -11,12 +11,16 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
+
+	"github.com/uncord-chat/uncord-server/internal/config"
 )
 
-func TestRequireAuthNoHeader(t *testing.T) {
+var testCfg = &config.Config{ServerEnv: "development"}
+
+func TestRequireAuthNoCredentials(t *testing.T) {
 	t.Parallel()
 	app := fiber.New()
-	app.Use(RequireAuth("secret", testIssuer))
+	app.Use(RequireAuth("secret", testIssuer, testCfg))
 	app.Get("/test", func(c fiber.Ctx) error {
 		return c.SendStatus(200)
 	})
@@ -41,7 +45,7 @@ func TestRequireAuthNoHeader(t *testing.T) {
 func TestRequireAuthBadFormat(t *testing.T) {
 	t.Parallel()
 	app := fiber.New()
-	app.Use(RequireAuth("secret", testIssuer))
+	app.Use(RequireAuth("secret", testIssuer, testCfg))
 	app.Get("/test", func(c fiber.Ctx) error {
 		return c.SendStatus(200)
 	})
@@ -63,12 +67,11 @@ func TestRequireAuthExpiredToken(t *testing.T) {
 	t.Parallel()
 	app := fiber.New()
 	secret := "test-secret"
-	app.Use(RequireAuth(secret, testIssuer))
+	app.Use(RequireAuth(secret, testIssuer, testCfg))
 	app.Get("/test", func(c fiber.Ctx) error {
 		return c.SendStatus(200)
 	})
 
-	// Create an expired token
 	tokenStr, err := NewAccessToken(uuid.New(), secret, -1*time.Second, testIssuer, false)
 	if err != nil {
 		t.Fatalf("NewAccessToken() error = %v", err)
@@ -92,13 +95,13 @@ func TestRequireAuthExpiredToken(t *testing.T) {
 	}
 }
 
-func TestRequireAuthValid(t *testing.T) {
+func TestRequireAuthValidHeader(t *testing.T) {
 	t.Parallel()
 	app := fiber.New()
 	secret := "test-secret"
 	userID := uuid.New()
 
-	app.Use(RequireAuth(secret, testIssuer))
+	app.Use(RequireAuth(secret, testIssuer, testCfg))
 	app.Get("/test", func(c fiber.Ctx) error {
 		id, ok := c.Locals("userID").(uuid.UUID)
 		if !ok {
@@ -110,6 +113,10 @@ func TestRequireAuthValid(t *testing.T) {
 		}
 		if !verified {
 			return c.Status(500).SendString("emailVerified should be true")
+		}
+		source, _ := c.Locals("authSource").(string)
+		if source != AuthSourceHeader {
+			return c.Status(500).SendString("authSource should be header")
 		}
 		return c.SendString(id.String())
 	})
@@ -140,7 +147,7 @@ func TestRequireAuthValid(t *testing.T) {
 func TestRequireAuthWrongSignature(t *testing.T) {
 	t.Parallel()
 	app := fiber.New()
-	app.Use(RequireAuth("correct-secret", testIssuer))
+	app.Use(RequireAuth("correct-secret", testIssuer, testCfg))
 	app.Get("/test", func(c fiber.Ctx) error {
 		return c.SendStatus(200)
 	})
@@ -157,6 +164,121 @@ func TestRequireAuthWrongSignature(t *testing.T) {
 
 	if resp.StatusCode != fiber.StatusUnauthorized {
 		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusUnauthorized)
+	}
+}
+
+func TestRequireAuthCookieFallback(t *testing.T) {
+	t.Parallel()
+	secret := "test-secret"
+	userID := uuid.New()
+
+	app := fiber.New()
+	app.Use(RequireAuth(secret, testIssuer, testCfg))
+	app.Get("/test", func(c fiber.Ctx) error {
+		id, ok := c.Locals("userID").(uuid.UUID)
+		if !ok {
+			return c.Status(500).SendString("userID not found")
+		}
+		source, _ := c.Locals("authSource").(string)
+		if source != AuthSourceCookie {
+			return c.Status(500).SendString("authSource should be cookie, got " + source)
+		}
+		return c.SendString(id.String())
+	})
+
+	tokenStr, err := NewAccessToken(userID, secret, 15*time.Minute, testIssuer, true)
+	if err != nil {
+		t.Fatalf("NewAccessToken() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.AddCookie(&http.Cookie{Name: AccessCookieName(testCfg), Value: tokenStr})
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test() error = %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != fiber.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want %d, body = %s", resp.StatusCode, fiber.StatusOK, string(bodyBytes))
+	}
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	if string(bodyBytes) != userID.String() {
+		t.Errorf("body = %q, want %q", string(bodyBytes), userID.String())
+	}
+}
+
+func TestRequireAuthHeaderPrecedence(t *testing.T) {
+	t.Parallel()
+	secret := "test-secret"
+	headerUserID := uuid.New()
+	cookieUserID := uuid.New()
+
+	app := fiber.New()
+	app.Use(RequireAuth(secret, testIssuer, testCfg))
+	app.Get("/test", func(c fiber.Ctx) error {
+		id, _ := c.Locals("userID").(uuid.UUID)
+		source, _ := c.Locals("authSource").(string)
+		if source != AuthSourceHeader {
+			return c.Status(500).SendString("authSource should be header when both are present")
+		}
+		return c.SendString(id.String())
+	})
+
+	headerToken, _ := NewAccessToken(headerUserID, secret, 15*time.Minute, testIssuer, true)
+	cookieToken, _ := NewAccessToken(cookieUserID, secret, 15*time.Minute, testIssuer, true)
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("Authorization", "Bearer "+headerToken)
+	req.AddCookie(&http.Cookie{Name: AccessCookieName(testCfg), Value: cookieToken})
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test() error = %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, fiber.StatusOK)
+	}
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	if string(bodyBytes) != headerUserID.String() {
+		t.Errorf("body = %q, want header userID %q", string(bodyBytes), headerUserID.String())
+	}
+}
+
+func TestRequireAuthExpiredCookie(t *testing.T) {
+	t.Parallel()
+	secret := "test-secret"
+
+	app := fiber.New()
+	app.Use(RequireAuth(secret, testIssuer, testCfg))
+	app.Get("/test", func(c fiber.Ctx) error {
+		return c.SendStatus(200)
+	})
+
+	tokenStr, err := NewAccessToken(uuid.New(), secret, -1*time.Second, testIssuer, false)
+	if err != nil {
+		t.Fatalf("NewAccessToken() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.AddCookie(&http.Cookie{Name: AccessCookieName(testCfg), Value: tokenStr})
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test() error = %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusUnauthorized)
+	}
+
+	body := readErrorCode(t, resp)
+	if body != string(apierrors.TokenExpired) {
+		t.Errorf("error code = %q, want %q", body, apierrors.TokenExpired)
 	}
 }
 

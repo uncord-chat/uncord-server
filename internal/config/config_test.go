@@ -51,6 +51,7 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
 	t.Setenv("SERVER_SECRET", testServerSecret)
 	t.Setenv("TYPESENSE_API_KEY", "test-typesense-key")
+	t.Setenv("CORS_ALLOW_ORIGINS", "https://app.example.com")
 
 	cfg, err := Load()
 	if err != nil {
@@ -501,6 +502,7 @@ func TestLoadSMTPOverrides(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
 	t.Setenv("SERVER_SECRET", testServerSecret)
 	t.Setenv("TYPESENSE_API_KEY", "test-typesense-key")
+	t.Setenv("CORS_ALLOW_ORIGINS", "https://app.example.com")
 	t.Setenv("SMTP_HOST", "mail.example.com")
 	t.Setenv("SMTP_PORT", "465")
 	t.Setenv("SMTP_USERNAME", "user@example.com")
@@ -656,6 +658,7 @@ func TestLoadDevelopmentOverrides(t *testing.T) {
 			t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
 			t.Setenv("SERVER_SECRET", testServerSecret)
 			t.Setenv("TYPESENSE_API_KEY", "test-typesense-key")
+			t.Setenv("CORS_ALLOW_ORIGINS", "https://app.example.com")
 			t.Setenv("SERVER_ENV", tt.serverEnv)
 			t.Setenv("SERVER_PORT", tt.serverPort)
 			t.Setenv("SMTP_HOST", tt.smtpHost)
@@ -731,6 +734,7 @@ func TestLoadDeletionTombstoneUsernamesDefault(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
 	t.Setenv("SERVER_SECRET", testServerSecret)
 	t.Setenv("TYPESENSE_API_KEY", "test-typesense-key")
+	t.Setenv("CORS_ALLOW_ORIGINS", "https://app.example.com")
 
 	cfg, err := Load()
 	if err != nil {
@@ -745,6 +749,7 @@ func TestLoadDeletionTombstoneUsernamesOverride(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
 	t.Setenv("SERVER_SECRET", testServerSecret)
 	t.Setenv("TYPESENSE_API_KEY", "test-typesense-key")
+	t.Setenv("CORS_ALLOW_ORIGINS", "https://app.example.com")
 	t.Setenv("DELETION_TOMBSTONE_USERNAMES", "false")
 
 	cfg, err := Load()
@@ -900,6 +905,7 @@ func TestLoadGatewayOverrides(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
 	t.Setenv("SERVER_SECRET", testServerSecret)
 	t.Setenv("TYPESENSE_API_KEY", "test-typesense-key")
+	t.Setenv("CORS_ALLOW_ORIGINS", "https://app.example.com")
 	t.Setenv("GATEWAY_HEARTBEAT_INTERVAL_MS", "30000")
 	t.Setenv("GATEWAY_SESSION_TTL_SECONDS", "600")
 	t.Setenv("GATEWAY_REPLAY_BUFFER_SIZE", "500")
