@@ -286,11 +286,26 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResult, er
 
 // Refresh rotates a refresh token and issues a new access token. The user's current email verification status is read
 // from the database so that the new access token reflects the latest state. One DB query per refresh is far cheaper
-// than one per authenticated request.
+// than one per authenticated request. When token reuse is detected (indicating potential theft), all refresh tokens for
+// the affected user are revoked as a precaution per the OAuth 2.0 Security BCP.
 func (s *Service) Refresh(ctx context.Context, oldToken string) (*TokenPair, error) {
+	// Look up the user associated with this token before rotation. If the token has already been consumed by a
+	// legitimate rotation, this returns ErrRefreshTokenNotFound and we surface ErrRefreshTokenReused instead so
+	// callers get a consistent error for any form of stale token submission.
+	lookedUpUserID, validateErr := ValidateRefreshToken(ctx, s.redis, oldToken)
+
 	newRefresh, userID, err := RotateRefreshToken(ctx, s.redis, oldToken, s.config.JWTRefreshTTL)
+	if errors.Is(err, ErrRefreshTokenReused) {
+		if validateErr == nil {
+			_ = RevokeAllRefreshTokens(ctx, s.redis, lookedUpUserID)
+		}
+		return nil, ErrRefreshTokenReused
+	}
 	if err != nil {
-		return nil, err // ErrRefreshTokenReused passes through
+		if validateErr != nil && errors.Is(validateErr, ErrRefreshTokenNotFound) {
+			return nil, ErrRefreshTokenReused
+		}
+		return nil, err
 	}
 
 	u, err := s.users.GetByID(ctx, userID)
