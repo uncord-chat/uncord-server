@@ -62,8 +62,8 @@ func (s *server) globalMsgLimiter() fiber.Handler {
 func (s *server) registerRoutes(app *fiber.App) {
 	requireAuth := auth.RequireAuth(s.cfg.JWTSecret.Expose(), s.cfg.ServerURL, s.cfg)
 	requireCSRF := auth.RequireCSRF(s.cfg)
-	requireVerified := auth.RequireVerifiedEmail()
-	requireActive := member.RequireActiveMember(s.memberRepo)
+	requireVerifiedEmail := auth.RequireVerifiedEmail()
+	requireActiveMember := member.RequireActiveMember(s.memberRepo)
 
 	// === EMAIL VERIFICATION PAGE ===
 
@@ -97,7 +97,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 
 	// User profile routes (authenticated + verified email, no member check required)
 	userHandler := api.NewUserHandler(s.userRepo, s.authService, log.Logger)
-	userGroup := app.Group("/api/v1/users", requireAuth, requireCSRF, requireVerified)
+	userGroup := app.Group("/api/v1/users", requireAuth, requireCSRF, requireVerifiedEmail)
 	userGroup.Get("/@me", userHandler.GetMe)
 	userGroup.Patch("/@me", userHandler.UpdateMe)
 	userGroup.Delete("/@me", userHandler.DeleteMe)
@@ -145,7 +145,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 	userGroup.Get("/@me/channels", dmHandler.ListDMChannels)
 
 	// DM channel routes (under /api/v1/dm, auth + verified + participant check)
-	dmGroup := app.Group("/api/v1/dm", requireAuth, requireCSRF, requireVerified)
+	dmGroup := app.Group("/api/v1/dm", requireAuth, requireCSRF, requireVerifiedEmail)
 	dmGroup.Get("/:channelID", dmHandler.RequireParticipant, dmHandler.GetDMChannel)
 	dmGroup.Post("/:channelID/participants", dmHandler.RequireParticipant, dmHandler.AddParticipant)
 	dmGroup.Delete("/:channelID/participants/:userID", dmHandler.RequireParticipant, dmHandler.RemoveParticipant)
@@ -158,20 +158,20 @@ func (s *server) registerRoutes(app *fiber.App) {
 	serverHandler := api.NewServerHandler(s.serverRepo, s.auditLogger, log.Logger)
 	app.Get("/api/v1/server/info", serverHandler.GetPublicInfo)
 	serverUploadLimiter := s.uploadLimiter()
-	serverGroup := app.Group("/api/v1/server", requireAuth, requireCSRF, requireVerified)
+	serverGroup := app.Group("/api/v1/server", requireAuth, requireCSRF, requireVerifiedEmail)
 	serverGroup.Get("/", serverHandler.Get)
-	serverGroup.Patch("/", requireActive,
+	serverGroup.Patch("/", requireActiveMember,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageServer), serverHandler.Update)
-	serverGroup.Put("/icon", requireActive,
+	serverGroup.Put("/icon", requireActiveMember,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageServer),
 		serverUploadLimiter, imageHandler.UploadServerIcon)
-	serverGroup.Delete("/icon", requireActive,
+	serverGroup.Delete("/icon", requireActiveMember,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageServer),
 		imageHandler.DeleteServerIcon)
-	serverGroup.Put("/banner", requireActive,
+	serverGroup.Put("/banner", requireActiveMember,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageServer),
 		serverUploadLimiter, imageHandler.UploadServerBanner)
-	serverGroup.Delete("/banner", requireActive,
+	serverGroup.Delete("/banner", requireActiveMember,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageServer),
 		imageHandler.DeleteServerBanner)
 
@@ -179,7 +179,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 
 	// Audit log route (requires active membership and ViewAuditLog permission)
 	auditHandler := api.NewAuditHandler(s.auditRepo, log.Logger)
-	serverGroup.Get("/audit-log", requireActive,
+	serverGroup.Get("/audit-log", requireActiveMember,
 		permission.RequireServerPermission(s.permResolver, permissions.ViewAuditLog),
 		auditHandler.List)
 
@@ -188,14 +188,14 @@ func (s *server) registerRoutes(app *fiber.App) {
 	// Emoji routes (under /api/v1/server/emoji, all require active membership)
 	emojiHandler := api.NewEmojiHandler(s.emojiRepo, s.storage, s.gatewayPublisher,
 		s.cfg.MaxEmojiSizeBytes(), 128, s.cfg.MaxEmojiPerServer, s.auditLogger, log.Logger)
-	serverGroup.Get("/emoji", requireActive, emojiHandler.ListEmoji)
-	serverGroup.Post("/emoji", requireActive,
+	serverGroup.Get("/emoji", requireActiveMember, emojiHandler.ListEmoji)
+	serverGroup.Post("/emoji", requireActiveMember,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageEmoji),
 		serverUploadLimiter, emojiHandler.CreateEmoji)
-	serverGroup.Patch("/emoji/:emojiID", requireActive,
+	serverGroup.Patch("/emoji/:emojiID", requireActiveMember,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageEmoji),
 		emojiHandler.UpdateEmoji)
-	serverGroup.Delete("/emoji/:emojiID", requireActive,
+	serverGroup.Delete("/emoji/:emojiID", requireActiveMember,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageEmoji),
 		emojiHandler.DeleteEmoji)
 
@@ -204,12 +204,12 @@ func (s *server) registerRoutes(app *fiber.App) {
 	// Channel routes (server group: list is open to pending, create requires active)
 	channelHandler := api.NewChannelHandler(s.channelRepo, s.memberRepo, s.onboardingRepo, s.permResolver, s.gatewayPublisher, s.cfg.MaxChannels, s.auditLogger, log.Logger)
 	serverGroup.Get("/channels", channelHandler.ListChannels)
-	serverGroup.Post("/channels", requireActive,
+	serverGroup.Post("/channels", requireActiveMember,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageChannels),
 		channelHandler.CreateChannel)
 
 	// Channel routes (standalone group: all routes require active membership)
-	channelGroup := app.Group("/api/v1/channels", requireAuth, requireCSRF, requireVerified, requireActive)
+	channelGroup := app.Group("/api/v1/channels", requireAuth, requireCSRF, requireVerifiedEmail, requireActiveMember)
 	channelGroup.Get("/:channelID",
 		permission.RequirePermission(s.permResolver, permissions.ViewChannels),
 		channelHandler.GetChannel)
@@ -294,7 +294,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 		reactionHandler.ListReactionUsers)
 
 	// Message routes (standalone for edit and delete, require active membership)
-	messageGroup := app.Group("/api/v1/messages", requireAuth, requireCSRF, requireVerified, requireActive)
+	messageGroup := app.Group("/api/v1/messages", requireAuth, requireCSRF, requireVerifiedEmail, requireActiveMember)
 	messageGroup.Patch("/:messageID", messageHandler.EditMessage)
 	messageGroup.Delete("/:messageID", messageHandler.DeleteMessage)
 
@@ -325,7 +325,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 		pinHandler.ListPins)
 
 	// Thread-scoped routes (standalone group)
-	threadGroup := app.Group("/api/v1/threads", requireAuth, requireCSRF, requireVerified, requireActive)
+	threadGroup := app.Group("/api/v1/threads", requireAuth, requireCSRF, requireVerifiedEmail, requireActiveMember)
 	threadGroup.Get("/:threadID", threadHandler.GetThread)
 	threadGroup.Patch("/:threadID", threadHandler.UpdateThread)
 	threadGroup.Get("/:threadID/messages", threadHandler.ListThreadMessages)
@@ -341,19 +341,19 @@ func (s *server) registerRoutes(app *fiber.App) {
 	searcher := search.NewTypesenseSearcher(s.cfg.TypesenseURL, s.cfg.TypesenseAPIKey.Expose(), s.cfg.TypesenseTimeout)
 	searchService := search.NewService(s.channelRepo, s.permResolver, searcher, log.Logger)
 	searchHandler := api.NewSearchHandler(searchService, log.Logger)
-	app.Get("/api/v1/search/messages", requireAuth, requireCSRF, requireVerified, requireActive,
+	app.Get("/api/v1/search/messages", requireAuth, requireCSRF, requireVerifiedEmail, requireActiveMember,
 		searchHandler.SearchMessages)
 
 	// === CATEGORY ROUTES ===
 
 	// Category routes (server group routes need per-route active, standalone group requires active)
 	categoryHandler := api.NewCategoryHandler(s.categoryRepo, s.cfg.MaxCategories, s.auditLogger, log.Logger)
-	serverGroup.Get("/categories", requireActive, categoryHandler.ListCategories)
-	serverGroup.Post("/categories", requireActive,
+	serverGroup.Get("/categories", requireActiveMember, categoryHandler.ListCategories)
+	serverGroup.Post("/categories", requireActiveMember,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageCategories),
 		categoryHandler.CreateCategory)
 
-	categoryGroup := app.Group("/api/v1/categories", requireAuth, requireCSRF, requireVerified, requireActive)
+	categoryGroup := app.Group("/api/v1/categories", requireAuth, requireCSRF, requireVerifiedEmail, requireActiveMember)
 	categoryGroup.Patch("/:categoryID",
 		permission.RequireServerPermission(s.permResolver, permissions.ManageCategories),
 		categoryHandler.UpdateCategory)
@@ -365,14 +365,14 @@ func (s *server) registerRoutes(app *fiber.App) {
 
 	// Role routes (all require active membership)
 	roleHandler := api.NewRoleHandler(s.roleRepo, s.permPublisher, s.gatewayPublisher, s.cfg.MaxRoles, s.auditLogger, log.Logger)
-	serverGroup.Get("/roles", requireActive, roleHandler.ListRoles)
-	serverGroup.Post("/roles", requireActive,
+	serverGroup.Get("/roles", requireActiveMember, roleHandler.ListRoles)
+	serverGroup.Post("/roles", requireActiveMember,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageRoles),
 		roleHandler.CreateRole)
-	serverGroup.Patch("/roles/:roleID", requireActive,
+	serverGroup.Patch("/roles/:roleID", requireActiveMember,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageRoles),
 		roleHandler.UpdateRole)
-	serverGroup.Delete("/roles/:roleID", requireActive,
+	serverGroup.Delete("/roles/:roleID", requireActiveMember,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageRoles),
 		roleHandler.DeleteRole)
 
@@ -380,17 +380,17 @@ func (s *server) registerRoutes(app *fiber.App) {
 
 	// Invite management routes (under /api/v1/server, require active membership)
 	inviteHandler := api.NewInviteHandler(s.inviteRepo, s.onboardingRepo, s.memberRepo, s.userRepo, s.auditLogger, log.Logger)
-	serverGroup.Post("/invites", requireActive,
+	serverGroup.Post("/invites", requireActiveMember,
 		permission.RequireServerPermission(s.permResolver, permissions.CreateInvites),
 		inviteHandler.CreateInvite)
-	serverGroup.Get("/invites", requireActive,
+	serverGroup.Get("/invites", requireActiveMember,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageInvites),
 		inviteHandler.ListInvites)
 
 	// Invite action routes (under /api/v1/invites, authenticated). The join endpoint handles email verification
 	// after invite validation so that clients can distinguish invalid codes from unverified accounts.
 	inviteGroup := app.Group("/api/v1/invites", requireAuth, requireCSRF)
-	inviteGroup.Delete("/:code", requireVerified, requireActive,
+	inviteGroup.Delete("/:code", requireVerifiedEmail, requireActiveMember,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageInvites),
 		inviteHandler.DeleteInvite)
 	inviteGroup.Post("/:code/join", inviteHandler.JoinViaInvite)
@@ -401,8 +401,8 @@ func (s *server) registerRoutes(app *fiber.App) {
 	onboardingHandler := api.NewOnboardingHandler(s.onboardingRepo, s.documentStore, s.memberRepo, s.userRepo, s.serverRepo, s.gatewayPublisher, s.auditLogger, log.Logger)
 	app.Get("/api/v1/onboarding/status", requireAuth, requireCSRF, onboardingHandler.GetOnboardingStatus)
 	app.Get("/api/v1/onboarding", requireAuth, requireCSRF, onboardingHandler.GetOnboarding)
-	app.Patch("/api/v1/onboarding", requireAuth, requireCSRF, requireVerified, requireActive, onboardingHandler.UpdateOnboarding)
-	app.Post("/api/v1/onboarding/accept", requireAuth, requireCSRF, requireVerified, onboardingHandler.AcceptOnboarding)
+	app.Patch("/api/v1/onboarding", requireAuth, requireCSRF, requireVerifiedEmail, requireActiveMember, onboardingHandler.UpdateOnboarding)
+	app.Post("/api/v1/onboarding/accept", requireAuth, requireCSRF, requireVerifiedEmail, onboardingHandler.AcceptOnboarding)
 	serverGroup.Post("/join", onboardingHandler.JoinServer)
 
 	// === MEMBER ROUTES ===
@@ -416,36 +416,36 @@ func (s *server) registerRoutes(app *fiber.App) {
 		memberHandler.ListChannelMembers)
 
 	memberGroup := serverGroup.Group("/members")
-	memberGroup.Get("/", requireActive, memberHandler.ListMembers)
+	memberGroup.Get("/", requireActiveMember, memberHandler.ListMembers)
 	memberGroup.Get("/@me", memberHandler.GetSelf)
-	memberGroup.Patch("/@me", requireActive,
+	memberGroup.Patch("/@me", requireActiveMember,
 		permission.RequireServerPermission(s.permResolver, permissions.ChangeNicknames),
 		memberHandler.UpdateSelf)
 	memberGroup.Delete("/@me", memberHandler.Leave)
-	memberGroup.Get("/:userID", requireActive, memberHandler.GetMember)
-	memberGroup.Patch("/:userID", requireActive,
+	memberGroup.Get("/:userID", requireActiveMember, memberHandler.GetMember)
+	memberGroup.Patch("/:userID", requireActiveMember,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageNicknames),
 		memberHandler.UpdateMember)
-	memberGroup.Delete("/:userID", requireActive,
+	memberGroup.Delete("/:userID", requireActiveMember,
 		permission.RequireServerPermission(s.permResolver, permissions.KickMembers),
 		memberHandler.KickMember)
-	memberGroup.Put("/:userID/timeout", requireActive,
+	memberGroup.Put("/:userID/timeout", requireActiveMember,
 		permission.RequireServerPermission(s.permResolver, permissions.TimeoutMembers),
 		memberHandler.SetTimeout)
-	memberGroup.Delete("/:userID/timeout", requireActive,
+	memberGroup.Delete("/:userID/timeout", requireActiveMember,
 		permission.RequireServerPermission(s.permResolver, permissions.TimeoutMembers),
 		memberHandler.ClearTimeout)
-	memberGroup.Put("/:userID/roles/:roleID", requireActive,
+	memberGroup.Put("/:userID/roles/:roleID", requireActiveMember,
 		permission.RequireServerPermission(s.permResolver, permissions.AssignRoles),
 		memberHandler.AssignRole)
-	memberGroup.Delete("/:userID/roles/:roleID", requireActive,
+	memberGroup.Delete("/:userID/roles/:roleID", requireActiveMember,
 		permission.RequireServerPermission(s.permResolver, permissions.AssignRoles),
 		memberHandler.RemoveRole)
 
 	// === BAN ROUTES ===
 
 	// Ban routes (require active membership)
-	banGroup := serverGroup.Group("/bans", requireActive,
+	banGroup := serverGroup.Group("/bans", requireActiveMember,
 		permission.RequireServerPermission(s.permResolver, permissions.BanMembers))
 	banGroup.Get("/", memberHandler.ListBans)
 	banGroup.Put("/:userID", memberHandler.BanMember)
