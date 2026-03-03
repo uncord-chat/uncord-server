@@ -369,7 +369,7 @@ func (h *ThreadHandler) CreateThreadMessage(c fiber.Ctx) error {
 		if errors.Is(err, message.ErrEmptyContent) && hasAttachments {
 			content = ""
 		} else {
-			return mapMessageContentError(c, h.log, err)
+			return mapMessageError(c, err, h.log)
 		}
 	}
 
@@ -390,7 +390,7 @@ func (h *ThreadHandler) CreateThreadMessage(c fiber.Ctx) error {
 		ThreadID:  &threadID,
 	})
 	if err != nil {
-		return mapMessageContentError(c, h.log, err)
+		return mapMessageError(c, err, h.log)
 	}
 
 	var linked []attachment.Attachment
@@ -461,19 +461,3 @@ func mapThreadError(c fiber.Ctx, log zerolog.Logger, err error) error {
 	}
 }
 
-// mapMessageContentError handles message validation errors that can occur when creating thread messages.
-func mapMessageContentError(c fiber.Ctx, log zerolog.Logger, err error) error {
-	switch {
-	case errors.Is(err, message.ErrNotFound):
-		return httputil.Fail(c, fiber.StatusNotFound, apierrors.UnknownMessage, "Message not found")
-	case errors.Is(err, message.ErrContentTooLong):
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, err.Error())
-	case errors.Is(err, message.ErrEmptyContent):
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, err.Error())
-	case errors.Is(err, message.ErrReplyNotFound):
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.UnknownMessage, err.Error())
-	default:
-		log.Error().Err(err).Str("handler", "thread").Msg("unhandled message service error")
-		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
-	}
-}

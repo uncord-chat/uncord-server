@@ -326,7 +326,7 @@ func (h *DMHandler) SendMessage(c fiber.Ctx) error {
 
 	content, err := message.ValidateContent(body.Content, h.maxContent)
 	if err != nil {
-		return h.mapMessageError(c, err)
+		return mapMessageError(c, err, h.log)
 	}
 
 	var replyToID *uuid.UUID
@@ -346,7 +346,7 @@ func (h *DMHandler) SendMessage(c fiber.Ctx) error {
 		Encrypted: true,
 	})
 	if err != nil {
-		return h.mapMessageError(c, err)
+		return mapMessageError(c, err, h.log)
 	}
 
 	// Store per-device encrypted message keys if provided.
@@ -426,20 +426,6 @@ func (h *DMHandler) mapDMError(c fiber.Ctx, err error) error {
 }
 
 // mapMessageError converts message-layer errors to appropriate HTTP responses in DM context.
-func (h *DMHandler) mapMessageError(c fiber.Ctx, err error) error {
-	switch {
-	case errors.Is(err, message.ErrContentTooLong):
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, err.Error())
-	case errors.Is(err, message.ErrEmptyContent):
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, err.Error())
-	case errors.Is(err, message.ErrReplyNotFound):
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.UnknownMessage, err.Error())
-	default:
-		h.log.Error().Err(err).Msg("unhandled message error in dm handler")
-		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
-	}
-}
-
 // dmChannelModel is the API response model for a DM channel.
 type dmChannelModel struct {
 	ID        string  `json:"id"`

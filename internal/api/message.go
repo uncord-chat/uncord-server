@@ -172,7 +172,7 @@ func (h *MessageHandler) CreateMessage(c fiber.Ctx) error {
 		if errors.Is(err, message.ErrEmptyContent) && hasAttachments {
 			content = ""
 		} else {
-			return h.mapMessageError(c, err)
+			return mapMessageError(c, err, h.log)
 		}
 	}
 
@@ -192,7 +192,7 @@ func (h *MessageHandler) CreateMessage(c fiber.Ctx) error {
 		ReplyToID: replyToID,
 	})
 	if err != nil {
-		return h.mapMessageError(c, err)
+		return mapMessageError(c, err, h.log)
 	}
 
 	// Link pending attachments to the new message.
@@ -264,12 +264,12 @@ func (h *MessageHandler) EditMessage(c fiber.Ctx) error {
 
 	content, err := message.ValidateContent(body.Content, h.maxContent)
 	if err != nil {
-		return h.mapMessageError(c, err)
+		return mapMessageError(c, err, h.log)
 	}
 
 	existing, err := h.messages.GetByID(c, messageID)
 	if err != nil {
-		return h.mapMessageError(c, err)
+		return mapMessageError(c, err, h.log)
 	}
 
 	if existing.AuthorID != userID {
@@ -278,7 +278,7 @@ func (h *MessageHandler) EditMessage(c fiber.Ctx) error {
 
 	msg, err := h.messages.Update(c, messageID, content)
 	if err != nil {
-		return h.mapMessageError(c, err)
+		return mapMessageError(c, err, h.log)
 	}
 
 	attachments, err := h.attachments.ListByMessage(c, msg.ID)
@@ -332,7 +332,7 @@ func (h *MessageHandler) DeleteMessage(c fiber.Ctx) error {
 
 	existing, err := h.messages.GetByID(c, messageID)
 	if err != nil {
-		return h.mapMessageError(c, err)
+		return mapMessageError(c, err, h.log)
 	}
 
 	// The author can always delete their own messages. Other users need the ManageMessages permission on the channel.
@@ -349,7 +349,7 @@ func (h *MessageHandler) DeleteMessage(c fiber.Ctx) error {
 	}
 
 	if err := h.messages.SoftDelete(c, messageID); err != nil {
-		return h.mapMessageError(c, err)
+		return mapMessageError(c, err, h.log)
 	}
 
 	// Audit log only for moderator deletions (when the actor is not the author).
@@ -452,20 +452,3 @@ func buildMessageModel(m *message.Message, attachments []attachment.Attachment, 
 }
 
 // mapMessageError converts message-layer errors to appropriate HTTP responses.
-func (h *MessageHandler) mapMessageError(c fiber.Ctx, err error) error {
-	switch {
-	case errors.Is(err, message.ErrNotFound):
-		return httputil.Fail(c, fiber.StatusNotFound, apierrors.UnknownMessage, "Message not found")
-	case errors.Is(err, message.ErrContentTooLong):
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, err.Error())
-	case errors.Is(err, message.ErrEmptyContent):
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, err.Error())
-	case errors.Is(err, message.ErrReplyNotFound):
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.UnknownMessage, err.Error())
-	case errors.Is(err, message.ErrNotAuthor):
-		return httputil.Fail(c, fiber.StatusForbidden, apierrors.MissingPermissions, "You can only edit your own messages")
-	default:
-		h.log.Error().Err(err).Str("handler", "message").Msg("unhandled message service error")
-		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
-	}
-}
