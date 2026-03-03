@@ -123,7 +123,7 @@ CREATE INDEX idx_channels_category ON channels (category_id);
 
 CREATE TABLE messages (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    channel_id      UUID NOT NULL,
+    channel_id      UUID NOT NULL,  -- references channels(id) or dm_channels(id); no FK because the column is polymorphic
     author_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     content         TEXT NOT NULL DEFAULT '',
     edited_at       TIMESTAMPTZ,
