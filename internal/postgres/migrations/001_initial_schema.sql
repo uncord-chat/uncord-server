@@ -195,7 +195,7 @@ CREATE TABLE reactions (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     message_id      UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
     user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    emoji_id        UUID,   -- FK to custom_emoji, null = unicode
+    emoji_id        UUID,
     emoji_unicode   TEXT,   -- null = custom emoji
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -413,6 +413,9 @@ CREATE TRIGGER set_updated_at BEFORE UPDATE ON custom_emoji
     FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
 
 CREATE INDEX idx_custom_emoji_uploader ON custom_emoji (uploader_id);
+
+-- The reactions table is created before custom_emoji in the file, so the FK must be added after both tables exist.
+ALTER TABLE reactions ADD CONSTRAINT fk_reactions_emoji FOREIGN KEY (emoji_id) REFERENCES custom_emoji(id) ON DELETE CASCADE;
 
 -- Invites
 
