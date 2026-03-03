@@ -52,14 +52,11 @@ func (h *TypingHandler) StartTyping(c fiber.Ctx) error {
 	}
 
 	if created && h.gateway != nil {
-		data := models.TypingStartData{
+		h.gateway.Enqueue(events.TypingStart, models.TypingStartData{
 			ChannelID: channelID.String(),
 			UserID:    userID.String(),
 			Timestamp: time.Now().UTC().Format(time.RFC3339),
-		}
-		if pErr := h.gateway.Publish(c, events.TypingStart, data); pErr != nil {
-			h.log.Warn().Err(pErr).Msg("Failed to publish typing start")
-		}
+		})
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)
@@ -85,13 +82,10 @@ func (h *TypingHandler) StopTyping(c fiber.Ctx) error {
 	}
 
 	if existed && h.gateway != nil {
-		data := models.TypingStopData{
+		h.gateway.Enqueue(events.TypingStop, models.TypingStopData{
 			ChannelID: channelID.String(),
 			UserID:    userID.String(),
-		}
-		if pErr := h.gateway.Publish(c, events.TypingStop, data); pErr != nil {
-			h.log.Warn().Err(pErr).Msg("Failed to publish typing stop")
-		}
+		})
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)
