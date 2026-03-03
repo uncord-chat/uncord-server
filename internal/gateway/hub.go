@@ -54,6 +54,7 @@ type HubDeps struct {
 type Hub struct {
 	clients        map[uuid.UUID][]*Client
 	mu             sync.RWMutex
+	offlineWg      sync.WaitGroup
 	rdb            *redis.Client
 	cfg            *config.Config
 	sessions       *SessionStore
@@ -207,7 +208,11 @@ func (h *Hub) unregister(client *Client) {
 		}
 
 		if h.presence != nil && !hasRemaining {
-			go h.delayedOffline(userID)
+			h.offlineWg.Add(1)
+			go func() {
+				defer h.offlineWg.Done()
+				h.delayedOffline(userID)
+			}()
 		}
 	}
 
@@ -710,17 +715,17 @@ func (h *Hub) assembleReady(ctx context.Context, userID uuid.UUID) (*models.Read
 }
 
 // Shutdown gracefully closes all active connections. It sends a Reconnect frame to each client, cleans up presence
-// keys, and closes the underlying WebSocket with a Going Away status.
+// keys, and closes the underlying WebSocket with a Going Away status. After closing connections, it releases the lock
+// and waits for any in-flight delayedOffline goroutines to finish before returning.
 func (h *Hub) Shutdown() {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 
 	if h.presence != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
 		for userID := range h.clients {
 			_ = h.presence.Delete(ctx, userID)
 		}
+		cancel()
 	}
 
 	reconnect, _ := NewReconnectFrame()
@@ -739,7 +744,12 @@ func (h *Hub) Shutdown() {
 		}
 		delete(h.clients, userID)
 	}
-	h.log.Info().Msg("Gateway hub shut down")
+
+	h.mu.Unlock()
+
+	h.log.Info().Msg("Waiting for delayed offline goroutines")
+	h.offlineWg.Wait()
+	h.log.Info().Msg("Gateway hub shutdown complete")
 }
 
 // ClientCount returns the total number of currently connected clients across all users.
