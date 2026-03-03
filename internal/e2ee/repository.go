@@ -181,65 +181,88 @@ func (r *PGRepository) CountOneTimePreKeys(ctx context.Context, deviceRowID uuid
 	return count, nil
 }
 
-// FetchUserKeyBundle fetches key bundles for all ready devices of a user. For each device that has an active signed
+// FetchUserKeyBundle fetches key bundles for all ready devices of a user. The entire operation runs inside a single
+// transaction to provide a consistent snapshot and serialise OPK consumption. For each device that has an active signed
 // pre-key, it atomically consumes one OPK using DELETE ... LIMIT 1 with FOR UPDATE SKIP LOCKED. Devices without an
 // active SPK are skipped. Returns ErrNoDevices if the user has no registered devices at all.
 func (r *PGRepository) FetchUserKeyBundle(ctx context.Context, targetUserID uuid.UUID) (*UserKeyBundle, error) {
-	devices, err := r.ListDevices(ctx, targetUserID)
+	var bundle *UserKeyBundle
+	err := postgres.WithTx(ctx, r.db, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx,
+			`SELECT id, user_id, device_id, label, identity_key, created_at, updated_at
+			 FROM user_devices WHERE user_id = $1 ORDER BY created_at`, targetUserID)
+		if err != nil {
+			return fmt.Errorf("list devices: %w", err)
+		}
+		defer rows.Close()
+
+		var devices []Device
+		for rows.Next() {
+			var d Device
+			if err := rows.Scan(&d.ID, &d.UserID, &d.DeviceID, &d.Label, &d.IdentityKey, &d.CreatedAt,
+				&d.UpdatedAt); err != nil {
+				return fmt.Errorf("scan device: %w", err)
+			}
+			devices = append(devices, d)
+		}
+		if err := rows.Err(); err != nil {
+			return fmt.Errorf("iterate devices: %w", err)
+		}
+		if len(devices) == 0 {
+			return ErrNoDevices
+		}
+
+		var bundles []DeviceKeyBundle
+		for _, dev := range devices {
+			var spk SignedPreKey
+			err := tx.QueryRow(ctx,
+				`SELECT id, device_id, key_id, public_key, signature, active, created_at
+				 FROM e2ee_signed_pre_keys WHERE device_id = $1 AND active = true LIMIT 1`, dev.ID,
+			).Scan(&spk.ID, &spk.DeviceID, &spk.KeyID, &spk.PublicKey, &spk.Signature, &spk.Active, &spk.CreatedAt)
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					continue
+				}
+				return fmt.Errorf("fetch spk for device %s: %w", dev.ID, err)
+			}
+
+			b := DeviceKeyBundle{
+				Device:       dev,
+				SignedPreKey: spk,
+			}
+
+			var opk OneTimePreKey
+			err = tx.QueryRow(ctx,
+				`DELETE FROM e2ee_one_time_pre_keys
+				 WHERE id = (
+				     SELECT id FROM e2ee_one_time_pre_keys
+				     WHERE device_id = $1
+				     ORDER BY key_id
+				     LIMIT 1
+				     FOR UPDATE SKIP LOCKED
+				 )
+				 RETURNING id, device_id, key_id, public_key, created_at`, dev.ID,
+			).Scan(&opk.ID, &opk.DeviceID, &opk.KeyID, &opk.PublicKey, &opk.CreatedAt)
+			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("consume opk for device %s: %w", dev.ID, err)
+			}
+			if err == nil {
+				b.OneTimePreKey = &opk
+			}
+
+			bundles = append(bundles, b)
+		}
+
+		bundle = &UserKeyBundle{
+			UserID:  targetUserID,
+			Devices: bundles,
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	if len(devices) == 0 {
-		return nil, ErrNoDevices
-	}
-
-	var bundles []DeviceKeyBundle
-	for _, dev := range devices {
-		var spk SignedPreKey
-		err := r.db.QueryRow(ctx,
-			`SELECT id, device_id, key_id, public_key, signature, active, created_at
-			 FROM e2ee_signed_pre_keys WHERE device_id = $1 AND active = true LIMIT 1`, dev.ID,
-		).Scan(&spk.ID, &spk.DeviceID, &spk.KeyID, &spk.PublicKey, &spk.Signature, &spk.Active, &spk.CreatedAt)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				continue // Device not ready for session establishment.
-			}
-			return nil, fmt.Errorf("fetch spk for device %s: %w", dev.ID, err)
-		}
-
-		bundle := DeviceKeyBundle{
-			Device:       dev,
-			SignedPreKey: spk,
-		}
-
-		// Atomically consume one OPK. The subquery with FOR UPDATE SKIP LOCKED prevents concurrent fetches from
-		// consuming the same key.
-		var opk OneTimePreKey
-		err = r.db.QueryRow(ctx,
-			`DELETE FROM e2ee_one_time_pre_keys
-			 WHERE id = (
-			     SELECT id FROM e2ee_one_time_pre_keys
-			     WHERE device_id = $1
-			     ORDER BY key_id
-			     LIMIT 1
-			     FOR UPDATE SKIP LOCKED
-			 )
-			 RETURNING id, device_id, key_id, public_key, created_at`, dev.ID,
-		).Scan(&opk.ID, &opk.DeviceID, &opk.KeyID, &opk.PublicKey, &opk.CreatedAt)
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("consume opk for device %s: %w", dev.ID, err)
-		}
-		if err == nil {
-			bundle.OneTimePreKey = &opk
-		}
-
-		bundles = append(bundles, bundle)
-	}
-
-	return &UserKeyBundle{
-		UserID:  targetUserID,
-		Devices: bundles,
-	}, nil
+	return bundle, nil
 }
 
 // StoreMessageKeys stores per-device encrypted message keys using CopyFrom.
