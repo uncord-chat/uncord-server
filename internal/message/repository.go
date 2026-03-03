@@ -223,7 +223,8 @@ func (r *PGRepository) ListPinned(ctx context.Context, channelID uuid.UUID) ([]M
 	rows, err := r.db.Query(ctx, fmt.Sprintf(
 		`SELECT %s %s
 		 WHERE m.channel_id = $1 AND m.pinned = true AND m.deleted = false
-		 ORDER BY m.created_at DESC`, selectColumns, baseJoin),
+		 ORDER BY m.created_at DESC
+		 LIMIT 50`, selectColumns, baseJoin),
 		channelID,
 	)
 	if err != nil {

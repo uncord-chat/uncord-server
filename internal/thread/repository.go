@@ -82,7 +82,7 @@ func (r *PGRepository) GetByID(ctx context.Context, id uuid.UUID) (*Thread, erro
 // ListByChannel returns all threads in a channel ordered newest first.
 func (r *PGRepository) ListByChannel(ctx context.Context, channelID uuid.UUID) ([]Thread, error) {
 	rows, err := r.db.Query(ctx,
-		fmt.Sprintf("SELECT %s FROM threads WHERE channel_id = $1 ORDER BY created_at DESC", selectColumns),
+		fmt.Sprintf("SELECT %s FROM threads WHERE channel_id = $1 ORDER BY created_at DESC LIMIT 100", selectColumns),
 		channelID,
 	)
 	if err != nil {
