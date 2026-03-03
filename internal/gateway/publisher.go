@@ -40,6 +40,7 @@ type Publisher struct {
 	workers int
 	timeout time.Duration
 	dropped atomic.Int64
+	closed  atomic.Bool
 }
 
 // NewPublisher creates a new gateway event publisher with a bounded worker pool. The workers parameter controls how many
@@ -68,6 +69,11 @@ func (p *Publisher) EnqueueTargeted(eventType events.DispatchEvent, data any, ta
 }
 
 func (p *Publisher) enqueue(j job) {
+	if p.closed.Load() {
+		p.dropped.Add(1)
+		p.log.Warn().Str("event", string(j.eventType)).Msg("Gateway publisher closed, event dropped")
+		return
+	}
 	select {
 	case p.queue <- j:
 	default:
@@ -90,6 +96,7 @@ func (p *Publisher) Run(ctx context.Context) error {
 	}
 
 	<-ctx.Done()
+	p.closed.Store(true)
 	close(p.queue)
 	wg.Wait()
 
