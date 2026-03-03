@@ -397,7 +397,7 @@ func (h *ThreadHandler) CreateThreadMessage(c fiber.Ctx) error {
 	if len(attachmentIDs) > 0 {
 		linked, err = h.attachments.LinkToMessage(c, attachmentIDs, msg.ID, userID)
 		if err != nil {
-			return mapAttachmentError(c, err)
+			return mapAttachmentError(c, err, h.log)
 		}
 	}
 

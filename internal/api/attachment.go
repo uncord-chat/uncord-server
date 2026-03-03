@@ -194,7 +194,7 @@ func detectContentType(header, filename string) string {
 }
 
 // mapAttachmentError converts attachment-layer errors to appropriate HTTP responses.
-func mapAttachmentError(c fiber.Ctx, err error) error {
+func mapAttachmentError(c fiber.Ctx, err error, log zerolog.Logger) error {
 	switch {
 	case errors.Is(err, attachment.ErrNotFound):
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.UnknownAttachment,
@@ -206,6 +206,7 @@ func mapAttachmentError(c fiber.Ctx, err error) error {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.PayloadTooLarge,
 			"File exceeds the maximum upload size")
 	default:
+		log.Error().Err(err).Str("handler", "attachment").Msg("unhandled attachment service error")
 		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
 	}
 }
