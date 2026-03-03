@@ -907,7 +907,7 @@ func newFiberApp(cfg *config.Config) *fiber.App {
 	app.Use(timeout.New(func(c fiber.Ctx) error { return c.Next() }, timeout.Config{
 		Timeout: cfg.RequestTimeout,
 		Next: func(c fiber.Ctx) bool {
-			return c.Get(fiber.HeaderUpgrade) == "websocket"
+			return strings.EqualFold(c.Get(fiber.HeaderUpgrade), "websocket")
 		},
 		OnTimeout: func(c fiber.Ctx) error {
 			return c.Status(fiber.StatusRequestTimeout).JSON(httputil.ErrorResponse{
