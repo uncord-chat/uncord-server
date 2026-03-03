@@ -49,7 +49,7 @@ func (h *InviteHandler) CreateInvite(c fiber.Ctx) error {
 
 	channelID, err := uuid.Parse(body.ChannelID)
 	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid channel ID format")
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
 	}
 
 	if err := invite.ValidateMaxUses(body.MaxUses); err != nil {

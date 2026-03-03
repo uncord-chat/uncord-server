@@ -249,7 +249,7 @@ func (h *MessageHandler) CreateMessage(c fiber.Ctx) error {
 func (h *MessageHandler) EditMessage(c fiber.Ctx) error {
 	messageID, err := uuid.Parse(c.Params("messageID"))
 	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid message ID format")
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidMessageID, "Invalid message ID format")
 	}
 
 	userID, err := httputil.UserID(c)
@@ -322,7 +322,7 @@ func (h *MessageHandler) EditMessage(c fiber.Ctx) error {
 func (h *MessageHandler) DeleteMessage(c fiber.Ctx) error {
 	messageID, err := uuid.Parse(c.Params("messageID"))
 	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid message ID format")
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidMessageID, "Invalid message ID format")
 	}
 
 	userID, err := httputil.UserID(c)

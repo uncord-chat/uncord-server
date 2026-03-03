@@ -42,7 +42,7 @@ func (h *TypingHandler) StartTyping(c fiber.Ctx) error {
 
 	channelID, err := uuid.Parse(c.Params("channelID"))
 	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid channel ID")
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
 	}
 
 	created, err := h.presence.SetTyping(c, channelID, userID)
@@ -75,7 +75,7 @@ func (h *TypingHandler) StopTyping(c fiber.Ctx) error {
 
 	channelID, err := uuid.Parse(c.Params("channelID"))
 	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid channel ID")
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
 	}
 
 	existed, err := h.presence.ClearTyping(c, channelID, userID)
