@@ -23,30 +23,37 @@ func NewPGRepository(db *pgxpool.Pool, maxDevices int) *PGRepository {
 	return &PGRepository{db: db, maxDevices: maxDevices}
 }
 
-// RegisterDevice creates a new device registration for a user. It enforces the per-user device limit and returns
-// ErrDuplicateDevice on a (user_id, device_id) conflict.
+// RegisterDevice creates a new device registration for a user. The count check and insert run inside a single
+// transaction to prevent concurrent requests from exceeding the per-user device limit. Returns ErrDuplicateDevice on a
+// (user_id, device_id) conflict.
 func (r *PGRepository) RegisterDevice(ctx context.Context, params RegisterDeviceParams) (*Device, error) {
-	var count int
-	err := r.db.QueryRow(ctx, `SELECT COUNT(*) FROM user_devices WHERE user_id = $1`, params.UserID).Scan(&count)
-	if err != nil {
-		return nil, fmt.Errorf("count devices: %w", err)
-	}
-	if count >= r.maxDevices {
-		return nil, ErrMaxDevicesReached
-	}
-
 	var d Device
-	err = r.db.QueryRow(ctx,
-		`INSERT INTO user_devices (user_id, device_id, label, identity_key)
-		 VALUES ($1, $2, $3, $4)
-		 RETURNING id, user_id, device_id, label, identity_key, created_at, updated_at`,
-		params.UserID, params.DeviceID, params.Label, params.IdentityKey,
-	).Scan(&d.ID, &d.UserID, &d.DeviceID, &d.Label, &d.IdentityKey, &d.CreatedAt, &d.UpdatedAt)
-	if err != nil {
-		if postgres.IsUniqueViolation(err) {
-			return nil, ErrDuplicateDevice
+	err := postgres.WithTx(ctx, r.db, func(tx pgx.Tx) error {
+		var count int
+		if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM user_devices WHERE user_id = $1 FOR UPDATE`,
+			params.UserID).Scan(&count); err != nil {
+			return fmt.Errorf("count devices: %w", err)
 		}
-		return nil, fmt.Errorf("insert device: %w", err)
+		if count >= r.maxDevices {
+			return ErrMaxDevicesReached
+		}
+
+		err := tx.QueryRow(ctx,
+			`INSERT INTO user_devices (user_id, device_id, label, identity_key)
+			 VALUES ($1, $2, $3, $4)
+			 RETURNING id, user_id, device_id, label, identity_key, created_at, updated_at`,
+			params.UserID, params.DeviceID, params.Label, params.IdentityKey,
+		).Scan(&d.ID, &d.UserID, &d.DeviceID, &d.Label, &d.IdentityKey, &d.CreatedAt, &d.UpdatedAt)
+		if err != nil {
+			if postgres.IsUniqueViolation(err) {
+				return ErrDuplicateDevice
+			}
+			return fmt.Errorf("insert device: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return &d, nil
 }
