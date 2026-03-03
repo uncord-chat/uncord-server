@@ -1,6 +1,8 @@
 package httputil
 
 import (
+	"strings"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 
@@ -41,6 +43,20 @@ func Fail(c fiber.Ctx, status int, code apierrors.Code, message string) error {
 			Message: message,
 		},
 	})
+}
+
+// ParseUUIDParam parses a UUID route parameter. On success it returns the parsed UUID and true. On failure it writes a
+// 400 JSON error response with the given code and returns (uuid.Nil, false). The error message is derived from the
+// parameter name (e.g. "channelID" produces "Invalid channel ID format"). Callers should return nil when ok is false
+// because the response has already been committed.
+func ParseUUIDParam(c fiber.Ctx, param string, code apierrors.Code) (uuid.UUID, bool) {
+	id, err := uuid.Parse(c.Params(param))
+	if err != nil {
+		label := strings.TrimSuffix(param, "ID") + " ID"
+		_ = Fail(c, fiber.StatusBadRequest, code, "Invalid "+label+" format")
+		return uuid.Nil, false
+	}
+	return id, true
 }
 
 // UserID extracts the authenticated user's ID from the request context. If the value is absent (indicating the

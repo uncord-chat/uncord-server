@@ -206,6 +206,68 @@ func TestResponseContentType(t *testing.T) {
 	}
 }
 
+func TestParseUUIDParam(t *testing.T) {
+	t.Parallel()
+
+	t.Run("valid UUID", func(t *testing.T) {
+		t.Parallel()
+		app := fiber.New()
+		app.Get("/items/:channelID", func(c fiber.Ctx) error {
+			id, ok := ParseUUIDParam(c, "channelID", apierrors.InvalidChannelID)
+			if !ok {
+				return nil
+			}
+			return Success(c, map[string]string{"id": id.String()})
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/items/550e8400-e29b-41d4-a716-446655440000", nil)
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("app.Test() error: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+		}
+	})
+
+	t.Run("invalid UUID", func(t *testing.T) {
+		t.Parallel()
+		app := fiber.New()
+		app.Get("/items/:channelID", func(c fiber.Ctx) error {
+			id, ok := ParseUUIDParam(c, "channelID", apierrors.InvalidChannelID)
+			if !ok {
+				return nil
+			}
+			return Success(c, map[string]string{"id": id.String()})
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/items/not-a-uuid", nil)
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("app.Test() error: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+		}
+
+		var env struct {
+			Error ErrorBody `json:"error"`
+		}
+		decodeBody(t, resp, &env)
+
+		if env.Error.Code != apierrors.InvalidChannelID {
+			t.Errorf("code = %q, want %q", env.Error.Code, apierrors.InvalidChannelID)
+		}
+		if env.Error.Message != "Invalid channel ID format" {
+			t.Errorf("message = %q, want %q", env.Error.Message, "Invalid channel ID format")
+		}
+	})
+}
+
 // doRequest sends a request to the Fiber test server and returns the response.
 func doRequest(t *testing.T, app *fiber.App, path string) *http.Response {
 	t.Helper()
