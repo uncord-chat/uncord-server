@@ -9,8 +9,11 @@ import (
 	"github.com/uncord-chat/uncord-protocol/permissions"
 )
 
-// ErrOverrideNotFound is returned when a permission override does not exist.
-var ErrOverrideNotFound = errors.New("permission override not found")
+// Sentinel errors for the permission package.
+var (
+	ErrOverrideNotFound = errors.New("permission override not found")
+	ErrChannelNotFound  = errors.New("channel not found")
+)
 
 // TargetType identifies whether a permission override applies to a channel or category.
 type TargetType string

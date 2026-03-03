@@ -2,9 +2,11 @@ package permission
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/uncord-chat/uncord-protocol/permissions"
 )
@@ -71,6 +73,9 @@ func (s *PGStore) ChannelInfo(ctx context.Context, channelID uuid.UUID) (Channel
 		channelID,
 	).Scan(&info.ID, &info.CategoryID)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ChannelInfo{}, ErrChannelNotFound
+		}
 		return ChannelInfo{}, fmt.Errorf("query channel info: %w", err)
 	}
 	return info, nil
