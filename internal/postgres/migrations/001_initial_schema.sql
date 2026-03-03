@@ -459,6 +459,8 @@ CREATE INDEX idx_webhooks_channel ON webhooks (channel_id);
 CREATE INDEX idx_webhooks_creator ON webhooks (creator_id);
 
 -- Audit Log
+-- Retention: the application does not currently purge old audit entries. Operators should implement an external
+-- retention policy (e.g. pg_partman or a cron job) if this table grows beyond acceptable bounds.
 
 CREATE TABLE audit_log (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -549,6 +551,8 @@ CREATE TRIGGER set_updated_at BEFORE UPDATE ON onboarding_config
     FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
 
 -- Anti-Abuse
+-- Retention: user_ip_log and device_fingerprints grow with user activity. The application does not currently purge
+-- these tables. Operators should implement an external retention policy if they grow beyond acceptable bounds.
 
 CREATE TABLE user_ip_log (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -631,6 +635,8 @@ CREATE INDEX idx_email_verifications_token ON email_verifications (token) WHERE 
 CREATE INDEX idx_email_verifications_user ON email_verifications (user_id);
 
 -- Login Attempts
+-- Retention: the application purges rows older than LOGIN_ATTEMPT_RETENTION (default 90 days) via the periodic data
+-- cleanup goroutine.
 
 CREATE TABLE login_attempts (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
