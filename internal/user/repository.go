@@ -387,7 +387,10 @@ func (r *PGRepository) GetUnusedRecoveryCodes(ctx context.Context, userID uuid.U
 		}
 		codes = append(codes, c)
 	}
-	return codes, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("query unused recovery codes: %w", err)
+	}
+	return codes, nil
 }
 
 // UseRecoveryCode marks a recovery code as consumed by setting its used_at timestamp.

@@ -57,7 +57,10 @@ func (s *PGStore) RolePermissions(ctx context.Context, userID uuid.UUID) ([]Role
 		e.Permissions = permissions.Permission(perms)
 		entries = append(entries, e)
 	}
-	return entries, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("query role permissions: %w", err)
+	}
+	return entries, nil
 }
 
 // ChannelInfo returns the channel's ID and optional parent category.
@@ -136,5 +139,8 @@ func (s *PGStore) Overrides(ctx context.Context, targetType TargetType, targetID
 		o.Deny = permissions.Permission(deny)
 		overrides = append(overrides, o)
 	}
-	return overrides, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("query overrides: %w", err)
+	}
+	return overrides, nil
 }

@@ -76,7 +76,10 @@ func (r *PGRepository) ListDevices(ctx context.Context, userID uuid.UUID) ([]Dev
 		}
 		devices = append(devices, d)
 	}
-	return devices, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list devices: %w", err)
+	}
+	return devices, nil
 }
 
 // GetDeviceByDeviceID looks up a device by (user_id, device_id) pair.
@@ -327,5 +330,8 @@ func (r *PGRepository) GetMessageKeysBatch(ctx context.Context, messageIDs []uui
 		}
 		result[msgID] = key
 	}
-	return result, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("batch get message keys: %w", err)
+	}
+	return result, nil
 }

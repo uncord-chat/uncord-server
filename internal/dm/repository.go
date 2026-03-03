@@ -139,7 +139,10 @@ func (r *PGRepository) ListForUser(ctx context.Context, userID uuid.UUID) ([]Cha
 		}
 		channels = append(channels, ch)
 	}
-	return channels, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list dm channels: %w", err)
+	}
+	return channels, nil
 }
 
 // AddParticipant adds a user to a group DM channel. Returns ErrAlreadyParticipant on duplicate and ErrGroupDMFull if
@@ -199,7 +202,10 @@ func (r *PGRepository) ListParticipants(ctx context.Context, channelID uuid.UUID
 		}
 		participants = append(participants, p)
 	}
-	return participants, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list participants: %w", err)
+	}
+	return participants, nil
 }
 
 // IsParticipant checks whether a user is a participant of a DM channel.
@@ -233,7 +239,10 @@ func (r *PGRepository) ListDMPeers(ctx context.Context, userID uuid.UUID) ([]uui
 		}
 		peers = append(peers, id)
 	}
-	return peers, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list dm peers: %w", err)
+	}
+	return peers, nil
 }
 
 // uniqueUUIDs deduplicates a UUID slice while preserving order.
