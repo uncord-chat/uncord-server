@@ -386,7 +386,9 @@ func run() error {
 	}
 	srv.registerRoutes(app)
 
-	// Graceful shutdown
+	// Graceful shutdown: the signal goroutine drains in-flight HTTP requests via app.ShutdownWithContext. All
+	// remaining cleanup happens sequentially in the main goroutine after Listen returns, eliminating races between
+	// the signal handler and post-Listen teardown.
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
@@ -394,16 +396,11 @@ func run() error {
 		<-quit
 		log.Info().Msg("Shutting down server")
 
-		// Drain inflight HTTP requests before cancelling background services so that in-progress handlers can still
-		// publish gateway events and write to caches.
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 		defer shutdownCancel()
 		if err := app.ShutdownWithContext(shutdownCtx); err != nil {
 			log.Error().Err(err).Msg("Server shutdown error")
 		}
-
-		gatewayHub.Shutdown()
-		subCancel()
 	}()
 
 	// Listen
@@ -422,9 +419,16 @@ func run() error {
 
 	listenErr := app.Listen(addr, fiber.ListenConfig{DisableStartupMessage: true})
 
-	// Ensure all background goroutines have stopped before returning. The signal handler above cancels subCtx, but
-	// Listen can also return on its own (e.g. bind failure) without the handler ever firing. Calling cancel twice is
-	// safe; context.WithCancel guarantees the second call is a no-op.
+	// Shutdown sequence: all steps run in the main goroutine after Listen returns, regardless of whether the return
+	// was triggered by a signal or a startup failure (e.g. port binding). This eliminates races between the signal
+	// handler and post-Listen teardown, and ensures shared resources (storage, database) are not closed until all
+	// background goroutines have stopped.
+	//
+	// 1. Shut down the gateway hub (sends Reconnect frames to connected clients).
+	// 2. Cancel the background service context so goroutines begin exiting.
+	// 3. Wait for all goroutines to stop (with a grace timeout).
+	// 4. run() returns and deferred Close calls release the database pool, Valkey client, and storage provider.
+	gatewayHub.Shutdown()
 	subCancel()
 
 	waitDone := make(chan struct{})
