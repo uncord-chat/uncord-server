@@ -158,9 +158,9 @@ func (h *EmojiHandler) UpdateEmoji(c fiber.Ctx) error {
 		return err
 	}
 
-	emojiID, err := uuid.Parse(c.Params("emojiID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid emoji ID format")
+	emojiID, ok := httputil.ParseUUIDParam(c, "emojiID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
 	var body models.UpdateEmojiRequest
@@ -196,9 +196,9 @@ func (h *EmojiHandler) DeleteEmoji(c fiber.Ctx) error {
 		return err
 	}
 
-	emojiID, err := uuid.Parse(c.Params("emojiID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid emoji ID format")
+	emojiID, ok := httputil.ParseUUIDParam(c, "emojiID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
 	existing, err := h.emoji.GetByID(c, emojiID)

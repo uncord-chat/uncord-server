@@ -76,9 +76,9 @@ func NewMessageHandler(
 
 // ListMessages handles GET /api/v1/channels/:channelID/messages.
 func (h *MessageHandler) ListMessages(c fiber.Ctx) error {
-	channelID, err := uuid.Parse(c.Params("channelID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	channelID, ok := httputil.ParseUUIDParam(c, "channelID", apierrors.InvalidChannelID)
+	if !ok {
+		return nil
 	}
 
 	var before *uuid.UUID
@@ -133,9 +133,9 @@ func (h *MessageHandler) ListMessages(c fiber.Ctx) error {
 
 // CreateMessage handles POST /api/v1/channels/:channelID/messages.
 func (h *MessageHandler) CreateMessage(c fiber.Ctx) error {
-	channelID, err := uuid.Parse(c.Params("channelID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	channelID, ok := httputil.ParseUUIDParam(c, "channelID", apierrors.InvalidChannelID)
+	if !ok {
+		return nil
 	}
 
 	userID, err := httputil.UserID(c)
@@ -247,9 +247,9 @@ func (h *MessageHandler) CreateMessage(c fiber.Ctx) error {
 
 // EditMessage handles PATCH /api/v1/messages/:messageID.
 func (h *MessageHandler) EditMessage(c fiber.Ctx) error {
-	messageID, err := uuid.Parse(c.Params("messageID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidMessageID, "Invalid message ID format")
+	messageID, ok := httputil.ParseUUIDParam(c, "messageID", apierrors.InvalidMessageID)
+	if !ok {
+		return nil
 	}
 
 	userID, err := httputil.UserID(c)
@@ -320,9 +320,9 @@ func (h *MessageHandler) EditMessage(c fiber.Ctx) error {
 
 // DeleteMessage handles DELETE /api/v1/messages/:messageID.
 func (h *MessageHandler) DeleteMessage(c fiber.Ctx) error {
-	messageID, err := uuid.Parse(c.Params("messageID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidMessageID, "Invalid message ID format")
+	messageID, ok := httputil.ParseUUIDParam(c, "messageID", apierrors.InvalidMessageID)
+	if !ok {
+		return nil
 	}
 
 	userID, err := httputil.UserID(c)

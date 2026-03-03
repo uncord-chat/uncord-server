@@ -54,9 +54,9 @@ func NewAttachmentHandler(
 
 // Upload handles POST /api/v1/channels/:channelID/attachments.
 func (h *AttachmentHandler) Upload(c fiber.Ctx) error {
-	channelID, err := uuid.Parse(c.Params("channelID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	channelID, ok := httputil.ParseUUIDParam(c, "channelID", apierrors.InvalidChannelID)
+	if !ok {
+		return nil
 	}
 
 	userID, err := httputil.UserID(c)

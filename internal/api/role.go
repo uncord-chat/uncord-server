@@ -5,7 +5,6 @@ import (
 	"errors"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 	"github.com/uncord-chat/uncord-protocol/events"
@@ -115,9 +114,9 @@ func (h *RoleHandler) UpdateRole(c fiber.Ctx) error {
 		return err
 	}
 
-	id, err := uuid.Parse(c.Params("roleID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid role ID format")
+	id, ok := httputil.ParseUUIDParam(c, "roleID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
 	var body models.UpdateRoleRequest
@@ -201,9 +200,9 @@ func (h *RoleHandler) DeleteRole(c fiber.Ctx) error {
 		return err
 	}
 
-	id, err := uuid.Parse(c.Params("roleID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid role ID format")
+	id, ok := httputil.ParseUUIDParam(c, "roleID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
 	// Enforce role hierarchy: the caller cannot delete roles at or above their own highest role.

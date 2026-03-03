@@ -215,9 +215,9 @@ func (h *ChannelHandler) CreateChannel(c fiber.Ctx) error {
 
 // GetChannel handles GET /api/v1/channels/:channelID.
 func (h *ChannelHandler) GetChannel(c fiber.Ctx) error {
-	id, err := uuid.Parse(c.Params("channelID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	id, ok := httputil.ParseUUIDParam(c, "channelID", apierrors.InvalidChannelID)
+	if !ok {
+		return nil
 	}
 
 	ch, err := h.channels.GetByID(c, id)
@@ -235,9 +235,9 @@ func (h *ChannelHandler) UpdateChannel(c fiber.Ctx) error {
 		return err
 	}
 
-	id, err := uuid.Parse(c.Params("channelID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	id, ok := httputil.ParseUUIDParam(c, "channelID", apierrors.InvalidChannelID)
+	if !ok {
+		return nil
 	}
 
 	var body models.UpdateChannelRequest
@@ -306,9 +306,9 @@ func (h *ChannelHandler) DeleteChannel(c fiber.Ctx) error {
 		return err
 	}
 
-	id, err := uuid.Parse(c.Params("channelID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	id, ok := httputil.ParseUUIDParam(c, "channelID", apierrors.InvalidChannelID)
+	if !ok {
+		return nil
 	}
 
 	if err := h.channels.Delete(c, id); err != nil {

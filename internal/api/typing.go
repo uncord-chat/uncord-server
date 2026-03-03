@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 	"github.com/uncord-chat/uncord-protocol/events"
@@ -40,9 +39,9 @@ func (h *TypingHandler) StartTyping(c fiber.Ctx) error {
 		return err
 	}
 
-	channelID, err := uuid.Parse(c.Params("channelID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	channelID, ok := httputil.ParseUUIDParam(c, "channelID", apierrors.InvalidChannelID)
+	if !ok {
+		return nil
 	}
 
 	created, err := h.presence.SetTyping(c, channelID, userID)
@@ -70,9 +69,9 @@ func (h *TypingHandler) StopTyping(c fiber.Ctx) error {
 		return err
 	}
 
-	channelID, err := uuid.Parse(c.Params("channelID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	channelID, ok := httputil.ParseUUIDParam(c, "channelID", apierrors.InvalidChannelID)
+	if !ok {
+		return nil
 	}
 
 	existed, err := h.presence.ClearTyping(c, channelID, userID)

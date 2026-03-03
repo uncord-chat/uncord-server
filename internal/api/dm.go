@@ -57,12 +57,12 @@ func (h *DMHandler) RequireParticipant(c fiber.Ctx) error {
 		return err
 	}
 
-	channelID, err := uuid.Parse(c.Params("channelID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	channelID, ok := httputil.ParseUUIDParam(c, "channelID", apierrors.InvalidChannelID)
+	if !ok {
+		return nil
 	}
 
-	ok, err := h.dms.IsParticipant(c, channelID, userID)
+	ok, err = h.dms.IsParticipant(c, channelID, userID)
 	if err != nil {
 		h.log.Error().Err(err).Msg("check dm participant failed")
 		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
@@ -168,9 +168,9 @@ func (h *DMHandler) ListDMChannels(c fiber.Ctx) error {
 
 // GetDMChannel handles GET /api/v1/dm/:channelID.
 func (h *DMHandler) GetDMChannel(c fiber.Ctx) error {
-	channelID, err := uuid.Parse(c.Params("channelID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	channelID, ok := httputil.ParseUUIDParam(c, "channelID", apierrors.InvalidChannelID)
+	if !ok {
+		return nil
 	}
 
 	ch, err := h.dms.GetByID(c, channelID)
@@ -187,9 +187,9 @@ func (h *DMHandler) AddParticipant(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	channelID, err := uuid.Parse(c.Params("channelID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	channelID, ok := httputil.ParseUUIDParam(c, "channelID", apierrors.InvalidChannelID)
+	if !ok {
+		return nil
 	}
 
 	ch, err := h.dms.GetByID(c, channelID)
@@ -227,9 +227,9 @@ func (h *DMHandler) RemoveParticipant(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	channelID, err := uuid.Parse(c.Params("channelID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	channelID, ok := httputil.ParseUUIDParam(c, "channelID", apierrors.InvalidChannelID)
+	if !ok {
+		return nil
 	}
 
 	ch, err := h.dms.GetByID(c, channelID)
@@ -240,9 +240,9 @@ func (h *DMHandler) RemoveParticipant(c fiber.Ctx) error {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Cannot remove participants from a 1:1 DM")
 	}
 
-	targetID, err := uuid.Parse(c.Params("userID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid user ID format")
+	targetID, ok := httputil.ParseUUIDParam(c, "userID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
 	// Only the owner can remove others. A participant can remove themselves (leave).
@@ -261,9 +261,9 @@ func (h *DMHandler) RemoveParticipant(c fiber.Ctx) error {
 
 // ListMessages handles GET /api/v1/dm/:channelID/messages.
 func (h *DMHandler) ListMessages(c fiber.Ctx) error {
-	channelID, err := uuid.Parse(c.Params("channelID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	channelID, ok := httputil.ParseUUIDParam(c, "channelID", apierrors.InvalidChannelID)
+	if !ok {
+		return nil
 	}
 
 	var before *uuid.UUID
@@ -314,9 +314,9 @@ func (h *DMHandler) SendMessage(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	channelID, err := uuid.Parse(c.Params("channelID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	channelID, ok := httputil.ParseUUIDParam(c, "channelID", apierrors.InvalidChannelID)
+	if !ok {
+		return nil
 	}
 
 	var body models.CreateDMMessageRequest

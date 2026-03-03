@@ -39,9 +39,9 @@ func (h *ReadStateHandler) Ack(c fiber.Ctx) error {
 		return err
 	}
 
-	channelID, err := uuid.Parse(c.Params("channelID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	channelID, ok := httputil.ParseUUIDParam(c, "channelID", apierrors.InvalidChannelID)
+	if !ok {
+		return nil
 	}
 
 	var body models.AckRequest

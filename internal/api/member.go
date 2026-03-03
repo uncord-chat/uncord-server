@@ -71,9 +71,9 @@ func (h *MemberHandler) ListMembers(c fiber.Ctx) error {
 // ListChannelMembers handles GET /api/v1/channels/:channelID/members. It returns only members who have the ViewChannels
 // permission on the specified channel, with cursor-based pagination.
 func (h *MemberHandler) ListChannelMembers(c fiber.Ctx) error {
-	channelID, err := uuid.Parse(c.Params("channelID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid channel ID format")
+	channelID, ok := httputil.ParseUUIDParam(c, "channelID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
 	var after *uuid.UUID
@@ -196,9 +196,9 @@ func (h *MemberHandler) Leave(c fiber.Ctx) error {
 
 // GetMember handles GET /api/v1/server/members/:userID.
 func (h *MemberHandler) GetMember(c fiber.Ctx) error {
-	targetID, err := uuid.Parse(c.Params("userID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid user ID format")
+	targetID, ok := httputil.ParseUUIDParam(c, "userID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
 	m, err := h.members.GetByUserID(c, targetID)
@@ -215,9 +215,9 @@ func (h *MemberHandler) UpdateMember(c fiber.Ctx) error {
 		return err
 	}
 
-	targetID, err := uuid.Parse(c.Params("userID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid user ID format")
+	targetID, ok := httputil.ParseUUIDParam(c, "userID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
 	var body models.UpdateMemberRequest
@@ -250,9 +250,9 @@ func (h *MemberHandler) KickMember(c fiber.Ctx) error {
 		return err
 	}
 
-	targetID, err := uuid.Parse(c.Params("userID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid user ID format")
+	targetID, ok := httputil.ParseUUIDParam(c, "userID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
 	if err := h.checkNotOwner(c, targetID); err != nil {
@@ -285,9 +285,9 @@ func (h *MemberHandler) SetTimeout(c fiber.Ctx) error {
 		return err
 	}
 
-	targetID, err := uuid.Parse(c.Params("userID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid user ID format")
+	targetID, ok := httputil.ParseUUIDParam(c, "userID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
 	var body models.TimeoutMemberRequest
@@ -335,9 +335,9 @@ func (h *MemberHandler) ClearTimeout(c fiber.Ctx) error {
 		return err
 	}
 
-	targetID, err := uuid.Parse(c.Params("userID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid user ID format")
+	targetID, ok := httputil.ParseUUIDParam(c, "userID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
 	updated, err := h.members.ClearTimeout(c, targetID)
@@ -365,9 +365,9 @@ func (h *MemberHandler) BanMember(c fiber.Ctx) error {
 		return err
 	}
 
-	targetID, err := uuid.Parse(c.Params("userID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid user ID format")
+	targetID, ok := httputil.ParseUUIDParam(c, "userID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
 	var body models.BanMemberRequest
@@ -415,9 +415,9 @@ func (h *MemberHandler) UnbanMember(c fiber.Ctx) error {
 		return err
 	}
 
-	targetID, err := uuid.Parse(c.Params("userID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid user ID format")
+	targetID, ok := httputil.ParseUUIDParam(c, "userID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
 	if err := h.members.Unban(c, targetID); err != nil {
@@ -468,14 +468,14 @@ func (h *MemberHandler) AssignRole(c fiber.Ctx) error {
 		return err
 	}
 
-	targetID, err := uuid.Parse(c.Params("userID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid user ID format")
+	targetID, ok := httputil.ParseUUIDParam(c, "userID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
-	roleID, err := uuid.Parse(c.Params("roleID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid role ID format")
+	roleID, ok := httputil.ParseUUIDParam(c, "roleID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
 	r, err := h.roles.GetByID(c, roleID)
@@ -537,14 +537,14 @@ func (h *MemberHandler) RemoveRole(c fiber.Ctx) error {
 		return err
 	}
 
-	targetID, err := uuid.Parse(c.Params("userID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid user ID format")
+	targetID, ok := httputil.ParseUUIDParam(c, "userID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
-	roleID, err := uuid.Parse(c.Params("roleID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid role ID format")
+	roleID, ok := httputil.ParseUUIDParam(c, "roleID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
 	r, err := h.roles.GetByID(c, roleID)

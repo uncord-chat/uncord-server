@@ -46,14 +46,14 @@ func NewReactionHandler(
 
 // AddReaction handles PUT /api/v1/channels/:channelID/messages/:messageID/reactions/:emoji.
 func (h *ReactionHandler) AddReaction(c fiber.Ctx) error {
-	channelID, err := uuid.Parse(c.Params("channelID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	channelID, ok := httputil.ParseUUIDParam(c, "channelID", apierrors.InvalidChannelID)
+	if !ok {
+		return nil
 	}
 
-	messageID, err := uuid.Parse(c.Params("messageID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidMessageID, "Invalid message ID format")
+	messageID, ok := httputil.ParseUUIDParam(c, "messageID", apierrors.InvalidMessageID)
+	if !ok {
+		return nil
 	}
 
 	userID, err := httputil.UserID(c)
@@ -110,14 +110,14 @@ func (h *ReactionHandler) AddReaction(c fiber.Ctx) error {
 
 // RemoveReaction handles DELETE /api/v1/channels/:channelID/messages/:messageID/reactions/:emoji.
 func (h *ReactionHandler) RemoveReaction(c fiber.Ctx) error {
-	channelID, err := uuid.Parse(c.Params("channelID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	channelID, ok := httputil.ParseUUIDParam(c, "channelID", apierrors.InvalidChannelID)
+	if !ok {
+		return nil
 	}
 
-	messageID, err := uuid.Parse(c.Params("messageID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidMessageID, "Invalid message ID format")
+	messageID, ok := httputil.ParseUUIDParam(c, "messageID", apierrors.InvalidMessageID)
+	if !ok {
+		return nil
 	}
 
 	userID, err := httputil.UserID(c)
@@ -155,14 +155,13 @@ func (h *ReactionHandler) RemoveReaction(c fiber.Ctx) error {
 
 // ListReactions handles GET /api/v1/channels/:channelID/messages/:messageID/reactions.
 func (h *ReactionHandler) ListReactions(c fiber.Ctx) error {
-	_, err := uuid.Parse(c.Params("channelID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	if _, ok := httputil.ParseUUIDParam(c, "channelID", apierrors.InvalidChannelID); !ok {
+		return nil
 	}
 
-	messageID, err := uuid.Parse(c.Params("messageID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidMessageID, "Invalid message ID format")
+	messageID, ok := httputil.ParseUUIDParam(c, "messageID", apierrors.InvalidMessageID)
+	if !ok {
+		return nil
 	}
 
 	userID, err := httputil.UserID(c)
@@ -182,14 +181,13 @@ func (h *ReactionHandler) ListReactions(c fiber.Ctx) error {
 
 // ListReactionUsers handles GET /api/v1/channels/:channelID/messages/:messageID/reactions/:emoji.
 func (h *ReactionHandler) ListReactionUsers(c fiber.Ctx) error {
-	_, err := uuid.Parse(c.Params("channelID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	if _, ok := httputil.ParseUUIDParam(c, "channelID", apierrors.InvalidChannelID); !ok {
+		return nil
 	}
 
-	messageID, err := uuid.Parse(c.Params("messageID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidMessageID, "Invalid message ID format")
+	messageID, ok := httputil.ParseUUIDParam(c, "messageID", apierrors.InvalidMessageID)
+	if !ok {
+		return nil
 	}
 
 	emojiID, emojiUnicode, err := parseEmojiParam(c.Params("emoji"))

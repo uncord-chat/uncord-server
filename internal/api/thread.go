@@ -76,9 +76,9 @@ func NewThreadHandler(
 
 // CreateThread handles POST /api/v1/messages/:messageID/threads.
 func (h *ThreadHandler) CreateThread(c fiber.Ctx) error {
-	messageID, err := uuid.Parse(c.Params("messageID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidMessageID, "Invalid message ID format")
+	messageID, ok := httputil.ParseUUIDParam(c, "messageID", apierrors.InvalidMessageID)
+	if !ok {
+		return nil
 	}
 
 	userID, err := httputil.UserID(c)
@@ -135,9 +135,9 @@ func (h *ThreadHandler) CreateThread(c fiber.Ctx) error {
 
 // ListThreads handles GET /api/v1/channels/:channelID/threads.
 func (h *ThreadHandler) ListThreads(c fiber.Ctx) error {
-	channelID, err := uuid.Parse(c.Params("channelID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	channelID, ok := httputil.ParseUUIDParam(c, "channelID", apierrors.InvalidChannelID)
+	if !ok {
+		return nil
 	}
 
 	threads, err := h.threads.ListByChannel(c, channelID)
@@ -155,9 +155,9 @@ func (h *ThreadHandler) ListThreads(c fiber.Ctx) error {
 
 // GetThread handles GET /api/v1/threads/:threadID.
 func (h *ThreadHandler) GetThread(c fiber.Ctx) error {
-	threadID, err := uuid.Parse(c.Params("threadID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidThreadID, "Invalid thread ID format")
+	threadID, ok := httputil.ParseUUIDParam(c, "threadID", apierrors.InvalidThreadID)
+	if !ok {
+		return nil
 	}
 
 	userID, err := httputil.UserID(c)
@@ -185,9 +185,9 @@ func (h *ThreadHandler) GetThread(c fiber.Ctx) error {
 
 // UpdateThread handles PATCH /api/v1/threads/:threadID.
 func (h *ThreadHandler) UpdateThread(c fiber.Ctx) error {
-	threadID, err := uuid.Parse(c.Params("threadID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidThreadID, "Invalid thread ID format")
+	threadID, ok := httputil.ParseUUIDParam(c, "threadID", apierrors.InvalidThreadID)
+	if !ok {
+		return nil
 	}
 
 	userID, err := httputil.UserID(c)
@@ -239,9 +239,9 @@ func (h *ThreadHandler) UpdateThread(c fiber.Ctx) error {
 
 // ListThreadMessages handles GET /api/v1/threads/:threadID/messages.
 func (h *ThreadHandler) ListThreadMessages(c fiber.Ctx) error {
-	threadID, err := uuid.Parse(c.Params("threadID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidThreadID, "Invalid thread ID format")
+	threadID, ok := httputil.ParseUUIDParam(c, "threadID", apierrors.InvalidThreadID)
+	if !ok {
+		return nil
 	}
 
 	userID, err := httputil.UserID(c)
@@ -311,9 +311,9 @@ func (h *ThreadHandler) ListThreadMessages(c fiber.Ctx) error {
 
 // CreateThreadMessage handles POST /api/v1/threads/:threadID/messages.
 func (h *ThreadHandler) CreateThreadMessage(c fiber.Ctx) error {
-	threadID, err := uuid.Parse(c.Params("threadID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidThreadID, "Invalid thread ID format")
+	threadID, ok := httputil.ParseUUIDParam(c, "threadID", apierrors.InvalidThreadID)
+	if !ok {
+		return nil
 	}
 
 	userID, err := httputil.UserID(c)

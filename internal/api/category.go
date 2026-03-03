@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 	"github.com/uncord-chat/uncord-protocol/models"
@@ -83,9 +82,9 @@ func (h *CategoryHandler) UpdateCategory(c fiber.Ctx) error {
 		return err
 	}
 
-	id, err := uuid.Parse(c.Params("categoryID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid category ID format")
+	id, ok := httputil.ParseUUIDParam(c, "categoryID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
 	var body models.UpdateCategoryRequest
@@ -125,9 +124,9 @@ func (h *CategoryHandler) DeleteCategory(c fiber.Ctx) error {
 		return err
 	}
 
-	id, err := uuid.Parse(c.Params("categoryID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid category ID format")
+	id, ok := httputil.ParseUUIDParam(c, "categoryID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
 	if err := h.categories.Delete(c, id); err != nil {

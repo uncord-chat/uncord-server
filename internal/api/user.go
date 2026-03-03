@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 	"github.com/uncord-chat/uncord-protocol/models"
@@ -43,9 +42,9 @@ func (h *UserHandler) GetMe(c fiber.Ctx) error {
 
 // GetProfile handles GET /api/v1/users/:userID.
 func (h *UserHandler) GetProfile(c fiber.Ctx) error {
-	targetID, err := uuid.Parse(c.Params("userID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid user ID format")
+	targetID, ok := httputil.ParseUUIDParam(c, "userID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
 	u, err := h.users.GetByID(c, targetID)

@@ -110,9 +110,9 @@ func (h *E2EEHandler) RemoveDevice(c fiber.Ctx) error {
 		return err
 	}
 
-	deviceID, err := uuid.Parse(c.Params("deviceID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid device ID format")
+	deviceID, ok := httputil.ParseUUIDParam(c, "deviceID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
 	dev, err := h.keys.GetDeviceByDeviceID(c, userID, deviceID)
@@ -134,9 +134,9 @@ func (h *E2EEHandler) UpdateIdentityKey(c fiber.Ctx) error {
 		return err
 	}
 
-	deviceID, err := uuid.Parse(c.Params("deviceID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid device ID format")
+	deviceID, ok := httputil.ParseUUIDParam(c, "deviceID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
 	var body models.UpdateIdentityKeyRequest
@@ -173,9 +173,9 @@ func (h *E2EEHandler) UploadSignedPreKey(c fiber.Ctx) error {
 		return err
 	}
 
-	deviceID, err := uuid.Parse(c.Params("deviceID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid device ID format")
+	deviceID, ok := httputil.ParseUUIDParam(c, "deviceID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
 	var body models.UploadSignedPreKeyRequest
@@ -223,9 +223,9 @@ func (h *E2EEHandler) UploadOneTimePreKeys(c fiber.Ctx) error {
 		return err
 	}
 
-	deviceID, err := uuid.Parse(c.Params("deviceID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid device ID format")
+	deviceID, ok := httputil.ParseUUIDParam(c, "deviceID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
 	var body models.UploadOneTimePreKeysRequest
@@ -265,9 +265,9 @@ func (h *E2EEHandler) GetKeyCount(c fiber.Ctx) error {
 		return err
 	}
 
-	deviceID, err := uuid.Parse(c.Params("deviceID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid device ID format")
+	deviceID, ok := httputil.ParseUUIDParam(c, "deviceID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
 	dev, err := h.keys.GetDeviceByDeviceID(c, userID, deviceID)
@@ -286,9 +286,9 @@ func (h *E2EEHandler) GetKeyCount(c fiber.Ctx) error {
 
 // FetchKeyBundle handles GET /api/v1/users/:userID/keys.
 func (h *E2EEHandler) FetchKeyBundle(c fiber.Ctx) error {
-	targetUserID, err := uuid.Parse(c.Params("userID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid user ID format")
+	targetUserID, ok := httputil.ParseUUIDParam(c, "userID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
 	bundle, err := h.keys.FetchUserKeyBundle(c, targetUserID)

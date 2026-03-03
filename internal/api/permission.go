@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
 	"github.com/uncord-chat/uncord-protocol/models"
@@ -38,14 +37,14 @@ func (h *PermissionHandler) SetOverride(c fiber.Ctx) error {
 		return err
 	}
 
-	channelID, err := uuid.Parse(c.Params("channelID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	channelID, ok := httputil.ParseUUIDParam(c, "channelID", apierrors.InvalidChannelID)
+	if !ok {
+		return nil
 	}
 
-	targetID, err := uuid.Parse(c.Params("targetID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid target ID format")
+	targetID, ok := httputil.ParseUUIDParam(c, "targetID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
 	var body models.SetOverrideRequest
@@ -95,14 +94,14 @@ func (h *PermissionHandler) DeleteOverride(c fiber.Ctx) error {
 		return err
 	}
 
-	channelID, err := uuid.Parse(c.Params("channelID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	channelID, ok := httputil.ParseUUIDParam(c, "channelID", apierrors.InvalidChannelID)
+	if !ok {
+		return nil
 	}
 
-	targetID, err := uuid.Parse(c.Params("targetID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid target ID format")
+	targetID, ok := httputil.ParseUUIDParam(c, "targetID", apierrors.ValidationError)
+	if !ok {
+		return nil
 	}
 
 	principalType, err := parsePrincipalType(c.Query("type"))
@@ -135,9 +134,9 @@ func (h *PermissionHandler) DeleteOverride(c fiber.Ctx) error {
 
 // GetMyPermissions handles GET /api/v1/channels/:channelID/permissions/@me.
 func (h *PermissionHandler) GetMyPermissions(c fiber.Ctx) error {
-	channelID, err := uuid.Parse(c.Params("channelID"))
-	if err != nil {
-		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	channelID, ok := httputil.ParseUUIDParam(c, "channelID", apierrors.InvalidChannelID)
+	if !ok {
+		return nil
 	}
 
 	userID, err := httputil.UserID(c)
