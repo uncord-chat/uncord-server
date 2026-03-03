@@ -126,7 +126,7 @@ func (h *MessageHandler) ListMessages(c fiber.Ctx) error {
 
 	result := make([]models.Message, len(messages))
 	for i := range messages {
-		result[i] = h.toMessageModel(&messages[i], attachmentMap[messages[i].ID], reactionMap[messages[i].ID], userReactions[messages[i].ID])
+		result[i] = buildMessageModel(&messages[i], attachmentMap[messages[i].ID], reactionMap[messages[i].ID], userReactions[messages[i].ID], h.storage)
 	}
 	return httputil.Success(c, result)
 }
@@ -205,7 +205,7 @@ func (h *MessageHandler) CreateMessage(c fiber.Ctx) error {
 	}
 
 	// Newly created messages have no reactions yet.
-	result := h.toMessageModel(msg, linked, nil, nil)
+	result := buildMessageModel(msg, linked, nil, nil, h.storage)
 
 	// Best-effort Typesense indexing. Uses context.Background because Fiber recycles the request context after the
 	// handler returns.
@@ -299,7 +299,7 @@ func (h *MessageHandler) EditMessage(c fiber.Ctx) error {
 		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
 	}
 
-	result := h.toMessageModel(msg, attachments, reactionMap[msg.ID], userReactions[msg.ID])
+	result := buildMessageModel(msg, attachments, reactionMap[msg.ID], userReactions[msg.ID], h.storage)
 
 	// Best-effort Typesense upsert. Uses context.Background because Fiber recycles the request context after the
 	// handler returns.
@@ -378,13 +378,6 @@ func (h *MessageHandler) DeleteMessage(c fiber.Ctx) error {
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)
-}
-
-// toMessageModel converts the internal message type to the protocol response type. The summaries parameter contains
-// grouped reaction counts for this message (nil is safe and produces an empty slice). The myReactions map contains the
-// emoji keys the requesting user has reacted with (used to set the Me flag).
-func (h *MessageHandler) toMessageModel(m *message.Message, attachments []attachment.Attachment, summaries []reaction.Summary, myReactions map[string]bool) models.Message {
-	return buildMessageModel(m, attachments, summaries, myReactions, h.storage)
 }
 
 // buildMessageModel converts an internal message to a protocol response model. This is a package-level function so
