@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/golang-jwt/jwt/v5"
@@ -22,7 +23,7 @@ func RequireAuth(secret, issuer string) fiber.Handler {
 		}
 
 		const prefix = "Bearer "
-		if len(header) <= len(prefix) || header[:len(prefix)] != prefix {
+		if len(header) <= len(prefix) || !strings.EqualFold(header[:len(prefix)], prefix) {
 			return httputil.Fail(c, fiber.StatusUnauthorized, apierrors.Unauthorised, "Invalid authorization format")
 		}
 		tokenStr := header[len(prefix):]
