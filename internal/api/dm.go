@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/base64"
 	"errors"
-	"strconv"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -275,7 +274,10 @@ func (h *DMHandler) ListMessages(c fiber.Ctx) error {
 		before = &id
 	}
 
-	rawLimit, _ := strconv.Atoi(c.Query("limit"))
+	rawLimit, ok := httputil.ParseIntQuery(c, "limit")
+	if !ok {
+		return nil
+	}
 	limit := message.ClampLimit(rawLimit)
 
 	messages, err := h.messages.List(c, channelID, before, limit)

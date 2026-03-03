@@ -268,6 +268,111 @@ func TestParseUUIDParam(t *testing.T) {
 	})
 }
 
+func TestParseIntQuery(t *testing.T) {
+	t.Parallel()
+
+	t.Run("absent parameter returns zero", func(t *testing.T) {
+		t.Parallel()
+		app := fiber.New()
+		app.Get("/items", func(c fiber.Ctx) error {
+			v, ok := ParseIntQuery(c, "limit")
+			if !ok {
+				return nil
+			}
+			return Success(c, map[string]int{"limit": v})
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/items", nil)
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("app.Test() error: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+		}
+
+		var env struct {
+			Data struct {
+				Limit float64 `json:"limit"`
+			} `json:"data"`
+		}
+		decodeBody(t, resp, &env)
+		if env.Data.Limit != 0 {
+			t.Errorf("limit = %v, want 0", env.Data.Limit)
+		}
+	})
+
+	t.Run("valid integer", func(t *testing.T) {
+		t.Parallel()
+		app := fiber.New()
+		app.Get("/items", func(c fiber.Ctx) error {
+			v, ok := ParseIntQuery(c, "limit")
+			if !ok {
+				return nil
+			}
+			return Success(c, map[string]int{"limit": v})
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/items?limit=25", nil)
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("app.Test() error: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+		}
+
+		var env struct {
+			Data struct {
+				Limit float64 `json:"limit"`
+			} `json:"data"`
+		}
+		decodeBody(t, resp, &env)
+		if env.Data.Limit != 25 {
+			t.Errorf("limit = %v, want 25", env.Data.Limit)
+		}
+	})
+
+	t.Run("non-integer returns 400", func(t *testing.T) {
+		t.Parallel()
+		app := fiber.New()
+		app.Get("/items", func(c fiber.Ctx) error {
+			v, ok := ParseIntQuery(c, "limit")
+			if !ok {
+				return nil
+			}
+			return Success(c, map[string]int{"limit": v})
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/items?limit=abc", nil)
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("app.Test() error: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+		}
+
+		var env struct {
+			Error ErrorBody `json:"error"`
+		}
+		decodeBody(t, resp, &env)
+
+		if env.Error.Code != apierrors.ValidationError {
+			t.Errorf("code = %q, want %q", env.Error.Code, apierrors.ValidationError)
+		}
+		if env.Error.Message != "Invalid limit parameter" {
+			t.Errorf("message = %q, want %q", env.Error.Message, "Invalid limit parameter")
+		}
+	})
+}
+
 // doRequest sends a request to the Fiber test server and returns the response.
 func doRequest(t *testing.T, app *fiber.App, path string) *http.Response {
 	t.Helper()

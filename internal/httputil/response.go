@@ -1,6 +1,7 @@
 package httputil
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
@@ -57,6 +58,23 @@ func ParseUUIDParam(c fiber.Ctx, param string, code apierrors.Code) (uuid.UUID, 
 		return uuid.Nil, false
 	}
 	return id, true
+}
+
+// ParseIntQuery parses an integer query parameter. If the parameter is absent or empty, it returns (0, true) so that
+// callers can apply their own defaults via clamping functions. If the parameter is present but not a valid integer, it
+// writes a 400 JSON error response and returns (0, false). Callers should return nil when ok is false because the
+// response has already been committed.
+func ParseIntQuery(c fiber.Ctx, param string) (int, bool) {
+	raw := c.Query(param)
+	if raw == "" {
+		return 0, true
+	}
+	v, err := strconv.Atoi(raw)
+	if err != nil {
+		_ = Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid "+param+" parameter")
+		return 0, false
+	}
+	return v, true
 }
 
 // UserID extracts the authenticated user's ID from the request context. If the value is absent (indicating the

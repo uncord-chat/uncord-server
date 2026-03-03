@@ -1,8 +1,6 @@
 package api
 
 import (
-	"strconv"
-
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
@@ -57,7 +55,10 @@ func (h *AuditHandler) List(c fiber.Ctx) error {
 		params.Before = &id
 	}
 
-	rawLimit, _ := strconv.Atoi(c.Query("limit"))
+	rawLimit, ok := httputil.ParseIntQuery(c, "limit")
+	if !ok {
+		return nil
+	}
 	params.Limit = audit.ClampLimit(rawLimit)
 
 	entries, err := h.repo.List(c, params)

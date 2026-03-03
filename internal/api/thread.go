@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -273,7 +272,10 @@ func (h *ThreadHandler) ListThreadMessages(c fiber.Ctx) error {
 		before = &id
 	}
 
-	rawLimit, _ := strconv.Atoi(c.Query("limit"))
+	rawLimit, ok := httputil.ParseIntQuery(c, "limit")
+	if !ok {
+		return nil
+	}
 	limit := message.ClampLimit(rawLimit)
 
 	messages, err := h.messages.ListByThread(c, threadID, before, limit)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -52,7 +51,10 @@ func (h *MemberHandler) ListMembers(c fiber.Ctx) error {
 		after = &id
 	}
 
-	rawLimit, _ := strconv.Atoi(c.Query("limit"))
+	rawLimit, ok := httputil.ParseIntQuery(c, "limit")
+	if !ok {
+		return nil
+	}
 	limit := member.ClampLimit(rawLimit)
 
 	members, err := h.members.List(c, after, limit)
@@ -85,7 +87,10 @@ func (h *MemberHandler) ListChannelMembers(c fiber.Ctx) error {
 		after = &id
 	}
 
-	rawLimit, _ := strconv.Atoi(c.Query("limit"))
+	rawLimit, ok := httputil.ParseIntQuery(c, "limit")
+	if !ok {
+		return nil
+	}
 	limit := member.ClampLimit(rawLimit)
 
 	// Fetch members in batches and filter by ViewChannels permission. The batch size is double the requested limit to
@@ -445,7 +450,10 @@ func (h *MemberHandler) ListBans(c fiber.Ctx) error {
 		after = &id
 	}
 
-	rawLimit, _ := strconv.Atoi(c.Query("limit"))
+	rawLimit, ok := httputil.ParseIntQuery(c, "limit")
+	if !ok {
+		return nil
+	}
 	limit := member.ClampLimit(rawLimit)
 
 	bans, err := h.members.ListBans(c, after, limit)

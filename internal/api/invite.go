@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"errors"
-	"strconv"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -89,7 +88,10 @@ func (h *InviteHandler) ListInvites(c fiber.Ctx) error {
 		after = &id
 	}
 
-	rawLimit, _ := strconv.Atoi(c.Query("limit"))
+	rawLimit, ok := httputil.ParseIntQuery(c, "limit")
+	if !ok {
+		return nil
+	}
 	limit := invite.ClampLimit(rawLimit)
 
 	invites, err := h.invites.List(c, after, limit)

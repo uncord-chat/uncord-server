@@ -70,8 +70,14 @@ func (h *SearchHandler) SearchMessages(c fiber.Ctx) error {
 		after = v
 	}
 
-	page, _ := strconv.Atoi(c.Query("page"))
-	perPage, _ := strconv.Atoi(c.Query("limit"))
+	page, ok := httputil.ParseIntQuery(c, "page")
+	if !ok {
+		return nil
+	}
+	perPage, ok := httputil.ParseIntQuery(c, "limit")
+	if !ok {
+		return nil
+	}
 	page, perPage = search.ClampPagination(page, perPage)
 
 	result, err := h.service.Search(c, userID, query, search.Options{
