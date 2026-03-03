@@ -1082,6 +1082,21 @@ func TestLoadValidationGatewayPublishTimeoutTooLow(t *testing.T) {
 	}
 }
 
+func TestLoadValidationCORSEmptyInProduction(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+	t.Setenv("SERVER_SECRET", testServerSecret)
+	t.Setenv("TYPESENSE_API_KEY", "test-typesense-key")
+	t.Setenv("CORS_ALLOW_ORIGINS", "")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() returned nil error, want validation error for empty CORS_ALLOW_ORIGINS in production")
+	}
+	if !strings.Contains(err.Error(), "CORS_ALLOW_ORIGINS must specify explicit origins in production") {
+		t.Errorf("error %q does not mention CORS_ALLOW_ORIGINS", err.Error())
+	}
+}
+
 func TestLoadValidationRequestTimeoutTooLow(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
 	t.Setenv("SERVER_SECRET", testServerSecret)

@@ -556,8 +556,10 @@ func (c *Config) validate() error {
 		errs = append(errs, fmt.Errorf("E2EE_MAX_DEVICES_PER_USER must be at least 1"))
 	}
 
-	if c.CORSAllowOrigins == "*" && !c.IsDevelopment() {
-		errs = append(errs, fmt.Errorf("CORS_ALLOW_ORIGINS must specify explicit origins in production"))
+	if !c.IsDevelopment() {
+		if c.CORSAllowOrigins == "*" || c.CORSAllowOrigins == "" {
+			errs = append(errs, fmt.Errorf("CORS_ALLOW_ORIGINS must specify explicit origins in production"))
+		}
 	}
 
 	if c.SMTPHost != "" {
