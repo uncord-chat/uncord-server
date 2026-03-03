@@ -400,13 +400,17 @@ func run() error {
 	go func() {
 		<-quit
 		log.Info().Msg("Shutting down server")
-		gatewayHub.Shutdown()
-		subCancel()
+
+		// Drain inflight HTTP requests before cancelling background services so that in-progress handlers can still
+		// publish gateway events and write to caches.
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer shutdownCancel()
 		if err := app.ShutdownWithContext(shutdownCtx); err != nil {
 			log.Error().Err(err).Msg("Server shutdown error")
 		}
+
+		gatewayHub.Shutdown()
+		subCancel()
 	}()
 
 	// Listen
@@ -429,7 +433,14 @@ func run() error {
 	// Listen can also return on its own (e.g. bind failure) without the handler ever firing. Calling cancel twice is
 	// safe; context.WithCancel guarantees the second call is a no-op.
 	subCancel()
-	wg.Wait()
+
+	waitDone := make(chan struct{})
+	go func() { wg.Wait(); close(waitDone) }()
+	select {
+	case <-waitDone:
+	case <-time.After(10 * time.Second):
+		log.Warn().Msg("Timed out waiting for background goroutines to stop")
+	}
 
 	if listenErr != nil {
 		return fmt.Errorf("server error: %w", listenErr)
