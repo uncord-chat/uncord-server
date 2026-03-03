@@ -175,21 +175,21 @@ func (r *PGRepository) SoftDelete(ctx context.Context, id uuid.UUID) error {
 // Pin marks a message as pinned. Returns ErrAlreadyPinned if the message is already pinned, or ErrNotFound if the
 // message does not exist or is deleted.
 func (r *PGRepository) Pin(ctx context.Context, id uuid.UUID) (*Message, error) {
-	msg, err := r.GetByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	if msg.Pinned {
-		return nil, ErrAlreadyPinned
-	}
-
 	tag, err := r.db.Exec(ctx,
-		"UPDATE messages SET pinned = true WHERE id = $1 AND deleted = false", id,
+		"UPDATE messages SET pinned = true WHERE id = $1 AND deleted = false AND pinned = false", id,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("pin message: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
+		// Distinguish "not found / deleted" from "already pinned" by checking whether the message exists.
+		msg, getErr := r.GetByID(ctx, id)
+		if getErr != nil {
+			return nil, ErrNotFound
+		}
+		if msg.Pinned {
+			return nil, ErrAlreadyPinned
+		}
 		return nil, ErrNotFound
 	}
 	return r.GetByID(ctx, id)
@@ -198,21 +198,21 @@ func (r *PGRepository) Pin(ctx context.Context, id uuid.UUID) (*Message, error) 
 // Unpin marks a message as unpinned. Returns ErrNotPinned if the message is not currently pinned, or ErrNotFound if the
 // message does not exist or is deleted.
 func (r *PGRepository) Unpin(ctx context.Context, id uuid.UUID) (*Message, error) {
-	msg, err := r.GetByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	if !msg.Pinned {
-		return nil, ErrNotPinned
-	}
-
 	tag, err := r.db.Exec(ctx,
-		"UPDATE messages SET pinned = false WHERE id = $1 AND deleted = false", id,
+		"UPDATE messages SET pinned = false WHERE id = $1 AND deleted = false AND pinned = true", id,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("unpin message: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
+		// Distinguish "not found / deleted" from "not pinned" by checking whether the message exists.
+		msg, getErr := r.GetByID(ctx, id)
+		if getErr != nil {
+			return nil, ErrNotFound
+		}
+		if !msg.Pinned {
+			return nil, ErrNotPinned
+		}
 		return nil, ErrNotFound
 	}
 	return r.GetByID(ctx, id)
