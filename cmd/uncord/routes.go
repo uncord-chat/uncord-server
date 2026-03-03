@@ -18,6 +18,45 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/search"
 )
 
+// authLimiter returns a rate limiter scoped to authentication endpoints.
+func (s *server) authLimiter() fiber.Handler {
+	return limiter.New(limiter.Config{
+		Max:          s.cfg.RateLimitAuthCount,
+		Expiration:   time.Duration(s.cfg.RateLimitAuthWindowSeconds) * time.Second,
+		LimitReached: rateLimitReached,
+	})
+}
+
+// uploadLimiter returns a per-user rate limiter scoped to file upload endpoints.
+func (s *server) uploadLimiter() fiber.Handler {
+	return limiter.New(limiter.Config{
+		Max:          s.cfg.RateLimitUploadCount,
+		Expiration:   time.Duration(s.cfg.RateLimitUploadWindowSeconds) * time.Second,
+		KeyGenerator: userKeyGenerator,
+		LimitReached: rateLimitReached,
+	})
+}
+
+// channelMsgLimiter returns a per-user-per-channel rate limiter for message creation.
+func (s *server) channelMsgLimiter() fiber.Handler {
+	return limiter.New(limiter.Config{
+		Max:          s.cfg.RateLimitMsgCount,
+		Expiration:   time.Duration(s.cfg.RateLimitMsgWindowSeconds) * time.Second,
+		KeyGenerator: userChannelKeyGenerator,
+		LimitReached: rateLimitReached,
+	})
+}
+
+// globalMsgLimiter returns a per-user rate limiter for message creation across all channels.
+func (s *server) globalMsgLimiter() fiber.Handler {
+	return limiter.New(limiter.Config{
+		Max:          s.cfg.RateLimitMsgGlobalCount,
+		Expiration:   time.Duration(s.cfg.RateLimitMsgGlobalWindowSeconds) * time.Second,
+		KeyGenerator: userKeyGenerator,
+		LimitReached: rateLimitReached,
+	})
+}
+
 // registerRoutes sets up all HTTP routes, middleware chains, and handler bindings on the Fiber application. Routes are
 // grouped by resource and documented with section comments to aid navigation.
 func (s *server) registerRoutes(app *fiber.App) {
@@ -30,11 +69,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 
 	// Browser-facing email verification page (outside /api/v1/ because users click this link directly from email)
 	verifyHandler := page.NewVerifyHandler(s.authService, s.cfg.ServerName, s.verifyPageTmpl, log.Logger)
-	app.Get("/verify-email", limiter.New(limiter.Config{
-		Max:          s.cfg.RateLimitAuthCount,
-		Expiration:   time.Duration(s.cfg.RateLimitAuthWindowSeconds) * time.Second,
-		LimitReached: rateLimitReached,
-	}), verifyHandler.VerifyEmail)
+	app.Get("/verify-email", s.authLimiter(), verifyHandler.VerifyEmail)
 
 	// === HEALTH CHECK ===
 
@@ -47,11 +82,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 
 	// Auth routes with stricter rate limiting (public, no email/member checks)
 	authGroup := app.Group("/api/v1/auth")
-	authGroup.Use(limiter.New(limiter.Config{
-		Max:          s.cfg.RateLimitAuthCount,
-		Expiration:   time.Duration(s.cfg.RateLimitAuthWindowSeconds) * time.Second,
-		LimitReached: rateLimitReached,
-	}))
+	authGroup.Use(s.authLimiter())
 	authGroup.Post("/register", authHandler.Register)
 	authGroup.Post("/login", authHandler.Login)
 	authGroup.Post("/refresh", authHandler.Refresh)
@@ -77,15 +108,10 @@ func (s *server) registerRoutes(app *fiber.App) {
 		s.userRepo, s.serverRepo, s.storage,
 		s.cfg.MaxAvatarSizeBytes(), s.cfg.MaxAvatarDimension,
 		s.cfg.MaxBannerWidth, s.cfg.MaxBannerHeight, log.Logger)
-	uploadLimiter := limiter.New(limiter.Config{
-		Max:          s.cfg.RateLimitUploadCount,
-		Expiration:   time.Duration(s.cfg.RateLimitUploadWindowSeconds) * time.Second,
-		KeyGenerator: userKeyGenerator,
-		LimitReached: rateLimitReached,
-	})
-	userGroup.Put("/@me/avatar", uploadLimiter, imageHandler.UploadUserAvatar)
+	userUploadLimiter := s.uploadLimiter()
+	userGroup.Put("/@me/avatar", userUploadLimiter, imageHandler.UploadUserAvatar)
 	userGroup.Delete("/@me/avatar", imageHandler.DeleteUserAvatar)
-	userGroup.Put("/@me/banner", uploadLimiter, imageHandler.UploadUserBanner)
+	userGroup.Put("/@me/banner", userUploadLimiter, imageHandler.UploadUserBanner)
 	userGroup.Delete("/@me/banner", imageHandler.DeleteUserBanner)
 
 	// === MFA ROUTES ===
@@ -131,19 +157,20 @@ func (s *server) registerRoutes(app *fiber.App) {
 	// Server config routes (authenticated + verified email)
 	serverHandler := api.NewServerHandler(s.serverRepo, s.auditLogger, log.Logger)
 	app.Get("/api/v1/server/info", serverHandler.GetPublicInfo)
+	serverUploadLimiter := s.uploadLimiter()
 	serverGroup := app.Group("/api/v1/server", requireAuth, requireCSRF, requireVerified)
 	serverGroup.Get("/", serverHandler.Get)
 	serverGroup.Patch("/", requireActive,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageServer), serverHandler.Update)
 	serverGroup.Put("/icon", requireActive,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageServer),
-		uploadLimiter, imageHandler.UploadServerIcon)
+		serverUploadLimiter, imageHandler.UploadServerIcon)
 	serverGroup.Delete("/icon", requireActive,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageServer),
 		imageHandler.DeleteServerIcon)
 	serverGroup.Put("/banner", requireActive,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageServer),
-		uploadLimiter, imageHandler.UploadServerBanner)
+		serverUploadLimiter, imageHandler.UploadServerBanner)
 	serverGroup.Delete("/banner", requireActive,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageServer),
 		imageHandler.DeleteServerBanner)
@@ -164,7 +191,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 	serverGroup.Get("/emoji", requireActive, emojiHandler.ListEmoji)
 	serverGroup.Post("/emoji", requireActive,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageEmoji),
-		uploadLimiter, emojiHandler.CreateEmoji)
+		serverUploadLimiter, emojiHandler.CreateEmoji)
 	serverGroup.Patch("/emoji/:emojiID", requireActive,
 		permission.RequireServerPermission(s.permResolver, permissions.ManageEmoji),
 		emojiHandler.UpdateEmoji)
@@ -220,12 +247,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 	attachmentHandler := api.NewAttachmentHandler(
 		s.attachmentRepo, s.storage, s.rdb, s.cfg.MaxUploadSizeBytes(), log.Logger)
 	channelGroup.Post("/:channelID/attachments",
-		limiter.New(limiter.Config{
-			Max:          s.cfg.RateLimitUploadCount,
-			Expiration:   time.Duration(s.cfg.RateLimitUploadWindowSeconds) * time.Second,
-			KeyGenerator: userKeyGenerator,
-			LimitReached: rateLimitReached,
-		}),
+		s.uploadLimiter(),
 		permission.RequirePermission(s.permResolver, permissions.AttachFiles),
 		attachmentHandler.Upload)
 
@@ -239,18 +261,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 		permission.RequirePermission(s.permResolver, permissions.ViewChannels|permissions.ReadMessageHistory),
 		messageHandler.ListMessages)
 	channelGroup.Post("/:channelID/messages",
-		limiter.New(limiter.Config{
-			Max:          s.cfg.RateLimitMsgCount,
-			Expiration:   time.Duration(s.cfg.RateLimitMsgWindowSeconds) * time.Second,
-			KeyGenerator: userChannelKeyGenerator,
-			LimitReached: rateLimitReached,
-		}),
-		limiter.New(limiter.Config{
-			Max:          s.cfg.RateLimitMsgGlobalCount,
-			Expiration:   time.Duration(s.cfg.RateLimitMsgGlobalWindowSeconds) * time.Second,
-			KeyGenerator: userKeyGenerator,
-			LimitReached: rateLimitReached,
-		}),
+		s.channelMsgLimiter(), s.globalMsgLimiter(),
 		permission.RequirePermission(s.permResolver, permissions.SendMessages),
 		messageHandler.CreateMessage)
 
@@ -318,14 +329,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 	threadGroup.Get("/:threadID", threadHandler.GetThread)
 	threadGroup.Patch("/:threadID", threadHandler.UpdateThread)
 	threadGroup.Get("/:threadID/messages", threadHandler.ListThreadMessages)
-	threadGroup.Post("/:threadID/messages",
-		limiter.New(limiter.Config{
-			Max:          s.cfg.RateLimitMsgCount,
-			Expiration:   time.Duration(s.cfg.RateLimitMsgWindowSeconds) * time.Second,
-			KeyGenerator: userKeyGenerator,
-			LimitReached: rateLimitReached,
-		}),
-		threadHandler.CreateThreadMessage)
+	threadGroup.Post("/:threadID/messages", s.channelMsgLimiter(), threadHandler.CreateThreadMessage)
 
 	// Pin/unpin (under /api/v1/messages, inherits auth/verified/active)
 	messageGroup.Put("/:messageID/pin", pinHandler.PinMessage)
