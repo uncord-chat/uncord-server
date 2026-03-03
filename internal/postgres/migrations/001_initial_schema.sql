@@ -487,7 +487,7 @@ CREATE INDEX idx_bans_banned_by ON bans (banned_by) WHERE banned_by IS NOT NULL;
 CREATE TABLE reports (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     reporter_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    message_id      UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    message_id      UUID REFERENCES messages(id) ON DELETE SET NULL,
     reason          TEXT NOT NULL,
     status          TEXT NOT NULL DEFAULT 'open',  -- open, resolved, dismissed
     resolved_by     UUID REFERENCES users(id) ON DELETE SET NULL,
