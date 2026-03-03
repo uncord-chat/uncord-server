@@ -208,14 +208,14 @@ func run() error {
 	defer subCancel()
 	var wg sync.WaitGroup
 
-	wg.Go(func() {
+	safeGo(&wg, func() {
 		blocklist.Run(subCtx, cfg.DisposableEmailBlocklistRefreshInterval)
 	})
 
 	// The purge goroutine is started below after the attachment repository is initialised, because orphan attachment
 	// cleanup needs access to the repo and storage provider.
 	startPurgeGoroutine := func(attachRepo *attachment.PGRepository, storage media.StorageProvider) {
-		wg.Go(func() {
+		safeGo(&wg, func() {
 			purgeExpiredData(subCtx, userRepo, attachRepo, storage, cfg)
 
 			ticker := time.NewTicker(cfg.DataCleanupInterval)
@@ -233,7 +233,7 @@ func run() error {
 
 	// Start permission cache invalidation subscriber with reconnection.
 	permSub := permission.NewSubscriber(permCache, rdb, log.Logger)
-	wg.Go(func() {
+	safeGo(&wg, func() {
 		runWithBackoff(subCtx, "permission-cache-subscriber", permSub.Run)
 	})
 
@@ -313,10 +313,10 @@ func run() error {
 	// Start thumbnail worker with reconnection.
 	thumbWorker := media.NewThumbnailWorker(rdb, storage, attachmentRepo, log.Logger)
 	thumbWorker.EnsureStream(subCtx)
-	wg.Go(func() {
+	safeGo(&wg, func() {
 		runWithBackoff(subCtx, "thumbnail-worker", thumbWorker.Run)
 	})
-	wg.Go(func() {
+	safeGo(&wg, func() {
 		runWithBackoff(subCtx, "gateway-publisher", gatewayPub.Run)
 	})
 	authService, err := auth.NewService(userRepo, rdb, cfg, blocklist, emailSender, serverRepo, permPublisher, log.Logger)
@@ -343,7 +343,7 @@ func run() error {
 		DocumentStore:  documentStore,
 		Logger:         log.Logger,
 	})
-	wg.Go(func() {
+	safeGo(&wg, func() {
 		runWithBackoff(subCtx, "gateway-hub", gatewayHub.Run)
 	})
 
@@ -600,6 +600,22 @@ func purgeExpiredData(ctx context.Context, repo user.Repository, attachRepo atta
 		log.Info().Int("deleted", len(orphanKeys)).Dur("ttl", cfg.AttachmentOrphanTTL).
 			Msg("Purged orphaned attachment files")
 	}
+}
+
+// safeGo starts a goroutine via wg.Go with panic recovery. If the goroutine panics, the panic value and a stack trace
+// are logged so operators can diagnose the failure. The goroutine returns normally so the WaitGroup can drain during
+// shutdown instead of crashing the process.
+func safeGo(wg *sync.WaitGroup, fn func()) {
+	wg.Go(func() {
+		defer func() {
+			if r := recover(); r != nil {
+				buf := make([]byte, 4096)
+				n := runtime.Stack(buf, false)
+				log.Error().Interface("panic", r).Str("stack", string(buf[:n])).Msg("Background goroutine panicked")
+			}
+		}()
+		fn()
+	})
 }
 
 // runWithBackoff runs fn in a loop, restarting with exponential backoff when it returns a non-nil, non-cancelled error.
