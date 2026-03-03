@@ -80,19 +80,22 @@ func TestLocalStorage_URL(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
+		name    string
 		baseURL string
 		key     string
 		want    string
 	}{
-		{"http://localhost:8080", "attachments/abc.jpg", "http://localhost:8080/media/attachments/abc.jpg"},
-		{"http://localhost:8080/", "attachments/abc.jpg", "http://localhost:8080/media/attachments/abc.jpg"},
-		{"https://cdn.example.com", "thumbnails/def.jpg", "https://cdn.example.com/media/thumbnails/def.jpg"},
+		{"base without trailing slash", "http://localhost:8080", "attachments/abc.jpg", "http://localhost:8080/media/attachments/abc.jpg"},
+		{"base with trailing slash", "http://localhost:8080/", "attachments/abc.jpg", "http://localhost:8080/media/attachments/abc.jpg"},
+		{"https base URL", "https://cdn.example.com", "thumbnails/def.jpg", "https://cdn.example.com/media/thumbnails/def.jpg"},
 	}
 	for _, tt := range tests {
-		store := newTestStorageWithURL(t, tt.baseURL)
-		if got := store.URL(tt.key); got != tt.want {
-			t.Errorf("URL(%q) with base %q = %q, want %q", tt.key, tt.baseURL, got, tt.want)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			store := newTestStorageWithURL(t, tt.baseURL)
+			if got := store.URL(tt.key); got != tt.want {
+				t.Errorf("URL(%q) with base %q = %q, want %q", tt.key, tt.baseURL, got, tt.want)
+			}
+		})
 	}
 }
 
@@ -106,9 +109,11 @@ func TestLocalStorage_PutTraversalBlocked(t *testing.T) {
 		"../../etc/passwd",
 	}
 	for _, key := range traversalKeys {
-		if err := store.Put(ctx, key, bytes.NewReader([]byte("malicious"))); err == nil {
-			t.Errorf("Put(%q) succeeded, want error", key)
-		}
+		t.Run(key, func(t *testing.T) {
+			if err := store.Put(ctx, key, bytes.NewReader([]byte("malicious"))); err == nil {
+				t.Errorf("Put(%q) succeeded, want error", key)
+			}
+		})
 	}
 }
 
@@ -122,10 +127,12 @@ func TestLocalStorage_GetTraversalBlocked(t *testing.T) {
 		"../../etc/passwd",
 	}
 	for _, key := range traversalKeys {
-		_, err := store.Get(ctx, key)
-		if err == nil {
-			t.Errorf("Get(%q) succeeded, want error", key)
-		}
+		t.Run(key, func(t *testing.T) {
+			_, err := store.Get(ctx, key)
+			if err == nil {
+				t.Errorf("Get(%q) succeeded, want error", key)
+			}
+		})
 	}
 }
 
@@ -139,9 +146,11 @@ func TestLocalStorage_DeleteTraversalBlocked(t *testing.T) {
 		"../../etc/passwd",
 	}
 	for _, key := range traversalKeys {
-		if err := store.Delete(ctx, key); err == nil {
-			t.Errorf("Delete(%q) succeeded, want error", key)
-		}
+		t.Run(key, func(t *testing.T) {
+			if err := store.Delete(ctx, key); err == nil {
+				t.Errorf("Delete(%q) succeeded, want error", key)
+			}
+		})
 	}
 }
 

@@ -103,22 +103,25 @@ func TestIsAvatarContentType(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
+		name string
 		ct   string
 		want bool
 	}{
-		{"image/jpeg", true},
-		{"image/png", true},
-		{"image/gif", true},
-		{"image/webp", true},
-		{"image/svg+xml", false},
-		{"image/bmp", false},
-		{"image/tiff", false},
-		{"application/pdf", false},
-		{"image/jpeg; charset=utf-8", true},
+		{"jpeg allowed", "image/jpeg", true},
+		{"png allowed", "image/png", true},
+		{"gif allowed", "image/gif", true},
+		{"webp allowed", "image/webp", true},
+		{"svg rejected", "image/svg+xml", false},
+		{"bmp rejected", "image/bmp", false},
+		{"tiff rejected", "image/tiff", false},
+		{"pdf rejected", "application/pdf", false},
+		{"jpeg with charset allowed", "image/jpeg; charset=utf-8", true},
 	}
 	for _, tt := range tests {
-		if got := IsAvatarContentType(tt.ct); got != tt.want {
-			t.Errorf("IsAvatarContentType(%q) = %v, want %v", tt.ct, got, tt.want)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsAvatarContentType(tt.ct); got != tt.want {
+				t.Errorf("IsAvatarContentType(%q) = %v, want %v", tt.ct, got, tt.want)
+			}
+		})
 	}
 }
