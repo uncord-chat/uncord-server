@@ -200,7 +200,7 @@ func (h *ChannelHandler) CreateChannel(c fiber.Ctx) error {
 
 	if h.auditLogger != nil {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.ChannelCreate,
+			ActorID: audit.UUIDPtr(userID), Action: audit.ChannelCreate,
 			TargetType: audit.Ptr("channel"), TargetID: audit.UUIDPtr(ch.ID),
 		})
 	}
@@ -286,7 +286,7 @@ func (h *ChannelHandler) UpdateChannel(c fiber.Ctx) error {
 
 	if h.auditLogger != nil {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.ChannelUpdate,
+			ActorID: audit.UUIDPtr(userID), Action: audit.ChannelUpdate,
 			TargetType: audit.Ptr("channel"), TargetID: audit.UUIDPtr(id),
 		})
 	}
@@ -317,7 +317,7 @@ func (h *ChannelHandler) DeleteChannel(c fiber.Ctx) error {
 
 	if h.auditLogger != nil {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.ChannelDelete,
+			ActorID: audit.UUIDPtr(userID), Action: audit.ChannelDelete,
 			TargetType: audit.Ptr("channel"), TargetID: audit.UUIDPtr(id),
 		})
 	}

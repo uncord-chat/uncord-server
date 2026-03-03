@@ -268,7 +268,7 @@ func (h *MemberHandler) KickMember(c fiber.Ctx) error {
 
 	if h.auditLogger != nil {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.MemberKick,
+			ActorID: audit.UUIDPtr(userID), Action: audit.MemberKick,
 			TargetType: audit.Ptr("user"), TargetID: audit.UUIDPtr(targetID),
 		})
 	}
@@ -317,7 +317,7 @@ func (h *MemberHandler) SetTimeout(c fiber.Ctx) error {
 
 	if h.auditLogger != nil {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.MemberTimeout,
+			ActorID: audit.UUIDPtr(userID), Action: audit.MemberTimeout,
 			TargetType: audit.Ptr("user"), TargetID: audit.UUIDPtr(targetID),
 		})
 	}
@@ -347,7 +347,7 @@ func (h *MemberHandler) ClearTimeout(c fiber.Ctx) error {
 
 	if h.auditLogger != nil {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.MemberTimeoutClear,
+			ActorID: audit.UUIDPtr(userID), Action: audit.MemberTimeoutClear,
 			TargetType: audit.Ptr("user"), TargetID: audit.UUIDPtr(targetID),
 		})
 	}
@@ -397,7 +397,7 @@ func (h *MemberHandler) BanMember(c fiber.Ctx) error {
 
 	if h.auditLogger != nil {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.MemberBan,
+			ActorID: audit.UUIDPtr(userID), Action: audit.MemberBan,
 			TargetType: audit.Ptr("user"), TargetID: audit.UUIDPtr(targetID),
 			Reason: body.Reason,
 		})
@@ -426,7 +426,7 @@ func (h *MemberHandler) UnbanMember(c fiber.Ctx) error {
 
 	if h.auditLogger != nil {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.MemberUnban,
+			ActorID: audit.UUIDPtr(userID), Action: audit.MemberUnban,
 			TargetType: audit.Ptr("user"), TargetID: audit.UUIDPtr(targetID),
 		})
 	}
@@ -512,7 +512,7 @@ func (h *MemberHandler) AssignRole(c fiber.Ctx) error {
 
 	if h.auditLogger != nil {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.MemberRoleAssign,
+			ActorID: audit.UUIDPtr(userID), Action: audit.MemberRoleAssign,
 			TargetType: audit.Ptr("user"), TargetID: audit.UUIDPtr(targetID),
 			Changes: audit.MarshalChanges(map[string]string{"role_id": roleID.String()}),
 		})
@@ -575,7 +575,7 @@ func (h *MemberHandler) RemoveRole(c fiber.Ctx) error {
 
 	if h.auditLogger != nil {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.MemberRoleRemove,
+			ActorID: audit.UUIDPtr(userID), Action: audit.MemberRoleRemove,
 			TargetType: audit.Ptr("user"), TargetID: audit.UUIDPtr(targetID),
 			Changes: audit.MarshalChanges(map[string]string{"role_id": roleID.String()}),
 		})

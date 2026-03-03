@@ -457,7 +457,7 @@ CREATE INDEX idx_webhooks_creator ON webhooks (creator_id);
 
 CREATE TABLE audit_log (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    actor_id        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    actor_id        UUID REFERENCES users(id) ON DELETE SET NULL,
     action          TEXT NOT NULL,
     target_type     TEXT,
     target_id       UUID,

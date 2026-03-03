@@ -91,7 +91,7 @@ func (h *PinHandler) PinMessage(c fiber.Ctx) error {
 
 	if h.auditLogger != nil {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.MessagePin,
+			ActorID: audit.UUIDPtr(userID), Action: audit.MessagePin,
 			TargetType: audit.Ptr("message"), TargetID: audit.UUIDPtr(messageID),
 		})
 	}
@@ -142,7 +142,7 @@ func (h *PinHandler) UnpinMessage(c fiber.Ctx) error {
 
 	if h.auditLogger != nil {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.MessageUnpin,
+			ActorID: audit.UUIDPtr(userID), Action: audit.MessageUnpin,
 			TargetType: audit.Ptr("message"), TargetID: audit.UUIDPtr(messageID),
 		})
 	}

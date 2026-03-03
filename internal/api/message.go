@@ -352,7 +352,7 @@ func (h *MessageHandler) DeleteMessage(c fiber.Ctx) error {
 	// Audit log only for moderator deletions (when the actor is not the author).
 	if h.auditLogger != nil && existing.AuthorID != userID {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.MessageDelete,
+			ActorID: audit.UUIDPtr(userID), Action: audit.MessageDelete,
 			TargetType: audit.Ptr("message"), TargetID: audit.UUIDPtr(messageID),
 		})
 	}

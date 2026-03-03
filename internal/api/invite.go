@@ -70,7 +70,7 @@ func (h *InviteHandler) CreateInvite(c fiber.Ctx) error {
 
 	if h.auditLogger != nil {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.InviteCreate,
+			ActorID: audit.UUIDPtr(userID), Action: audit.InviteCreate,
 			TargetType: audit.Ptr("invite"), TargetID: audit.UUIDPtr(inv.ID),
 		})
 	}
@@ -119,7 +119,7 @@ func (h *InviteHandler) DeleteInvite(c fiber.Ctx) error {
 
 	if h.auditLogger != nil {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.InviteDelete,
+			ActorID: audit.UUIDPtr(userID), Action: audit.InviteDelete,
 			TargetType: audit.Ptr("invite"),
 			Changes:    audit.MarshalChanges(map[string]string{"code": code}),
 		})

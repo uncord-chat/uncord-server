@@ -127,7 +127,7 @@ func (h *OnboardingHandler) UpdateOnboarding(c fiber.Ctx) error {
 
 	if h.auditLogger != nil {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.OnboardingUpdate,
+			ActorID: audit.UUIDPtr(userID), Action: audit.OnboardingUpdate,
 			TargetType: audit.Ptr("onboarding"),
 		})
 	}

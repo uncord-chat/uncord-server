@@ -82,10 +82,11 @@ func ClampLimit(n int) int {
 	return n
 }
 
-// Entry represents a single row in the audit_log table.
+// Entry represents a single row in the audit_log table. ActorID is a pointer because the column is nullable; a NULL
+// value indicates the acting user has since been deleted.
 type Entry struct {
 	ID         uuid.UUID
-	ActorID    uuid.UUID
+	ActorID    *uuid.UUID
 	Action     ActionType
 	TargetType *string
 	TargetID   *uuid.UUID
@@ -96,9 +97,13 @@ type Entry struct {
 
 // ToModel converts the internal entry to the protocol response type.
 func (e *Entry) ToModel() models.AuditLogEntry {
+	var actorID string
+	if e.ActorID != nil {
+		actorID = e.ActorID.String()
+	}
 	m := models.AuditLogEntry{
 		ID:        e.ID.String(),
-		ActorID:   e.ActorID.String(),
+		ActorID:   actorID,
 		Action:    string(e.Action),
 		Changes:   e.Changes,
 		Reason:    e.Reason,
@@ -146,10 +151,11 @@ func NewLogger(repo Repository, logger zerolog.Logger) *Logger {
 // responsible for spawning a goroutine with context.Background() if the write should not block the HTTP response.
 func (l *Logger) Record(ctx context.Context, entry Entry) {
 	if err := l.repo.Create(ctx, entry); err != nil {
-		l.log.Error().Err(err).
-			Str("action", string(entry.Action)).
-			Str("actor_id", entry.ActorID.String()).
-			Msg("failed to write audit log entry")
+		event := l.log.Error().Err(err).Str("action", string(entry.Action))
+		if entry.ActorID != nil {
+			event = event.Str("actor_id", entry.ActorID.String())
+		}
+		event.Msg("failed to write audit log entry")
 	}
 }
 

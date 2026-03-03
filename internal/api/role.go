@@ -89,7 +89,7 @@ func (h *RoleHandler) CreateRole(c fiber.Ctx) error {
 
 	if h.auditLogger != nil {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.RoleCreate,
+			ActorID: audit.UUIDPtr(userID), Action: audit.RoleCreate,
 			TargetType: audit.Ptr("role"), TargetID: audit.UUIDPtr(created.ID),
 		})
 	}
@@ -175,7 +175,7 @@ func (h *RoleHandler) UpdateRole(c fiber.Ctx) error {
 
 	if h.auditLogger != nil {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.RoleUpdate,
+			ActorID: audit.UUIDPtr(userID), Action: audit.RoleUpdate,
 			TargetType: audit.Ptr("role"), TargetID: audit.UUIDPtr(id),
 		})
 	}
@@ -228,7 +228,7 @@ func (h *RoleHandler) DeleteRole(c fiber.Ctx) error {
 
 	if h.auditLogger != nil {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.RoleDelete,
+			ActorID: audit.UUIDPtr(userID), Action: audit.RoleDelete,
 			TargetType: audit.Ptr("role"), TargetID: audit.UUIDPtr(id),
 		})
 	}

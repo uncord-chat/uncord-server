@@ -77,7 +77,7 @@ func TestAuditList_Populated(t *testing.T) {
 		entries: []audit.Entry{
 			{
 				ID:         entryID,
-				ActorID:    actorID,
+				ActorID:    &actorID,
 				Action:     audit.RoleCreate,
 				TargetType: &targetType,
 				TargetID:   &targetID,

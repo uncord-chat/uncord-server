@@ -68,7 +68,7 @@ func (h *CategoryHandler) CreateCategory(c fiber.Ctx) error {
 
 	if h.auditLogger != nil {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.CategoryCreate,
+			ActorID: audit.UUIDPtr(userID), Action: audit.CategoryCreate,
 			TargetType: audit.Ptr("category"), TargetID: audit.UUIDPtr(cat.ID),
 		})
 	}
@@ -110,7 +110,7 @@ func (h *CategoryHandler) UpdateCategory(c fiber.Ctx) error {
 
 	if h.auditLogger != nil {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.CategoryUpdate,
+			ActorID: audit.UUIDPtr(userID), Action: audit.CategoryUpdate,
 			TargetType: audit.Ptr("category"), TargetID: audit.UUIDPtr(id),
 		})
 	}
@@ -136,7 +136,7 @@ func (h *CategoryHandler) DeleteCategory(c fiber.Ctx) error {
 
 	if h.auditLogger != nil {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.CategoryDelete,
+			ActorID: audit.UUIDPtr(userID), Action: audit.CategoryDelete,
 			TargetType: audit.Ptr("category"), TargetID: audit.UUIDPtr(id),
 		})
 	}

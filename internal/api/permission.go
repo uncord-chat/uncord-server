@@ -70,7 +70,7 @@ func (h *PermissionHandler) SetOverride(c fiber.Ctx) error {
 
 	if h.auditLogger != nil {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.OverrideSet,
+			ActorID: audit.UUIDPtr(userID), Action: audit.OverrideSet,
 			TargetType: audit.Ptr("channel"), TargetID: audit.UUIDPtr(channelID),
 			Changes: audit.MarshalChanges(map[string]any{
 				"target_id": targetID.String(), "type": string(principalType),
@@ -116,7 +116,7 @@ func (h *PermissionHandler) DeleteOverride(c fiber.Ctx) error {
 
 	if h.auditLogger != nil {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.OverrideDelete,
+			ActorID: audit.UUIDPtr(userID), Action: audit.OverrideDelete,
 			TargetType: audit.Ptr("channel"), TargetID: audit.UUIDPtr(channelID),
 			Changes: audit.MarshalChanges(map[string]any{
 				"target_id": targetID.String(), "type": string(principalType),

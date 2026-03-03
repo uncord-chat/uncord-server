@@ -141,7 +141,7 @@ func (h *EmojiHandler) CreateEmoji(c fiber.Ctx) error {
 
 	if h.auditLogger != nil {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.EmojiCreate,
+			ActorID: audit.UUIDPtr(userID), Action: audit.EmojiCreate,
 			TargetType: audit.Ptr("emoji"), TargetID: audit.UUIDPtr(created.ID),
 		})
 	}
@@ -179,7 +179,7 @@ func (h *EmojiHandler) UpdateEmoji(c fiber.Ctx) error {
 
 	if h.auditLogger != nil {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.EmojiUpdate,
+			ActorID: audit.UUIDPtr(userID), Action: audit.EmojiUpdate,
 			TargetType: audit.Ptr("emoji"), TargetID: audit.UUIDPtr(emojiID),
 		})
 	}
@@ -212,7 +212,7 @@ func (h *EmojiHandler) DeleteEmoji(c fiber.Ctx) error {
 
 	if h.auditLogger != nil {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.EmojiDelete,
+			ActorID: audit.UUIDPtr(userID), Action: audit.EmojiDelete,
 			TargetType: audit.Ptr("emoji"), TargetID: audit.UUIDPtr(emojiID),
 		})
 	}

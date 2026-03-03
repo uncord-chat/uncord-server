@@ -62,7 +62,7 @@ func TestLoggerRecord_Success(t *testing.T) {
 	logger := NewLogger(repo, zerolog.Nop())
 
 	entry := Entry{
-		ActorID:    uuid.New(),
+		ActorID:    UUIDPtr(uuid.New()),
 		Action:     RoleCreate,
 		TargetType: Ptr("role"),
 		TargetID:   UUIDPtr(uuid.New()),
@@ -83,7 +83,7 @@ func TestLoggerRecord_ErrorSwallowed(t *testing.T) {
 	logger := NewLogger(repo, zerolog.Nop())
 
 	entry := Entry{
-		ActorID: uuid.New(),
+		ActorID: UUIDPtr(uuid.New()),
 		Action:  RoleCreate,
 	}
 
@@ -101,7 +101,7 @@ func TestEntryToModel(t *testing.T) {
 
 	entry := Entry{
 		ID:         entryID,
-		ActorID:    actorID,
+		ActorID:    &actorID,
 		Action:     RoleCreate,
 		TargetType: Ptr("role"),
 		TargetID:   &targetID,
@@ -141,7 +141,7 @@ func TestEntryToModel(t *testing.T) {
 func TestEntryToModel_NilOptionalFields(t *testing.T) {
 	entry := Entry{
 		ID:        uuid.New(),
-		ActorID:   uuid.New(),
+		ActorID:   UUIDPtr(uuid.New()),
 		Action:    MemberKick,
 		CreatedAt: time.Now(),
 	}

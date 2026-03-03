@@ -79,7 +79,7 @@ func (h *ServerHandler) Update(c fiber.Ctx) error {
 
 	if h.auditLogger != nil {
 		go h.auditLogger.Record(context.Background(), audit.Entry{
-			ActorID: userID, Action: audit.ServerUpdate,
+			ActorID: audit.UUIDPtr(userID), Action: audit.ServerUpdate,
 			TargetType: audit.Ptr("server"),
 		})
 	}
