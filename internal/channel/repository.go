@@ -119,18 +119,6 @@ func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdatePa
 		return r.GetByID(ctx, id)
 	}
 
-	// Validate the category exists before updating.
-	if params.CategoryID != nil {
-		var exists bool
-		err := r.db.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM categories WHERE id = $1)", *params.CategoryID).Scan(&exists)
-		if err != nil {
-			return nil, fmt.Errorf("check category exists: %w", err)
-		}
-		if !exists {
-			return nil, ErrCategoryNotFound
-		}
-	}
-
 	const query = `UPDATE channels SET
 		name             = COALESCE(@name, name),
 		category_id      = CASE WHEN @clear_category THEN NULL ELSE COALESCE(@category_id, category_id) END,
@@ -156,6 +144,9 @@ func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, params UpdatePa
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
+		}
+		if postgres.IsForeignKeyViolation(err) {
+			return nil, ErrCategoryNotFound
 		}
 		return nil, fmt.Errorf("update channel: %w", err)
 	}
