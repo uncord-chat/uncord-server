@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog"
 	"github.com/uncord-chat/uncord-protocol/permissions"
 )
 
@@ -52,11 +53,12 @@ var _ Cache = (*ValkeyCache)(nil)
 // ValkeyCache implements Cache using Valkey/Redis.
 type ValkeyCache struct {
 	client *redis.Client
+	log    zerolog.Logger
 }
 
 // NewValkeyCache creates a new Valkey-backed permission cache.
-func NewValkeyCache(client *redis.Client) *ValkeyCache {
-	return &ValkeyCache{client: client}
+func NewValkeyCache(client *redis.Client, logger zerolog.Logger) *ValkeyCache {
+	return &ValkeyCache{client: client, log: logger}
 }
 
 // Get retrieves a cached permission for a single user/channel pair. The bool return indicates a cache hit.
@@ -114,6 +116,7 @@ func (c *ValkeyCache) GetMany(ctx context.Context, userID uuid.UUID, channelIDs 
 		}
 		n, parseErr := strconv.ParseInt(s, 10, 64)
 		if parseErr != nil {
+			c.log.Warn().Err(parseErr).Str("key", keys[i]).Msg("corrupt cached permission value")
 			continue
 		}
 		result[channelIDs[i]] = permissions.Permission(n)
@@ -167,6 +170,7 @@ func (c *ValkeyCache) GetManyUsers(ctx context.Context, userIDs []uuid.UUID, cha
 		}
 		n, parseErr := strconv.ParseInt(s, 10, 64)
 		if parseErr != nil {
+			c.log.Warn().Err(parseErr).Str("key", keys[i]).Msg("corrupt cached permission value")
 			continue
 		}
 		result[userIDs[i]] = permissions.Permission(n)

@@ -7,6 +7,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog"
 	"github.com/uncord-chat/uncord-protocol/permissions"
 )
 
@@ -14,7 +15,7 @@ func setupMiniRedis(t *testing.T) (*miniredis.Miniredis, *ValkeyCache) {
 	t.Helper()
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	return mr, NewValkeyCache(rdb)
+	return mr, NewValkeyCache(rdb, zerolog.Nop())
 }
 
 func TestCacheSetAndGet(t *testing.T) {

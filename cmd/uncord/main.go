@@ -202,7 +202,7 @@ func run() error {
 
 	// Initialise permission engine
 	permStore := permission.NewPGStore(db)
-	permCache := permission.NewValkeyCache(rdb)
+	permCache := permission.NewValkeyCache(rdb, log.Logger)
 	permResolver := permission.NewResolver(permStore, permCache, log.Logger)
 	permPublisher := permission.NewPublisher(rdb)
 
