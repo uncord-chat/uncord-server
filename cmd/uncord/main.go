@@ -825,32 +825,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 	// sufficient entropy to prevent guessing. Path traversal is handled by os.Root inside LocalStorage, which rejects
 	// any key that would escape the storage directory (including via symbolic links).
 	if _, ok := s.storage.(*media.LocalStorage); ok {
-		app.Get("/media/*", func(c fiber.Ctx) error {
-			key := c.Params("*")
-			if key == "" {
-				return fiber.ErrNotFound
-			}
-			rc, err := s.storage.Get(c.Context(), key)
-			if err != nil {
-				return fiber.ErrNotFound
-			}
-
-			// Derive the content type from the storage key extension. The key preserves the original file extension
-			// (e.g. "attachments/{channelID}/{uuid}.jpg"), so mime.TypeByExtension produces the correct type without
-			// a database lookup. Falls back to application/octet-stream, which triggers a download rather than inline
-			// rendering for unrecognised extensions.
-			contentType := "application/octet-stream"
-			if ext := filepath.Ext(key); ext != "" {
-				if mt := mime.TypeByExtension(ext); mt != "" {
-					contentType = mt
-				}
-			}
-			c.Set("Content-Type", contentType)
-			c.Set("X-Content-Type-Options", "nosniff")
-			// Set a long cache header since attachment URLs include a unique UUID.
-			c.Set("Cache-Control", "public, max-age=31536000, immutable")
-			return c.SendStream(rc)
-		})
+		app.Get("/media/*", serveMediaFile(s.storage))
 	}
 
 	// Gateway WebSocket endpoint (unauthenticated; authentication happens inside the WebSocket via Identify/Resume).
@@ -1108,5 +1083,31 @@ func fiberStatusToAPICode(status int) apierrors.Code {
 			return apierrors.ValidationError
 		}
 		return apierrors.InternalError
+	}
+}
+
+// serveMediaFile returns a Fiber handler that serves stored files by storage key. Content type is derived from the
+// storage key extension, falling back to application/octet-stream for unrecognised extensions.
+func serveMediaFile(storage media.StorageProvider) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		key := c.Params("*")
+		if key == "" {
+			return fiber.ErrNotFound
+		}
+		rc, err := storage.Get(c.Context(), key)
+		if err != nil {
+			return fiber.ErrNotFound
+		}
+
+		contentType := "application/octet-stream"
+		if ext := filepath.Ext(key); ext != "" {
+			if mt := mime.TypeByExtension(ext); mt != "" {
+				contentType = mt
+			}
+		}
+		c.Set("Content-Type", contentType)
+		c.Set("X-Content-Type-Options", "nosniff")
+		c.Set("Cache-Control", "public, max-age=31536000, immutable")
+		return c.SendStream(rc)
 	}
 }
