@@ -113,7 +113,10 @@ func (h *DMHandler) CreateDMChannel(c fiber.Ctx) error {
 			return h.mapDMError(c, err)
 		}
 
-		participants, _ := h.dms.ListParticipants(c, ch.ID)
+		participants, pErr := h.dms.ListParticipants(c, ch.ID)
+		if pErr != nil {
+			h.log.Error().Err(pErr).Msg("list participants for group dm create event failed")
+		}
 		participantUserIDs := participantUserIDs(participants)
 		if h.gateway != nil {
 			h.gateway.EnqueueTargeted(events.DMChannelCreate, dmChannelToModel(ch), participantUserIDs)
@@ -165,7 +168,10 @@ func (h *DMHandler) ListDMChannels(c fiber.Ctx) error {
 
 // GetDMChannel handles GET /api/v1/dm/:channelID.
 func (h *DMHandler) GetDMChannel(c fiber.Ctx) error {
-	channelID, _ := uuid.Parse(c.Params("channelID"))
+	channelID, err := uuid.Parse(c.Params("channelID"))
+	if err != nil {
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	}
 
 	ch, err := h.dms.GetByID(c, channelID)
 	if err != nil {
@@ -181,7 +187,10 @@ func (h *DMHandler) AddParticipant(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	channelID, _ := uuid.Parse(c.Params("channelID"))
+	channelID, err := uuid.Parse(c.Params("channelID"))
+	if err != nil {
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	}
 
 	ch, err := h.dms.GetByID(c, channelID)
 	if err != nil {
@@ -218,7 +227,10 @@ func (h *DMHandler) RemoveParticipant(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	channelID, _ := uuid.Parse(c.Params("channelID"))
+	channelID, err := uuid.Parse(c.Params("channelID"))
+	if err != nil {
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	}
 
 	ch, err := h.dms.GetByID(c, channelID)
 	if err != nil {
@@ -249,7 +261,10 @@ func (h *DMHandler) RemoveParticipant(c fiber.Ctx) error {
 
 // ListMessages handles GET /api/v1/dm/:channelID/messages.
 func (h *DMHandler) ListMessages(c fiber.Ctx) error {
-	channelID, _ := uuid.Parse(c.Params("channelID"))
+	channelID, err := uuid.Parse(c.Params("channelID"))
+	if err != nil {
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	}
 
 	var before *uuid.UUID
 	if raw := c.Query("before"); raw != "" {
@@ -280,7 +295,11 @@ func (h *DMHandler) ListMessages(c fiber.Ctx) error {
 
 	var keyMap map[uuid.UUID][]byte
 	if deviceRowID != nil && h.e2eeKeys != nil {
-		keyMap, _ = h.e2eeKeys.GetMessageKeysBatch(c, msgIDs, *deviceRowID)
+		var keyErr error
+		keyMap, keyErr = h.e2eeKeys.GetMessageKeysBatch(c, msgIDs, *deviceRowID)
+		if keyErr != nil {
+			h.log.Error().Err(keyErr).Msg("fetch dm message keys batch failed")
+		}
 	}
 
 	for i := range messages {
@@ -295,7 +314,10 @@ func (h *DMHandler) SendMessage(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	channelID, _ := uuid.Parse(c.Params("channelID"))
+	channelID, err := uuid.Parse(c.Params("channelID"))
+	if err != nil {
+		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
+	}
 
 	var body models.CreateDMMessageRequest
 	if err := c.Bind().Body(&body); err != nil {
@@ -350,7 +372,10 @@ func (h *DMHandler) SendMessage(c fiber.Ctx) error {
 
 	// Dispatch to participants.
 	if h.gateway != nil {
-		participants, _ := h.dms.ListParticipants(c, channelID)
+		participants, pErr := h.dms.ListParticipants(c, channelID)
+		if pErr != nil {
+			h.log.Error().Err(pErr).Msg("list participants for dm message create event failed")
+		}
 		targets := participantUserIDs(participants)
 		msgModel := dmMessageToModel(msg, nil)
 		h.gateway.EnqueueTargeted(events.DMMessageCreate, msgModel, targets)
