@@ -313,19 +313,24 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResult, er
 // than one per authenticated request. When token reuse is detected (indicating potential theft), all refresh tokens for
 // the affected user are revoked as a precaution per the OAuth 2.0 Security BCP.
 func (s *Service) Refresh(ctx context.Context, oldToken string) (*TokenPair, error) {
-	// Look up the user associated with this token before rotation. If the token has already been consumed by a
-	// legitimate rotation, this returns ErrRefreshTokenNotFound and we surface ErrRefreshTokenReused instead so
-	// callers get a consistent error for any form of stale token submission.
+	// Two lookups are intentional here. ValidateRefreshToken reads the userID associated with the token so that if
+	// RotateRefreshToken detects reuse (the token was already consumed by a legitimate rotation), we know which user's
+	// token family to revoke. RotateRefreshToken itself is an atomic Lua script that cannot return the owning userID
+	// on a reuse failure because the token value has already been deleted by the prior rotation. Without this
+	// pre-lookup, a reuse event would have no userID and could not trigger the family revocation.
 	lookedUpUserID, validateErr := ValidateRefreshToken(ctx, s.redis, oldToken)
 
 	newRefresh, userID, err := RotateRefreshToken(ctx, s.redis, oldToken, s.config.JWTRefreshTTL)
 	if errors.Is(err, ErrRefreshTokenReused) {
+		// Revoke the entire token family if the pre-lookup succeeded (we have a valid userID to target).
 		if validateErr == nil {
 			_ = RevokeAllRefreshTokens(ctx, s.redis, lookedUpUserID)
 		}
 		return nil, ErrRefreshTokenReused
 	}
 	if err != nil {
+		// The token was not found by the Lua script. If the pre-lookup also failed with ErrRefreshTokenNotFound,
+		// this is a stale or replayed token; surface ErrRefreshTokenReused for a consistent client experience.
 		if validateErr != nil && errors.Is(validateErr, ErrRefreshTokenNotFound) {
 			return nil, ErrRefreshTokenReused
 		}
