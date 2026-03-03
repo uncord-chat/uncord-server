@@ -39,7 +39,10 @@ func NewE2EEHandler(keys e2ee.Repository, dms dm.Repository, gw *gateway.Publish
 
 // RegisterDevice handles POST /api/v1/users/@me/devices.
 func (h *E2EEHandler) RegisterDevice(c fiber.Ctx) error {
-	userID, _ := c.Locals("userID").(uuid.UUID)
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
 
 	var body models.RegisterDeviceRequest
 	if err := c.Bind().Body(&body); err != nil {
@@ -81,7 +84,10 @@ func (h *E2EEHandler) RegisterDevice(c fiber.Ctx) error {
 
 // ListDevices handles GET /api/v1/users/@me/devices.
 func (h *E2EEHandler) ListDevices(c fiber.Ctx) error {
-	userID, _ := c.Locals("userID").(uuid.UUID)
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
 
 	devices, err := h.keys.ListDevices(c, userID)
 	if err != nil {
@@ -98,7 +104,10 @@ func (h *E2EEHandler) ListDevices(c fiber.Ctx) error {
 
 // RemoveDevice handles DELETE /api/v1/users/@me/devices/:deviceID.
 func (h *E2EEHandler) RemoveDevice(c fiber.Ctx) error {
-	userID, _ := c.Locals("userID").(uuid.UUID)
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
 
 	deviceID, err := uuid.Parse(c.Params("deviceID"))
 	if err != nil {
@@ -119,7 +128,10 @@ func (h *E2EEHandler) RemoveDevice(c fiber.Ctx) error {
 
 // UpdateIdentityKey handles PUT /api/v1/users/@me/devices/:deviceID/identity-key.
 func (h *E2EEHandler) UpdateIdentityKey(c fiber.Ctx) error {
-	userID, _ := c.Locals("userID").(uuid.UUID)
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
 
 	deviceID, err := uuid.Parse(c.Params("deviceID"))
 	if err != nil {
@@ -155,7 +167,10 @@ func (h *E2EEHandler) UpdateIdentityKey(c fiber.Ctx) error {
 
 // UploadSignedPreKey handles PUT /api/v1/users/@me/devices/:deviceID/signed-pre-key.
 func (h *E2EEHandler) UploadSignedPreKey(c fiber.Ctx) error {
-	userID, _ := c.Locals("userID").(uuid.UUID)
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
 
 	deviceID, err := uuid.Parse(c.Params("deviceID"))
 	if err != nil {
@@ -202,7 +217,10 @@ func (h *E2EEHandler) UploadSignedPreKey(c fiber.Ctx) error {
 
 // UploadOneTimePreKeys handles POST /api/v1/users/@me/devices/:deviceID/one-time-pre-keys.
 func (h *E2EEHandler) UploadOneTimePreKeys(c fiber.Ctx) error {
-	userID, _ := c.Locals("userID").(uuid.UUID)
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
 
 	deviceID, err := uuid.Parse(c.Params("deviceID"))
 	if err != nil {
@@ -241,7 +259,10 @@ func (h *E2EEHandler) UploadOneTimePreKeys(c fiber.Ctx) error {
 
 // GetKeyCount handles GET /api/v1/users/@me/devices/:deviceID/one-time-pre-keys/count.
 func (h *E2EEHandler) GetKeyCount(c fiber.Ctx) error {
-	userID, _ := c.Locals("userID").(uuid.UUID)
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
 
 	deviceID, err := uuid.Parse(c.Params("deviceID"))
 	if err != nil {

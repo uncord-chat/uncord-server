@@ -166,7 +166,10 @@ func (h *PinHandler) ListPins(c fiber.Ctx) error {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel ID format")
 	}
 
-	userID, _ := c.Locals("userID").(uuid.UUID)
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
 
 	messages, err := h.messages.ListPinned(c, channelID)
 	if err != nil {

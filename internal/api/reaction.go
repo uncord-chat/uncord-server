@@ -165,7 +165,10 @@ func (h *ReactionHandler) ListReactions(c fiber.Ctx) error {
 		return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidMessageID, "Invalid message ID format")
 	}
 
-	userID, _ := c.Locals("userID").(uuid.UUID)
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
 
 	reactions, err := h.reactions.ListByMessage(c, messageID)
 	if err != nil {

@@ -52,7 +52,10 @@ func NewDMHandler(
 // RequireParticipant is a middleware that verifies the requesting user is a participant of the DM channel identified by
 // the :channelID route parameter.
 func (h *DMHandler) RequireParticipant(c fiber.Ctx) error {
-	userID, _ := c.Locals("userID").(uuid.UUID)
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
 
 	channelID, err := uuid.Parse(c.Params("channelID"))
 	if err != nil {
@@ -73,7 +76,10 @@ func (h *DMHandler) RequireParticipant(c fiber.Ctx) error {
 
 // CreateDMChannel handles POST /api/v1/users/@me/channels.
 func (h *DMHandler) CreateDMChannel(c fiber.Ctx) error {
-	userID, _ := c.Locals("userID").(uuid.UUID)
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
 
 	var body struct {
 		RecipientID string   `json:"recipient_id"`
@@ -139,7 +145,10 @@ func (h *DMHandler) CreateDMChannel(c fiber.Ctx) error {
 
 // ListDMChannels handles GET /api/v1/users/@me/channels.
 func (h *DMHandler) ListDMChannels(c fiber.Ctx) error {
-	userID, _ := c.Locals("userID").(uuid.UUID)
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
 
 	channels, err := h.dms.ListForUser(c, userID)
 	if err != nil {
@@ -168,7 +177,10 @@ func (h *DMHandler) GetDMChannel(c fiber.Ctx) error {
 
 // AddParticipant handles POST /api/v1/dm/:channelID/participants.
 func (h *DMHandler) AddParticipant(c fiber.Ctx) error {
-	userID, _ := c.Locals("userID").(uuid.UUID)
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
 	channelID, _ := uuid.Parse(c.Params("channelID"))
 
 	ch, err := h.dms.GetByID(c, channelID)
@@ -202,7 +214,10 @@ func (h *DMHandler) AddParticipant(c fiber.Ctx) error {
 
 // RemoveParticipant handles DELETE /api/v1/dm/:channelID/participants/:userID.
 func (h *DMHandler) RemoveParticipant(c fiber.Ctx) error {
-	userID, _ := c.Locals("userID").(uuid.UUID)
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
 	channelID, _ := uuid.Parse(c.Params("channelID"))
 
 	ch, err := h.dms.GetByID(c, channelID)
@@ -276,7 +291,10 @@ func (h *DMHandler) ListMessages(c fiber.Ctx) error {
 
 // SendMessage handles POST /api/v1/dm/:channelID/messages.
 func (h *DMHandler) SendMessage(c fiber.Ctx) error {
-	userID, _ := c.Locals("userID").(uuid.UUID)
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
 	channelID, _ := uuid.Parse(c.Params("channelID"))
 
 	var body models.CreateDMMessageRequest
@@ -352,7 +370,10 @@ func (h *DMHandler) resolveDeviceRowID(c fiber.Ctx) *uuid.UUID {
 	if err != nil {
 		return nil
 	}
-	userID, _ := c.Locals("userID").(uuid.UUID)
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return nil
+	}
 	dev, err := h.e2eeKeys.GetDeviceByDeviceID(c, userID, deviceID)
 	if err != nil {
 		return nil

@@ -100,7 +100,10 @@ func (h *MessageHandler) ListMessages(c fiber.Ctx) error {
 	}
 
 	// Batch-load attachments and reactions for all returned messages.
-	userID, _ := c.Locals("userID").(uuid.UUID)
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
 	messageIDs := make([]uuid.UUID, len(messages))
 	for i := range messages {
 		messageIDs[i] = messages[i].ID
