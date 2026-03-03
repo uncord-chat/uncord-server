@@ -23,8 +23,6 @@ const (
 	// writeWait is the time allowed to write a message to the peer.
 	writeWait = 10 * time.Second
 
-	// identifyTimeout is how long a client has to send Identify or Resume after connecting.
-	identifyTimeout = 30 * time.Second
 )
 
 // Client represents a single WebSocket connection. Each client runs two goroutines (readPump and writePump) and
@@ -116,7 +114,7 @@ func (c *Client) readPump() {
 	_ = c.conn.SetReadDeadline(time.Now().Add(heartbeatInterval + heartbeatInterval/2))
 
 	// Identify timeout: close the connection if the client does not authenticate within the deadline.
-	identifyTimer := time.AfterFunc(identifyTimeout, func() {
+	identifyTimer := time.AfterFunc(c.hub.cfg.GatewayIdentifyTimeout, func() {
 		if !c.IsIdentified() {
 			c.log.Debug().Msg("Client did not identify in time")
 			c.closeWithCode(CloseNotAuthenticated, "identify timeout")

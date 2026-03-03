@@ -91,6 +91,7 @@ type Config struct {
 	GatewayReadyMemberLimit    int           // Maximum number of members included in the READY payload. Default: 1000.
 	GatewayPublishWorkers      int           // Number of worker goroutines consuming the publish queue. Default: 4.
 	GatewayPublishQueueSize    int           // Buffer size of the publish queue channel. Default: 1024.
+	GatewayIdentifyTimeout     time.Duration // How long a client has to send Identify or Resume after connecting. Default: 30s.
 	GatewayPublishTimeout      time.Duration // Per-publish timeout for Valkey operations. Default: 5s.
 
 	// Rate Limiting
@@ -225,6 +226,7 @@ func Load() (*Config, error) {
 		GatewayReadyMemberLimit:    p.int("GATEWAY_READY_MEMBER_LIMIT", 1000),
 		GatewayPublishWorkers:      p.int("GATEWAY_PUBLISH_WORKERS", 4),
 		GatewayPublishQueueSize:    p.int("GATEWAY_PUBLISH_QUEUE_SIZE", 1024),
+		GatewayIdentifyTimeout:     p.duration("GATEWAY_IDENTIFY_TIMEOUT", 30*time.Second),
 		GatewayPublishTimeout:      p.duration("GATEWAY_PUBLISH_TIMEOUT", 5*time.Second),
 
 		RateLimitAPIRequests:            p.int("RATE_LIMIT_API_REQUESTS", 60),
@@ -510,6 +512,9 @@ func (c *Config) validate() error {
 	}
 	if c.GatewayPublishQueueSize < 1 {
 		errs = append(errs, fmt.Errorf("GATEWAY_PUBLISH_QUEUE_SIZE must be at least 1"))
+	}
+	if c.GatewayIdentifyTimeout < 5*time.Second {
+		errs = append(errs, fmt.Errorf("GATEWAY_IDENTIFY_TIMEOUT must be at least 5s"))
 	}
 	if c.GatewayPublishTimeout < time.Second {
 		errs = append(errs, fmt.Errorf("GATEWAY_PUBLISH_TIMEOUT must be at least 1s"))

@@ -203,6 +203,7 @@ func testConfig() *config.Config {
 	return &config.Config{
 		GatewayHeartbeatIntervalMS: 20000,
 		GatewayOfflineDelayMS:      3000,
+		GatewayIdentifyTimeout:     30 * time.Second,
 		GatewaySessionTTL:          5 * time.Minute,
 		GatewayReplayBufferSize:    100,
 		GatewayMaxConnections:      10,

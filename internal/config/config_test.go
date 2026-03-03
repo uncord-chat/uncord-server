@@ -174,6 +174,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.GatewayPublishQueueSize != 1024 {
 		t.Errorf("GatewayPublishQueueSize = %d, want 1024", cfg.GatewayPublishQueueSize)
 	}
+	if cfg.GatewayIdentifyTimeout != 30*time.Second {
+		t.Errorf("GatewayIdentifyTimeout = %v, want 30s", cfg.GatewayIdentifyTimeout)
+	}
 	if cfg.GatewayPublishTimeout != 5*time.Second {
 		t.Errorf("GatewayPublishTimeout = %v, want 5s", cfg.GatewayPublishTimeout)
 	}
@@ -912,6 +915,7 @@ func TestLoadGatewayOverrides(t *testing.T) {
 	t.Setenv("GATEWAY_MAX_CONNECTIONS", "5000")
 	t.Setenv("GATEWAY_PUBLISH_WORKERS", "8")
 	t.Setenv("GATEWAY_PUBLISH_QUEUE_SIZE", "2048")
+	t.Setenv("GATEWAY_IDENTIFY_TIMEOUT", "45s")
 	t.Setenv("GATEWAY_PUBLISH_TIMEOUT", "10s")
 	t.Setenv("RATE_LIMIT_WS_COUNT", "60")
 	t.Setenv("RATE_LIMIT_WS_WINDOW_SECONDS", "30")
@@ -944,8 +948,25 @@ func TestLoadGatewayOverrides(t *testing.T) {
 	if cfg.GatewayPublishQueueSize != 2048 {
 		t.Errorf("GatewayPublishQueueSize = %d, want 2048", cfg.GatewayPublishQueueSize)
 	}
+	if cfg.GatewayIdentifyTimeout != 45*time.Second {
+		t.Errorf("GatewayIdentifyTimeout = %v, want 45s", cfg.GatewayIdentifyTimeout)
+	}
 	if cfg.GatewayPublishTimeout != 10*time.Second {
 		t.Errorf("GatewayPublishTimeout = %v, want 10s", cfg.GatewayPublishTimeout)
+	}
+}
+
+func TestLoadValidationGatewayIdentifyTimeoutTooLow(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
+	t.Setenv("SERVER_SECRET", testServerSecret)
+	t.Setenv("GATEWAY_IDENTIFY_TIMEOUT", "2s")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() returned nil error, want validation error for GATEWAY_IDENTIFY_TIMEOUT < 5s")
+	}
+	if !strings.Contains(err.Error(), "GATEWAY_IDENTIFY_TIMEOUT") {
+		t.Errorf("error %q does not mention GATEWAY_IDENTIFY_TIMEOUT", err.Error())
 	}
 }
 
