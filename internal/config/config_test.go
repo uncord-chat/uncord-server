@@ -321,6 +321,7 @@ func TestLoadOverrides(t *testing.T) {
 	t.Setenv("ONBOARDING_OPEN_JOIN", "true")
 	t.Setenv("INIT_OWNER_EMAIL", "test@example.com")
 	t.Setenv("INIT_OWNER_USERNAME", "testadmin")
+	t.Setenv("INIT_OWNER_PASSWORD", "testpassword123")
 	t.Setenv("JWT_SECRET", "test-secret-key-that-is-32-chars!")
 	t.Setenv("SERVER_SECRET", testServerSecret)
 	t.Setenv("JWT_ACCESS_TTL", "30m")
