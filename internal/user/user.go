@@ -16,7 +16,6 @@ var (
 	ErrNotFound             = errors.New("user not found")
 	ErrAlreadyExists        = errors.New("email or username already taken")
 	ErrInvalidToken         = errors.New("invalid or expired verification token")
-	ErrTombstoned           = errors.New("email or username was previously used by a deleted account")
 	ErrDisplayNameLength    = errors.New("display name must be between 1 and 32 characters")
 	ErrPronounsLength       = errors.New("pronouns must be between 1 and 40 characters")
 	ErrAboutLength          = errors.New("about must be between 1 and 190 characters")
