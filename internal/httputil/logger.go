@@ -1,7 +1,6 @@
 package httputil
 
 import (
-	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -37,7 +36,7 @@ func RequestLogger(logger zerolog.Logger, skipPaths ...string) fiber.Handler {
 			Str("method", c.Method()).
 			Str("path", c.Path()).
 			Int("status", status).
-			Str("latency", strings.ReplaceAll(time.Since(start).String(), "µ", "u")).
+			Dur("latency", time.Since(start)).
 			Str("ip", c.IP()).
 			Msg("Request")
 
