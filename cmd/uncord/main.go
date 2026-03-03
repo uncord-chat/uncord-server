@@ -172,11 +172,15 @@ func run() error {
 		log.Info().Msg("First-run initialization complete")
 	}
 
-	// Typesense collection (best-effort)
+	// Typesense collection (best-effort). Search is non-essential; the server runs without it but message search will
+	// be unavailable. The searchAvailable flag is logged in the startup summary so operators immediately see whether
+	// search is degraded.
+	var searchAvailable bool
 	result, err := typesense.EnsureMessagesCollection(ctx, cfg.TypesenseURL, cfg.TypesenseAPIKey.Expose(), cfg.TypesenseTimeout)
 	if err != nil {
-		log.Warn().Err(err).Msg("Typesense collection setup failed")
+		log.Warn().Err(err).Msg("Typesense collection setup failed; message search will be unavailable")
 	} else {
+		searchAvailable = true
 		switch result {
 		case typesense.ResultCreated:
 			log.Info().Msg("Typesense messages collection created")
@@ -402,6 +406,13 @@ func run() error {
 			log.Error().Err(err).Msg("Server shutdown error")
 		}
 	}()
+
+	// Startup summary: log the status of optional services so operators can immediately see what is degraded.
+	log.Info().
+		Bool("search", searchAvailable).
+		Bool("email", cfg.SMTPConfigured()).
+		Str("storage", cfg.StorageBackend).
+		Msg("Service status")
 
 	// Listen
 	addr := fmt.Sprintf(":%d", cfg.ServerPort)
