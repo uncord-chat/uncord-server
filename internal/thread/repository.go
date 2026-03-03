@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/uncord-chat/uncord-server/internal/postgres"
@@ -52,8 +51,7 @@ func (r *PGRepository) Create(ctx context.Context, params CreateParams) (*Thread
 		var scanErr error
 		t, scanErr = scanThreadRow(row)
 		if scanErr != nil {
-			var pgErr *pgconn.PgError
-			if errors.As(scanErr, &pgErr) && pgErr.Code == "23505" {
+			if postgres.IsUniqueViolation(scanErr) {
 				return ErrAlreadyExists
 			}
 			return fmt.Errorf("insert thread: %w", scanErr)
