@@ -460,4 +460,3 @@ func mapThreadError(c fiber.Ctx, log zerolog.Logger, err error) error {
 		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
 	}
 }
-

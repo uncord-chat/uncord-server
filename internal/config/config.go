@@ -14,6 +14,7 @@ import (
 const minJWTSecretLength = 32
 
 const (
+	envDevelopment      = "development"
 	storageBackendLocal = "local"
 	storageBackendS3    = "s3"
 )
@@ -21,13 +22,15 @@ const (
 // Config holds application configuration populated from environment variables.
 type Config struct {
 	// Core
-	ServerName        string
-	ServerDescription string
-	ServerURL         string
-	ServerPort        int
-	ServerEnv         string // "development" or "production"
-	LogHealthRequests bool
-	RequestTimeout    time.Duration // Maximum duration for REST request processing. Default: 30s.
+	ServerName           string
+	ServerDescription    string
+	ServerURL            string
+	ServerPort           int
+	ServerEnv            string // "development" or "production"
+	LogHealthRequests    bool
+	RequestTimeout       time.Duration // Maximum duration for REST request processing. Default: 30s.
+	ShutdownTimeout      time.Duration // HTTP server shutdown timeout. Default: 15s.
+	ShutdownGraceTimeout time.Duration // Maximum wait for background goroutines to stop after shutdown. Default: 10s.
 
 	// Database
 	DatabaseURL     Secret
@@ -165,13 +168,15 @@ func Load() (*Config, error) {
 	p := &parser{}
 
 	cfg := &Config{
-		ServerName:        envStr("SERVER_NAME", "My Community"),
-		ServerDescription: envStr("SERVER_DESCRIPTION", ""),
-		ServerURL:         envStr("SERVER_URL", "https://chat.example.com"),
-		ServerPort:        p.int("SERVER_PORT", 8080),
-		ServerEnv:         envStr("SERVER_ENV", "production"),
-		LogHealthRequests: p.bool("LOG_HEALTH_REQUESTS", true),
-		RequestTimeout:    p.duration("REQUEST_TIMEOUT", 30*time.Second),
+		ServerName:           envStr("SERVER_NAME", "My Community"),
+		ServerDescription:    envStr("SERVER_DESCRIPTION", ""),
+		ServerURL:            envStr("SERVER_URL", "https://chat.example.com"),
+		ServerPort:           p.int("SERVER_PORT", 8080),
+		ServerEnv:            envStr("SERVER_ENV", "production"),
+		LogHealthRequests:    p.bool("LOG_HEALTH_REQUESTS", true),
+		RequestTimeout:       p.duration("REQUEST_TIMEOUT", 30*time.Second),
+		ShutdownTimeout:      p.duration("SHUTDOWN_TIMEOUT", 15*time.Second),
+		ShutdownGraceTimeout: p.duration("SHUTDOWN_GRACE_TIMEOUT", 10*time.Second),
 
 		DatabaseURL:     NewSecret(envStr("DATABASE_URL", "postgres://uncord:password@postgres:5432/uncord?sslmode=disable")),
 		DatabaseMaxConn: p.int("DATABASE_MAX_CONNS", 25),
@@ -302,7 +307,7 @@ func Load() (*Config, error) {
 
 // IsDevelopment returns true when running in development mode.
 func (c *Config) IsDevelopment() bool {
-	return c.ServerEnv == "development"
+	return c.ServerEnv == envDevelopment
 }
 
 // SMTPConfigured returns true when an SMTP host is set, indicating that the server should attempt to send emails.
@@ -356,6 +361,12 @@ func (c *Config) validate() error {
 	}
 	if c.RequestTimeout < time.Second {
 		errs = append(errs, fmt.Errorf("REQUEST_TIMEOUT must be at least 1s"))
+	}
+	if c.ShutdownTimeout < time.Second {
+		errs = append(errs, fmt.Errorf("SHUTDOWN_TIMEOUT must be at least 1s"))
+	}
+	if c.ShutdownGraceTimeout < time.Second {
+		errs = append(errs, fmt.Errorf("SHUTDOWN_GRACE_TIMEOUT must be at least 1s"))
 	}
 
 	if c.DatabaseMaxConn < 1 {
@@ -422,7 +433,7 @@ func (c *Config) validate() error {
 		errs = append(errs, fmt.Errorf("RATE_LIMIT_UPLOAD_WINDOW_SECONDS must be at least 1"))
 	}
 
-	if c.ServerEnv != "development" && c.TypesenseAPIKey.Expose() == "change-me-in-production" {
+	if c.ServerEnv != envDevelopment && c.TypesenseAPIKey.Expose() == "change-me-in-production" {
 		errs = append(errs, fmt.Errorf("TYPESENSE_API_KEY must be changed from the default value in production"))
 	}
 

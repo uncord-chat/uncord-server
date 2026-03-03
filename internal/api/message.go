@@ -348,7 +348,7 @@ func (h *MessageHandler) DeleteMessage(c fiber.Ctx) error {
 		}
 	}
 
-	if err := h.messages.SoftDelete(c, messageID); err != nil {
+	if err := h.messages.SoftDelete(c, messageID, userID); err != nil {
 		return mapMessageError(c, err, h.log)
 	}
 

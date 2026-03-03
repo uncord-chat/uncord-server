@@ -219,7 +219,7 @@ func TestRun_PublishTimeout(t *testing.T) {
 
 	pub.Enqueue(events.MessageCreate, map[string]string{"id": "msg-1"})
 
-	// Give the worker time to process (and fail) the publish.
+	// No observable counter for failed publishes; a short sleep is the only option to let the worker process the item.
 	time.Sleep(100 * time.Millisecond)
 
 	cancel()

@@ -130,7 +130,8 @@ CREATE TABLE messages (
     reply_to_id     UUID REFERENCES messages(id) ON DELETE SET NULL,
     thread_id       UUID,  -- FK added after threads table creation
     pinned          BOOLEAN NOT NULL DEFAULT false,
-    deleted         BOOLEAN NOT NULL DEFAULT false,
+    deleted_at      TIMESTAMPTZ,
+    deleted_by      UUID REFERENCES users(id) ON DELETE SET NULL,
     encrypted       BOOLEAN NOT NULL DEFAULT false,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -139,11 +140,11 @@ CREATE TABLE messages (
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON messages
     FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
 
-CREATE INDEX idx_messages_channel_time ON messages (channel_id, created_at DESC) WHERE deleted = false;
+CREATE INDEX idx_messages_channel_time ON messages (channel_id, created_at DESC) WHERE deleted_at IS NULL;
 CREATE INDEX idx_messages_author ON messages (author_id, created_at DESC);
 CREATE INDEX idx_messages_thread ON messages (thread_id) WHERE thread_id IS NOT NULL;
 CREATE INDEX idx_messages_reply ON messages (reply_to_id) WHERE reply_to_id IS NOT NULL;
-CREATE INDEX idx_messages_pinned ON messages (channel_id, created_at DESC) WHERE pinned = true AND deleted = false;
+CREATE INDEX idx_messages_pinned ON messages (channel_id, created_at DESC) WHERE pinned = true AND deleted_at IS NULL;
 
 -- Message Attachments
 

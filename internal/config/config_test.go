@@ -41,6 +41,7 @@ func TestLoadDefaults(t *testing.T) {
 		"RATE_LIMIT_MSG_COUNT", "RATE_LIMIT_MSG_WINDOW_SECONDS",
 		"RATE_LIMIT_MSG_GLOBAL_COUNT", "RATE_LIMIT_MSG_GLOBAL_WINDOW_SECONDS",
 		"REQUEST_TIMEOUT",
+		"SHUTDOWN_TIMEOUT", "SHUTDOWN_GRACE_TIMEOUT",
 	}
 	for _, k := range keys {
 		t.Setenv(k, "")
@@ -68,6 +69,12 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.RequestTimeout != 30*time.Second {
 		t.Errorf("RequestTimeout = %v, want 30s", cfg.RequestTimeout)
+	}
+	if cfg.ShutdownTimeout != 15*time.Second {
+		t.Errorf("ShutdownTimeout = %v, want 15s", cfg.ShutdownTimeout)
+	}
+	if cfg.ShutdownGraceTimeout != 10*time.Second {
+		t.Errorf("ShutdownGraceTimeout = %v, want 10s", cfg.ShutdownGraceTimeout)
 	}
 
 	// Database defaults

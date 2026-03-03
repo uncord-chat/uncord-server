@@ -13,7 +13,7 @@ import (
 )
 
 const selectColumns = `m.id, m.channel_id, m.author_id, m.content, m.edited_at, m.reply_to_id, m.thread_id,
-m.pinned, m.deleted, m.encrypted, m.created_at, m.updated_at,
+m.pinned, m.deleted_at, m.deleted_by, m.encrypted, m.created_at, m.updated_at,
 u.username, u.display_name, u.avatar_key`
 
 const baseJoin = "FROM messages m JOIN users u ON u.id = m.author_id"
@@ -36,7 +36,7 @@ func (r *PGRepository) Create(ctx context.Context, params CreateParams) (*Messag
 		if params.ReplyToID != nil {
 			var exists bool
 			err := tx.QueryRow(ctx,
-				"SELECT EXISTS(SELECT 1 FROM messages WHERE id = $1 AND channel_id = $2 AND deleted = false)",
+				"SELECT EXISTS(SELECT 1 FROM messages WHERE id = $1 AND channel_id = $2 AND deleted_at IS NULL)",
 				*params.ReplyToID, params.ChannelID,
 			).Scan(&exists)
 			if err != nil {
@@ -83,7 +83,7 @@ func (r *PGRepository) Create(ctx context.Context, params CreateParams) (*Messag
 // GetByID returns a single non-deleted message by ID with joined author information.
 func (r *PGRepository) GetByID(ctx context.Context, id uuid.UUID) (*Message, error) {
 	row := r.db.QueryRow(ctx,
-		fmt.Sprintf("SELECT %s %s WHERE m.id = $1 AND m.deleted = false", selectColumns, baseJoin), id,
+		fmt.Sprintf("SELECT %s %s WHERE m.id = $1 AND m.deleted_at IS NULL", selectColumns, baseJoin), id,
 	)
 	msg, err := scanMessage(row)
 	if err != nil {
@@ -104,7 +104,7 @@ func (r *PGRepository) List(ctx context.Context, channelID uuid.UUID, before *uu
 	if before != nil {
 		rows, err = r.db.Query(ctx, fmt.Sprintf(
 			`SELECT %s %s
-			 WHERE m.channel_id = $1 AND m.deleted = false
+			 WHERE m.channel_id = $1 AND m.deleted_at IS NULL
 			   AND (m.created_at, m.id) < (SELECT created_at, id FROM messages WHERE id = $2)
 			 ORDER BY m.created_at DESC, m.id DESC
 			 LIMIT $3`, selectColumns, baseJoin),
@@ -113,7 +113,7 @@ func (r *PGRepository) List(ctx context.Context, channelID uuid.UUID, before *uu
 	} else {
 		rows, err = r.db.Query(ctx, fmt.Sprintf(
 			`SELECT %s %s
-			 WHERE m.channel_id = $1 AND m.deleted = false
+			 WHERE m.channel_id = $1 AND m.deleted_at IS NULL
 			 ORDER BY m.created_at DESC, m.id DESC
 			 LIMIT $2`, selectColumns, baseJoin),
 			channelID, limit,
@@ -143,7 +143,7 @@ func (r *PGRepository) List(ctx context.Context, channelID uuid.UUID, before *uu
 func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, content string) (*Message, error) {
 	row := r.db.QueryRow(ctx,
 		`UPDATE messages SET content = $1, edited_at = NOW()
-		 WHERE id = $2 AND deleted = false
+		 WHERE id = $2 AND deleted_at IS NULL
 		 RETURNING id`, content, id,
 	)
 
@@ -158,10 +158,11 @@ func (r *PGRepository) Update(ctx context.Context, id uuid.UUID, content string)
 	return r.GetByID(ctx, updatedID)
 }
 
-// SoftDelete marks a message as deleted. Returns ErrNotFound if the message does not exist or is already deleted.
-func (r *PGRepository) SoftDelete(ctx context.Context, id uuid.UUID) error {
+// SoftDelete marks a message as deleted by recording the deletion timestamp and the actor who performed it. Returns
+// ErrNotFound if the message does not exist or is already deleted.
+func (r *PGRepository) SoftDelete(ctx context.Context, id uuid.UUID, deletedBy uuid.UUID) error {
 	tag, err := r.db.Exec(ctx,
-		"UPDATE messages SET deleted = true WHERE id = $1 AND deleted = false", id,
+		"UPDATE messages SET deleted_at = NOW(), deleted_by = $2 WHERE id = $1 AND deleted_at IS NULL", id, deletedBy,
 	)
 	if err != nil {
 		return fmt.Errorf("soft delete message: %w", err)
@@ -176,7 +177,7 @@ func (r *PGRepository) SoftDelete(ctx context.Context, id uuid.UUID) error {
 // message does not exist or is deleted.
 func (r *PGRepository) Pin(ctx context.Context, id uuid.UUID) (*Message, error) {
 	tag, err := r.db.Exec(ctx,
-		"UPDATE messages SET pinned = true WHERE id = $1 AND deleted = false AND pinned = false", id,
+		"UPDATE messages SET pinned = true WHERE id = $1 AND deleted_at IS NULL AND pinned = false", id,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("pin message: %w", err)
@@ -199,7 +200,7 @@ func (r *PGRepository) Pin(ctx context.Context, id uuid.UUID) (*Message, error) 
 // message does not exist or is deleted.
 func (r *PGRepository) Unpin(ctx context.Context, id uuid.UUID) (*Message, error) {
 	tag, err := r.db.Exec(ctx,
-		"UPDATE messages SET pinned = false WHERE id = $1 AND deleted = false AND pinned = true", id,
+		"UPDATE messages SET pinned = false WHERE id = $1 AND deleted_at IS NULL AND pinned = true", id,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("unpin message: %w", err)
@@ -222,7 +223,7 @@ func (r *PGRepository) Unpin(ctx context.Context, id uuid.UUID) (*Message, error
 func (r *PGRepository) ListPinned(ctx context.Context, channelID uuid.UUID) ([]Message, error) {
 	rows, err := r.db.Query(ctx, fmt.Sprintf(
 		`SELECT %s %s
-		 WHERE m.channel_id = $1 AND m.pinned = true AND m.deleted = false
+		 WHERE m.channel_id = $1 AND m.pinned = true AND m.deleted_at IS NULL
 		 ORDER BY m.created_at DESC
 		 LIMIT 50`, selectColumns, baseJoin),
 		channelID,
@@ -255,7 +256,7 @@ func (r *PGRepository) ListByThread(ctx context.Context, threadID uuid.UUID, bef
 	if before != nil {
 		rows, err = r.db.Query(ctx, fmt.Sprintf(
 			`SELECT %s %s
-			 WHERE m.thread_id = $1 AND m.deleted = false
+			 WHERE m.thread_id = $1 AND m.deleted_at IS NULL
 			   AND (m.created_at, m.id) < (SELECT created_at, id FROM messages WHERE id = $2)
 			 ORDER BY m.created_at DESC, m.id DESC
 			 LIMIT $3`, selectColumns, baseJoin),
@@ -264,7 +265,7 @@ func (r *PGRepository) ListByThread(ctx context.Context, threadID uuid.UUID, bef
 	} else {
 		rows, err = r.db.Query(ctx, fmt.Sprintf(
 			`SELECT %s %s
-			 WHERE m.thread_id = $1 AND m.deleted = false
+			 WHERE m.thread_id = $1 AND m.deleted_at IS NULL
 			 ORDER BY m.created_at DESC, m.id DESC
 			 LIMIT $2`, selectColumns, baseJoin),
 			threadID, limit,
@@ -294,7 +295,7 @@ func scanMessage(row pgx.Row) (*Message, error) {
 	var msg Message
 	err := row.Scan(
 		&msg.ID, &msg.ChannelID, &msg.AuthorID, &msg.Content, &msg.EditedAt, &msg.ReplyToID, &msg.ThreadID,
-		&msg.Pinned, &msg.Deleted, &msg.Encrypted, &msg.CreatedAt, &msg.UpdatedAt,
+		&msg.Pinned, &msg.DeletedAt, &msg.DeletedBy, &msg.Encrypted, &msg.CreatedAt, &msg.UpdatedAt,
 		&msg.AuthorUsername, &msg.AuthorDisplayName, &msg.AuthorAvatarKey,
 	)
 	if err != nil {

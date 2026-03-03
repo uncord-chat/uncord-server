@@ -31,6 +31,14 @@ type Sender interface {
 	SendVerification(ctx context.Context, to, token, serverURL, serverName string) error
 }
 
+// noOpSender is a Sender that silently discards all emails. It is substituted when no real Sender is provided (e.g.
+// SMTP is not configured), eliminating nil checks at every call site.
+type noOpSender struct{}
+
+func (noOpSender) SendVerification(context.Context, string, string, string, string) error {
+	return nil
+}
+
 // Service implements authentication business logic, keeping HTTP handlers thin and focused on request parsing /
 // response formatting.
 type Service struct {
@@ -47,15 +55,18 @@ type Service struct {
 	dummyHash string
 }
 
-// NewService creates a new authentication service. The sender parameter may be nil when SMTP is not configured; in that
-// case, verification emails are silently skipped. It returns an error if the Argon2id configuration is invalid, since
-// password hashing is fundamental to every auth operation.
+// NewService creates a new authentication service. When sender is nil (SMTP not configured), a no-op implementation is
+// substituted so that call sites do not need nil guards. It returns an error if the Argon2id configuration is invalid,
+// since password hashing is fundamental to every auth operation.
 func NewService(users user.Repository, rdb *redis.Client, cfg *config.Config, bl *disposable.Blocklist, sender Sender, serverRepo server.Repository, permPub *permission.Publisher, logger zerolog.Logger) (*Service, error) {
 	// Generate a dummy hash at startup so VerifyPassword always runs against a real Argon2id hash even when the user
 	// does not exist. A failure here means the Argon2 parameters are broken and no password operation will succeed.
 	dummy, err := HashPassword("uncord-dummy-password", cfg.Argon2Memory, cfg.Argon2Iterations, cfg.Argon2Parallelism, cfg.Argon2SaltLength, cfg.Argon2KeyLength)
 	if err != nil {
 		return nil, fmt.Errorf("generate dummy hash: %w", err)
+	}
+	if sender == nil {
+		sender = noOpSender{}
 	}
 	return &Service{
 		users:         users,
@@ -126,6 +137,10 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*Result, e
 		return nil, err
 	}
 
+	// Fail open: if the blocklist fetch fails (network error, upstream unavailable), allow the registration to
+	// proceed rather than blocking legitimate users. The error is logged so operators can investigate persistent
+	// failures. A determined attacker can trivially work around the blocklist by using a non-listed provider, so
+	// blocking registrations on transient infrastructure issues provides no meaningful security benefit.
 	blocked, err := s.blocklist.IsBlocked(ctx, domain)
 	if err != nil {
 		s.log.Warn().Err(err).Msg("Disposable email check failed")
@@ -189,10 +204,8 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*Result, e
 			Msg("Email verification token (dev mode)")
 	}
 
-	if s.sender != nil {
-		if err := s.sender.SendVerification(ctx, email, verifyToken, s.config.ServerURL, s.config.ServerName); err != nil {
-			s.log.Error().Err(err).Str("user_id", userID.String()).Msg("Failed to send verification email")
-		}
+	if err := s.sender.SendVerification(ctx, email, verifyToken, s.config.ServerURL, s.config.ServerName); err != nil {
+		s.log.Error().Err(err).Str("user_id", userID.String()).Msg("Failed to send verification email")
 	}
 
 	s.log.Debug().Str("user_id", userID.String()).Msg("User registered")
@@ -384,10 +397,8 @@ func (s *Service) ResendVerification(ctx context.Context, userID uuid.UUID) erro
 			Msg("Email verification token (dev mode)")
 	}
 
-	if s.sender != nil {
-		if err := s.sender.SendVerification(ctx, u.Email, verifyToken, s.config.ServerURL, s.config.ServerName); err != nil {
-			s.log.Error().Err(err).Str("user_id", userID.String()).Msg("Failed to send verification email")
-		}
+	if err := s.sender.SendVerification(ctx, u.Email, verifyToken, s.config.ServerURL, s.config.ServerName); err != nil {
+		s.log.Error().Err(err).Str("user_id", userID.String()).Msg("Failed to send verification email")
 	}
 
 	s.log.Debug().Str("user_id", userID.String()).Msg("Verification email resent")

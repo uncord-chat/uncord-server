@@ -31,7 +31,7 @@ func (r *PGRepository) Create(ctx context.Context, params CreateParams) (*Thread
 	err := postgres.WithTx(ctx, r.db, func(tx pgx.Tx) error {
 		var exists bool
 		err := tx.QueryRow(ctx,
-			"SELECT EXISTS(SELECT 1 FROM messages WHERE id = $1 AND channel_id = $2 AND deleted = false)",
+			"SELECT EXISTS(SELECT 1 FROM messages WHERE id = $1 AND channel_id = $2 AND deleted_at IS NULL)",
 			params.ParentMessageID, params.ChannelID,
 		).Scan(&exists)
 		if err != nil {

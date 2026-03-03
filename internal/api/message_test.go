@@ -35,7 +35,7 @@ func (r *fakeMessageRepo) Create(_ context.Context, params message.CreateParams)
 	if params.ReplyToID != nil {
 		found := false
 		for i := range r.messages {
-			if r.messages[i].ID == *params.ReplyToID && r.messages[i].ChannelID == params.ChannelID && !r.messages[i].Deleted {
+			if r.messages[i].ID == *params.ReplyToID && r.messages[i].ChannelID == params.ChannelID && r.messages[i].DeletedAt == nil {
 				found = true
 				break
 			}
@@ -65,7 +65,7 @@ func (r *fakeMessageRepo) Create(_ context.Context, params message.CreateParams)
 
 func (r *fakeMessageRepo) GetByID(_ context.Context, id uuid.UUID) (*message.Message, error) {
 	for i := range r.messages {
-		if r.messages[i].ID == id && !r.messages[i].Deleted {
+		if r.messages[i].ID == id && r.messages[i].DeletedAt == nil {
 			return &r.messages[i], nil
 		}
 	}
@@ -76,7 +76,7 @@ func (r *fakeMessageRepo) List(_ context.Context, channelID uuid.UUID, before *u
 	var result []message.Message
 	for i := len(r.messages) - 1; i >= 0; i-- {
 		msg := r.messages[i]
-		if msg.ChannelID != channelID || msg.Deleted {
+		if msg.ChannelID != channelID || msg.DeletedAt != nil {
 			continue
 		}
 		if before != nil {
@@ -101,7 +101,7 @@ func (r *fakeMessageRepo) List(_ context.Context, channelID uuid.UUID, before *u
 
 func (r *fakeMessageRepo) Update(_ context.Context, id uuid.UUID, content string) (*message.Message, error) {
 	for i := range r.messages {
-		if r.messages[i].ID == id && !r.messages[i].Deleted {
+		if r.messages[i].ID == id && r.messages[i].DeletedAt == nil {
 			r.messages[i].Content = content
 			now := time.Now()
 			r.messages[i].EditedAt = &now
@@ -111,10 +111,11 @@ func (r *fakeMessageRepo) Update(_ context.Context, id uuid.UUID, content string
 	return nil, message.ErrNotFound
 }
 
-func (r *fakeMessageRepo) SoftDelete(_ context.Context, id uuid.UUID) error {
+func (r *fakeMessageRepo) SoftDelete(_ context.Context, id uuid.UUID, _ uuid.UUID) error {
 	for i := range r.messages {
-		if r.messages[i].ID == id && !r.messages[i].Deleted {
-			r.messages[i].Deleted = true
+		if r.messages[i].ID == id && r.messages[i].DeletedAt == nil {
+			now := time.Now()
+			r.messages[i].DeletedAt = &now
 			return nil
 		}
 	}
@@ -123,7 +124,7 @@ func (r *fakeMessageRepo) SoftDelete(_ context.Context, id uuid.UUID) error {
 
 func (r *fakeMessageRepo) Pin(_ context.Context, id uuid.UUID) (*message.Message, error) {
 	for i := range r.messages {
-		if r.messages[i].ID == id && !r.messages[i].Deleted {
+		if r.messages[i].ID == id && r.messages[i].DeletedAt == nil {
 			if r.messages[i].Pinned {
 				return nil, message.ErrAlreadyPinned
 			}
@@ -136,7 +137,7 @@ func (r *fakeMessageRepo) Pin(_ context.Context, id uuid.UUID) (*message.Message
 
 func (r *fakeMessageRepo) Unpin(_ context.Context, id uuid.UUID) (*message.Message, error) {
 	for i := range r.messages {
-		if r.messages[i].ID == id && !r.messages[i].Deleted {
+		if r.messages[i].ID == id && r.messages[i].DeletedAt == nil {
 			if !r.messages[i].Pinned {
 				return nil, message.ErrNotPinned
 			}
@@ -150,7 +151,7 @@ func (r *fakeMessageRepo) Unpin(_ context.Context, id uuid.UUID) (*message.Messa
 func (r *fakeMessageRepo) ListPinned(_ context.Context, channelID uuid.UUID) ([]message.Message, error) {
 	var result []message.Message
 	for i := range r.messages {
-		if r.messages[i].ChannelID == channelID && r.messages[i].Pinned && !r.messages[i].Deleted {
+		if r.messages[i].ChannelID == channelID && r.messages[i].Pinned && r.messages[i].DeletedAt == nil {
 			result = append(result, r.messages[i])
 		}
 	}
@@ -161,7 +162,7 @@ func (r *fakeMessageRepo) ListByThread(_ context.Context, threadID uuid.UUID, be
 	var result []message.Message
 	for i := len(r.messages) - 1; i >= 0; i-- {
 		msg := r.messages[i]
-		if msg.ThreadID == nil || *msg.ThreadID != threadID || msg.Deleted {
+		if msg.ThreadID == nil || *msg.ThreadID != threadID || msg.DeletedAt != nil {
 			continue
 		}
 		if before != nil {

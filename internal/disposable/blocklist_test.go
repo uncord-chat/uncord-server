@@ -188,8 +188,7 @@ func TestRunPeriodicRefresh(t *testing.T) {
 		close(done)
 	}()
 
-	// Wait long enough for at least one refresh tick beyond the initial prefetch.
-	time.Sleep(200 * time.Millisecond)
+	waitFor(t, 2*time.Second, func() bool { return fetchCount.Load() >= 2 })
 
 	cancel()
 	<-done
@@ -258,8 +257,8 @@ func TestRunRefreshFailureContinues(t *testing.T) {
 		close(done)
 	}()
 
-	// Wait for at least one failed refresh attempt.
-	time.Sleep(200 * time.Millisecond)
+	// Wait for at least one failed refresh attempt (fetchCount > 1 means the refresh fired).
+	waitFor(t, 2*time.Second, func() bool { return fetchCount.Load() > 1 })
 
 	cancel()
 	<-done
@@ -272,4 +271,17 @@ func TestRunRefreshFailureContinues(t *testing.T) {
 	if !blocked {
 		t.Error("IsBlocked(mailinator.com) = false after failed refresh, want true (cached list should persist)")
 	}
+}
+
+// waitFor polls condition every 10ms until it returns true or timeout elapses.
+func waitFor(t *testing.T, timeout time.Duration, condition func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if condition() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("waitFor: condition not met within timeout")
 }

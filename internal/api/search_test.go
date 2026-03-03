@@ -148,8 +148,8 @@ func TestSearchMessages_InvalidChannelID(t *testing.T) {
 		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusBadRequest)
 	}
 	env := parseError(t, body)
-	if env.Error.Code != string(apierrors.ValidationError) {
-		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.ValidationError)
+	if env.Error.Code != string(apierrors.InvalidChannelID) {
+		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.InvalidChannelID)
 	}
 }
 

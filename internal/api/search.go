@@ -41,7 +41,7 @@ func (h *SearchHandler) SearchMessages(c fiber.Ctx) error {
 	channelID := c.Query("channel_id")
 	if channelID != "" {
 		if _, err := uuid.Parse(channelID); err != nil {
-			return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid channel_id format")
+			return httputil.Fail(c, fiber.StatusBadRequest, apierrors.InvalidChannelID, "Invalid channel_id format")
 		}
 	}
 

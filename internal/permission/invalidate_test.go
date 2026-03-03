@@ -335,7 +335,7 @@ func TestSubscriberRunContextCancel(t *testing.T) {
 		done <- sub.Run(ctx)
 	}()
 
-	// Give subscriber time to connect
+	// No observable condition for pub/sub subscription establishment; a short sleep is the only option.
 	time.Sleep(100 * time.Millisecond)
 
 	cancel()
@@ -364,7 +364,7 @@ func TestSubscriberRunReceivesAndInvalidates(t *testing.T) {
 		done <- sub.Run(ctx)
 	}()
 
-	// Give subscriber time to connect
+	// No observable condition for pub/sub subscription establishment; a short sleep is the only option.
 	time.Sleep(100 * time.Millisecond)
 
 	// Publish a message
@@ -373,8 +373,11 @@ func TestSubscriberRunReceivesAndInvalidates(t *testing.T) {
 	data, _ := json.Marshal(msg)
 	rdb.Publish(ctx, InvalidateChannel, data)
 
-	// Wait for processing
-	time.Sleep(200 * time.Millisecond)
+	waitFor(t, 2*time.Second, func() bool {
+		cache.mu.Lock()
+		defer cache.mu.Unlock()
+		return cache.deleteByUserCalled
+	})
 
 	cache.mu.Lock()
 	called := cache.deleteByUserCalled
@@ -389,4 +392,17 @@ func TestSubscriberRunReceivesAndInvalidates(t *testing.T) {
 	}
 
 	cancel()
+}
+
+// waitFor polls condition every 10ms until it returns true or timeout elapses.
+func waitFor(t *testing.T, timeout time.Duration, condition func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if condition() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("waitFor: condition not met within timeout")
 }

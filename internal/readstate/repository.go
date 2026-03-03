@@ -53,7 +53,7 @@ func (r *PGRepository) Ack(ctx context.Context, userID, channelID, messageID uui
 	// the read position. The forward-only guard compares created_at timestamps because UUIDs v4 are not time-ordered.
 	const query = `
 		WITH new_msg AS (
-			SELECT id, created_at FROM messages WHERE id = $3 AND channel_id = $2 AND deleted = false
+			SELECT id, created_at FROM messages WHERE id = $3 AND channel_id = $2 AND deleted_at IS NULL
 		),
 		current AS (
 			SELECT last_message_id FROM channel_read_states WHERE user_id = $1 AND channel_id = $2

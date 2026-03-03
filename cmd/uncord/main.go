@@ -98,7 +98,7 @@ type server struct {
 	dmRepo           dm.Repository
 	e2eeRepo         e2ee.Repository
 	storage          media.StorageProvider
-	permStore *permission.PGStore
+	permStore        *permission.PGStore
 	permResolver     *permission.Resolver
 	permPublisher    *permission.Publisher
 	typesenseIndexer *typesense.Indexer
@@ -401,7 +401,7 @@ func run() error {
 
 		// Drain inflight HTTP requests before cancelling background services so that in-progress handlers can still
 		// publish gateway events and write to caches.
-		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 		defer shutdownCancel()
 		if err := app.ShutdownWithContext(shutdownCtx); err != nil {
 			log.Error().Err(err).Msg("Server shutdown error")
@@ -436,7 +436,7 @@ func run() error {
 	go func() { wg.Wait(); close(waitDone) }()
 	select {
 	case <-waitDone:
-	case <-time.After(10 * time.Second):
+	case <-time.After(cfg.ShutdownGraceTimeout):
 		log.Warn().Msg("Timed out waiting for background goroutines to stop")
 	}
 

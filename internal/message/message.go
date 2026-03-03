@@ -38,7 +38,8 @@ type Message struct {
 	ReplyToID *uuid.UUID
 	ThreadID  *uuid.UUID
 	Pinned    bool
-	Deleted   bool
+	DeletedAt *time.Time
+	DeletedBy *uuid.UUID
 	Encrypted bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -91,7 +92,7 @@ type Repository interface {
 	ListByThread(ctx context.Context, threadID uuid.UUID, before *uuid.UUID, limit int) ([]Message, error)
 	ListPinned(ctx context.Context, channelID uuid.UUID) ([]Message, error)
 	Update(ctx context.Context, id uuid.UUID, content string) (*Message, error)
-	SoftDelete(ctx context.Context, id uuid.UUID) error
+	SoftDelete(ctx context.Context, id uuid.UUID, deletedBy uuid.UUID) error
 	Pin(ctx context.Context, id uuid.UUID) (*Message, error)
 	Unpin(ctx context.Context, id uuid.UUID) (*Message, error)
 }

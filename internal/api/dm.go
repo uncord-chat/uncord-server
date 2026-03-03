@@ -425,8 +425,10 @@ func (h *DMHandler) mapDMError(c fiber.Ctx, err error) error {
 	}
 }
 
-// mapMessageError converts message-layer errors to appropriate HTTP responses in DM context.
-// dmChannelModel is the API response model for a DM channel.
+// dmChannelModel is the API response model for a DM channel. It is defined locally rather than in the protocol module
+// because DM channels have a different field set from server channels (no category, topic, position, or permission
+// overwrites). The protocol module's Channel type models server channels only; a shared type would either carry unused
+// fields or require a discriminated union that adds complexity without benefit.
 type dmChannelModel struct {
 	ID        string  `json:"id"`
 	Type      string  `json:"type"`
