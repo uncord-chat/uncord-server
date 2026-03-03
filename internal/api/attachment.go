@@ -178,18 +178,26 @@ func sanitiseFilename(name string) string {
 	return name
 }
 
-// detectContentType returns the MIME type from the multipart header, falling back to extension-based detection.
+// detectContentType returns the MIME type for an uploaded file. It trusts the multipart Content-Type header when it
+// contains a specific type. When the header is empty or the generic "application/octet-stream" (which many clients send
+// when the actual type is unknown), it falls back to extension-based detection. If extension lookup also fails, the
+// original header value is returned as-is.
 func detectContentType(header, filename string) string {
 	ct := strings.TrimSpace(header)
+
+	// A specific, non-generic Content-Type from the client is the best signal.
 	if ct != "" && ct != "application/octet-stream" {
 		return ct
 	}
-	ext := filepath.Ext(filename)
-	if ext != "" {
-		if mt := mime.TypeByExtension(ext); mt != "" {
-			return mt
+
+	// The header was missing or generic; try to infer from the file extension.
+	if ext := filepath.Ext(filename); ext != "" {
+		if byExt := mime.TypeByExtension(ext); byExt != "" {
+			return byExt
 		}
 	}
+
+	// No better signal available; return whatever the client sent (may be empty or "application/octet-stream").
 	return ct
 }
 
