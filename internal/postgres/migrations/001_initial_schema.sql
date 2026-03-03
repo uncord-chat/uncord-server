@@ -95,7 +95,7 @@ CREATE TABLE categories (
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON categories
     FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
 
-CREATE UNIQUE INDEX idx_categories_position ON categories (position);
+ALTER TABLE categories ADD CONSTRAINT uq_categories_position UNIQUE (position) DEFERRABLE INITIALLY DEFERRED;
 
 -- Channels
 
@@ -239,7 +239,7 @@ CREATE TABLE roles (
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON roles
     FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
 
-CREATE UNIQUE INDEX idx_roles_position ON roles (position);
+ALTER TABLE roles ADD CONSTRAINT uq_roles_position UNIQUE (position) DEFERRABLE INITIALLY DEFERRED;
 CREATE UNIQUE INDEX idx_roles_everyone ON roles (is_everyone) WHERE is_everyone = true;
 
 -- Member Roles
