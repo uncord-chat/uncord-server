@@ -220,6 +220,7 @@ CREATE TABLE channel_read_states (
 );
 
 CREATE INDEX idx_read_states_user ON channel_read_states (user_id);
+CREATE INDEX idx_read_states_channel ON channel_read_states (channel_id);
 
 -- Roles
 
