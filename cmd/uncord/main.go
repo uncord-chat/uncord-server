@@ -901,6 +901,14 @@ func newFiberApp(cfg *config.Config) *fiber.App {
 	} else {
 		app.Use(httputil.RequestLogger(log.Logger, "/api/v1/health"))
 	}
+	// CORS runs before the timeout so that preflight OPTIONS responses are not subject to the request deadline.
+	app.Use(cors.New(cors.Config{
+		AllowOrigins:  strings.Split(cfg.CORSAllowOrigins, ","),
+		AllowMethods:  []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:  []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		ExposeHeaders: []string{"X-Request-ID"},
+	}))
+
 	// Enforce a per-request timeout on all REST handlers. WebSocket upgrade requests are excluded because the gateway
 	// manages its own connection lifecycle. The timeout middleware runs the remaining handler chain in a goroutine and
 	// returns 408 if processing exceeds the configured duration.
@@ -917,13 +925,6 @@ func newFiberApp(cfg *config.Config) *fiber.App {
 				},
 			})
 		},
-	}))
-
-	app.Use(cors.New(cors.Config{
-		AllowOrigins:  strings.Split(cfg.CORSAllowOrigins, ","),
-		AllowMethods:  []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:  []string{"Origin", "Content-Type", "Accept", "Authorization"},
-		ExposeHeaders: []string{"X-Request-ID"},
 	}))
 
 	// Restrict non-upload request bodies to a sensible size for JSON payloads. Multipart (file upload) requests are
