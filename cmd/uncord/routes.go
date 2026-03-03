@@ -144,7 +144,9 @@ func (s *server) registerRoutes(app *fiber.App) {
 	userGroup.Post("/@me/channels", dmHandler.CreateDMChannel)
 	userGroup.Get("/@me/channels", dmHandler.ListDMChannels)
 
-	// DM channel routes (under /api/v1/dm, auth + verified + participant check)
+	// DM channel routes (under /api/v1/dm, auth + verified + participant check). Active server membership is
+	// intentionally not required because DMs are independent of the server; access control is enforced per channel via
+	// RequireParticipant instead.
 	dmGroup := app.Group("/api/v1/dm", requireAuth, requireCSRF, requireVerifiedEmail)
 	dmGroup.Get("/:channelID", dmHandler.RequireParticipant, dmHandler.GetDMChannel)
 	dmGroup.Post("/:channelID/participants", dmHandler.RequireParticipant, dmHandler.AddParticipant)

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"io/fs"
 	"mime"
 	"os"
 	"os/signal"
@@ -197,8 +198,8 @@ func run() error {
 	// indefinitely; if the fetch fails, IsBlocked retries lazily on first use.
 	blocklist := disposable.NewBlocklist(cfg.DisposableEmailBlocklistURL, cfg.DisposableEmailBlocklistEnabled, cfg.DisposableEmailBlocklistTimeout, log.Logger)
 	prefetchCtx, prefetchCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer prefetchCancel()
 	blocklist.Prefetch(prefetchCtx)
-	prefetchCancel()
 
 	// Initialise permission engine
 	permStore := permission.NewPGStore(db)
@@ -393,21 +394,27 @@ func run() error {
 	}
 	srv.registerRoutes(app)
 
-	// Graceful shutdown: the signal goroutine drains in-flight HTTP requests via app.ShutdownWithContext. All
-	// remaining cleanup happens sequentially in the main goroutine after Listen returns, eliminating races between
-	// the signal handler and post-Listen teardown.
+	// Graceful shutdown: the signal goroutine drains in-flight HTTP requests via app.ShutdownWithContext. A sync.Once
+	// ensures the shutdown path executes exactly once regardless of whether a signal or a Listen error triggers it
+	// first. All remaining cleanup happens sequentially in the main goroutine after Listen returns, eliminating races
+	// between the signal handler and post-Listen teardown.
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(quit)
 
-	go func() {
-		<-quit
-		log.Info().Msg("Shutting down server")
-
+	var shutdownOnce sync.Once
+	shutdownApp := func() {
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 		defer shutdownCancel()
 		if err := app.ShutdownWithContext(shutdownCtx); err != nil {
 			log.Error().Err(err).Msg("Server shutdown error")
 		}
+	}
+
+	go func() {
+		<-quit
+		log.Info().Msg("Shutting down server")
+		shutdownOnce.Do(shutdownApp)
 	}()
 
 	// Startup summary: log the status of optional services so operators can immediately see what is degraded.
@@ -432,6 +439,10 @@ func run() error {
 		Msg("Runtime memory stats")
 
 	listenErr := app.Listen(addr, fiber.ListenConfig{DisableStartupMessage: true})
+
+	// Ensure the Fiber app is shut down even if Listen returned due to a startup error (e.g. port binding) rather
+	// than a signal. The sync.Once guarantees this is a no-op if the signal handler already triggered shutdown.
+	shutdownOnce.Do(shutdownApp)
 
 	// Shutdown sequence: all steps run in the main goroutine after Listen returns, regardless of whether the return
 	// was triggered by a signal or a startup failure (e.g. port binding). This eliminates races between the signal
@@ -562,6 +573,8 @@ func loadTemplates(dataDir string) (verification *template.Template, verifyPage 
 			return nil, nil, fmt.Errorf("parse email verification template: %w", err)
 		}
 		log.Info().Str("path", emailTmplPath).Msg("Loaded email verification template from data directory")
+	} else if !errors.Is(readErr, fs.ErrNotExist) {
+		return nil, nil, fmt.Errorf("read email verification template: %w", readErr)
 	}
 
 	pageTmplPath := filepath.Join(dataDir, "templates", "pages", "verify.html")
@@ -571,6 +584,8 @@ func loadTemplates(dataDir string) (verification *template.Template, verifyPage 
 			return nil, nil, fmt.Errorf("parse verify page template: %w", err)
 		}
 		log.Info().Str("path", pageTmplPath).Msg("Loaded verify page template from data directory")
+	} else if !errors.Is(readErr, fs.ErrNotExist) {
+		return nil, nil, fmt.Errorf("read verify page template: %w", readErr)
 	}
 
 	return verification, verifyPage, nil

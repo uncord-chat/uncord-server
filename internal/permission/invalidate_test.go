@@ -71,7 +71,7 @@ func TestHandleMessageUserOnly(t *testing.T) {
 	sub := &Subscriber{cache: cache, log: zerolog.Nop()}
 	userID := uuid.New()
 
-	payload := `{"user_id":"` + userID.String() + `"}`
+	payload := `{"v":1,"user_id":"` + userID.String() + `"}`
 	sub.handleMessage(context.Background(), payload)
 
 	if !cache.deleteByUserCalled {
@@ -88,7 +88,7 @@ func TestHandleMessageChannelOnly(t *testing.T) {
 	sub := &Subscriber{cache: cache, log: zerolog.Nop()}
 	channelID := uuid.New()
 
-	payload := `{"channel_id":"` + channelID.String() + `"}`
+	payload := `{"v":1,"channel_id":"` + channelID.String() + `"}`
 	sub.handleMessage(context.Background(), payload)
 
 	if !cache.deleteByChannelCalled {
@@ -106,7 +106,7 @@ func TestHandleMessageBoth(t *testing.T) {
 	userID := uuid.New()
 	channelID := uuid.New()
 
-	payload := `{"user_id":"` + userID.String() + `","channel_id":"` + channelID.String() + `"}`
+	payload := `{"v":1,"user_id":"` + userID.String() + `","channel_id":"` + channelID.String() + `"}`
 	sub.handleMessage(context.Background(), payload)
 
 	if !cache.deleteExactCalled {
@@ -138,13 +138,25 @@ func TestHandleMessageAll(t *testing.T) {
 	cache := &spyCache{}
 	sub := &Subscriber{cache: cache, log: zerolog.Nop()}
 
-	sub.handleMessage(context.Background(), `{"all":true}`)
+	sub.handleMessage(context.Background(), `{"v":1,"all":true}`)
 
 	if !cache.deleteAllCalled {
 		t.Error("DeleteAll should be called")
 	}
 	if cache.deleteByUserCalled || cache.deleteByChannelCalled || cache.deleteExactCalled {
 		t.Error("only DeleteAll should be called")
+	}
+}
+
+func TestHandleMessageUnknownVersion(t *testing.T) {
+	t.Parallel()
+	cache := &spyCache{}
+	sub := &Subscriber{cache: cache, log: zerolog.Nop()}
+
+	sub.handleMessage(context.Background(), `{"v":999,"all":true}`)
+
+	if cache.deleteAllCalled || cache.deleteByUserCalled || cache.deleteByChannelCalled || cache.deleteExactCalled {
+		t.Error("no cache method should be called for an incompatible version")
 	}
 }
 
@@ -248,6 +260,9 @@ func TestPublisherInvalidateUser(t *testing.T) {
 	case msg := <-ch:
 		var im InvalidationMessage
 		_ = json.Unmarshal([]byte(msg.Payload), &im)
+		if im.Version != 1 {
+			t.Errorf("published version = %d, want 1", im.Version)
+		}
 		if im.UserID == nil || *im.UserID != userID {
 			t.Errorf("published user_id = %v, want %v", im.UserID, userID)
 		}
@@ -367,9 +382,9 @@ func TestSubscriberRunReceivesAndInvalidates(t *testing.T) {
 	// No observable condition for pub/sub subscription establishment; a short sleep is the only option.
 	time.Sleep(100 * time.Millisecond)
 
-	// Publish a message
+	// Publish a message with the current schema version so the subscriber processes it.
 	userID := uuid.New()
-	msg := InvalidationMessage{UserID: &userID}
+	msg := InvalidationMessage{Version: 1, UserID: &userID}
 	data, _ := json.Marshal(msg)
 	rdb.Publish(ctx, InvalidateChannel, data)
 

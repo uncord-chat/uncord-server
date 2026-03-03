@@ -10,12 +10,18 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// InvalidationMessage is published to trigger cache invalidation.
+// InvalidationMessage is published to trigger cache invalidation. The Version field allows subscribers to detect and
+// skip messages with an incompatible schema during rolling deployments.
 type InvalidationMessage struct {
+	Version   int        `json:"v"`
 	UserID    *uuid.UUID `json:"user_id,omitempty"`
 	ChannelID *uuid.UUID `json:"channel_id,omitempty"`
 	All       bool       `json:"all,omitempty"`
 }
+
+// invalidationVersion is the current schema version for InvalidationMessage. Bump this when the message format changes
+// in a way that older subscribers cannot safely process.
+const invalidationVersion = 1
 
 // Publisher sends cache invalidation messages via Valkey pub/sub.
 type Publisher struct {
@@ -49,6 +55,7 @@ func (p *Publisher) InvalidateAll(ctx context.Context) error {
 }
 
 func (p *Publisher) publish(ctx context.Context, msg InvalidationMessage) error {
+	msg.Version = invalidationVersion
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("marshal invalidation: %w", err)
@@ -92,6 +99,11 @@ func (s *Subscriber) handleMessage(ctx context.Context, payload string) {
 	var msg InvalidationMessage
 	if err := json.Unmarshal([]byte(payload), &msg); err != nil {
 		s.log.Warn().Err(err).Str("payload", payload).Msg("Invalid invalidation message")
+		return
+	}
+	if msg.Version != invalidationVersion {
+		s.log.Warn().Int("got", msg.Version).Int("want", invalidationVersion).
+			Msg("Skipping invalidation message with incompatible version")
 		return
 	}
 

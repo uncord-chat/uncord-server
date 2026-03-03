@@ -56,7 +56,7 @@ func (r *fakeThreadRepo) GetByID(_ context.Context, id uuid.UUID) (*thread.Threa
 	return nil, thread.ErrNotFound
 }
 
-func (r *fakeThreadRepo) ListByChannel(_ context.Context, channelID uuid.UUID) ([]thread.Thread, error) {
+func (r *fakeThreadRepo) ListByChannel(_ context.Context, channelID uuid.UUID, _ *uuid.UUID, _ int) ([]thread.Thread, error) {
 	var result []thread.Thread
 	for i := range r.threads {
 		if r.threads[i].ChannelID == channelID {

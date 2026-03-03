@@ -70,11 +70,29 @@ func ValidateName(name *string) error {
 	return nil
 }
 
+// Pagination defaults and limits for thread listing.
+const (
+	DefaultLimit = 50
+	MaxLimit     = 100
+)
+
+// ClampLimit constrains a requested page size to [1, MaxLimit], defaulting to DefaultLimit when the input is zero or
+// negative.
+func ClampLimit(limit int) int {
+	if limit <= 0 {
+		return DefaultLimit
+	}
+	if limit > MaxLimit {
+		return MaxLimit
+	}
+	return limit
+}
+
 // Repository defines the data-access contract for thread operations.
 type Repository interface {
 	Create(ctx context.Context, params CreateParams) (*Thread, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*Thread, error)
-	ListByChannel(ctx context.Context, channelID uuid.UUID) ([]Thread, error)
+	ListByChannel(ctx context.Context, channelID uuid.UUID, before *uuid.UUID, limit int) ([]Thread, error)
 	Update(ctx context.Context, id uuid.UUID, params UpdateParams) (*Thread, error)
 }
 

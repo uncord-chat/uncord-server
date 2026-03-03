@@ -151,7 +151,7 @@ func (r *PGRepository) AddParticipant(ctx context.Context, channelID, userID uui
 	return postgres.WithTx(ctx, r.db, func(tx pgx.Tx) error {
 		var count int
 		err := tx.QueryRow(ctx,
-			`SELECT COUNT(*) FROM dm_participants WHERE dm_channel_id = $1`, channelID).Scan(&count)
+			`SELECT COUNT(*) FROM dm_participants WHERE dm_channel_id = $1 FOR UPDATE`, channelID).Scan(&count)
 		if err != nil {
 			return fmt.Errorf("count participants: %w", err)
 		}

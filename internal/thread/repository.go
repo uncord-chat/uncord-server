@@ -79,12 +79,24 @@ func (r *PGRepository) GetByID(ctx context.Context, id uuid.UUID) (*Thread, erro
 	return t, nil
 }
 
-// ListByChannel returns all threads in a channel ordered newest first.
-func (r *PGRepository) ListByChannel(ctx context.Context, channelID uuid.UUID) ([]Thread, error) {
-	rows, err := r.db.Query(ctx,
-		fmt.Sprintf("SELECT %s FROM threads WHERE channel_id = $1 ORDER BY created_at DESC LIMIT 100", selectColumns),
-		channelID,
-	)
+// ListByChannel returns threads in a channel ordered newest first. When before is non-nil, only threads created before
+// the referenced thread are returned (cursor-based pagination).
+func (r *PGRepository) ListByChannel(ctx context.Context, channelID uuid.UUID, before *uuid.UUID, limit int) ([]Thread, error) {
+	var rows pgx.Rows
+	var err error
+	if before != nil {
+		rows, err = r.db.Query(ctx,
+			fmt.Sprintf(`SELECT %s FROM threads WHERE channel_id = $1
+				AND (created_at, id) < (SELECT created_at, id FROM threads WHERE id = $2)
+				ORDER BY created_at DESC, id DESC LIMIT $3`, selectColumns),
+			channelID, *before, limit,
+		)
+	} else {
+		rows, err = r.db.Query(ctx,
+			fmt.Sprintf("SELECT %s FROM threads WHERE channel_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2", selectColumns),
+			channelID, limit,
+		)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("query threads: %w", err)
 	}

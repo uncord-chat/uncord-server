@@ -139,7 +139,22 @@ func (h *ThreadHandler) ListThreads(c fiber.Ctx) error {
 		return nil
 	}
 
-	threads, err := h.threads.ListByChannel(c, channelID)
+	var before *uuid.UUID
+	if raw := c.Query("before"); raw != "" {
+		id, parseErr := uuid.Parse(raw)
+		if parseErr != nil {
+			return httputil.Fail(c, fiber.StatusBadRequest, apierrors.ValidationError, "Invalid before parameter")
+		}
+		before = &id
+	}
+
+	rawLimit, ok := httputil.ParseIntQuery(c, "limit")
+	if !ok {
+		return nil
+	}
+	limit := thread.ClampLimit(rawLimit)
+
+	threads, err := h.threads.ListByChannel(c, channelID, before, limit)
 	if err != nil {
 		h.log.Error().Err(err).Str("handler", "thread").Msg("list threads failed")
 		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
