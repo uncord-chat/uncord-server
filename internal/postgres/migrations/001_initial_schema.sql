@@ -276,6 +276,7 @@ CREATE TRIGGER set_updated_at BEFORE UPDATE ON permission_overrides
 CREATE UNIQUE INDEX idx_overrides_unique
     ON permission_overrides (target_type, target_id, principal_type, principal_id);
 CREATE INDEX idx_overrides_target ON permission_overrides (target_type, target_id);
+CREATE INDEX idx_overrides_principal ON permission_overrides (principal_type, principal_id);
 
 -- Orphan cleanup triggers for permission_overrides polymorphic foreign keys
 -- +goose StatementBegin
