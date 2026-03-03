@@ -136,3 +136,5 @@ type Repository interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 	HighestPosition(ctx context.Context, userID uuid.UUID) (int, error)
 }
+
+var _ Repository = (*PGRepository)(nil)

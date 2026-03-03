@@ -47,6 +47,8 @@ type Cache interface {
 	DeleteAll(ctx context.Context) error
 }
 
+var _ Cache = (*ValkeyCache)(nil)
+
 // ValkeyCache implements Cache using Valkey/Redis.
 type ValkeyCache struct {
 	client *redis.Client

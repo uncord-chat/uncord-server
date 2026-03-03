@@ -161,3 +161,5 @@ type Repository interface {
 	// GetMessageKeysBatch returns encrypted keys for multiple messages for a single device.
 	GetMessageKeysBatch(ctx context.Context, messageIDs []uuid.UUID, deviceRowID uuid.UUID) (map[uuid.UUID][]byte, error)
 }
+
+var _ Repository = (*PGRepository)(nil)

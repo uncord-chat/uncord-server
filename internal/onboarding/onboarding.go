@@ -71,3 +71,5 @@ type Repository interface {
 	Get(ctx context.Context) (*Config, error)
 	Update(ctx context.Context, params UpdateParams) (*Config, error)
 }
+
+var _ Repository = (*PGRepository)(nil)

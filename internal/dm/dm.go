@@ -80,3 +80,5 @@ type Repository interface {
 	// ListDMPeers returns the distinct user IDs of all users who share any DM channel with the given user.
 	ListDMPeers(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
 }
+
+var _ Repository = (*PGRepository)(nil)

@@ -147,3 +147,5 @@ type Repository interface {
 	CreatePending(ctx context.Context, userID uuid.UUID) (*WithProfile, error)
 	Activate(ctx context.Context, userID uuid.UUID, autoRoles []uuid.UUID) (*WithProfile, error)
 }
+
+var _ Repository = (*PGRepository)(nil)

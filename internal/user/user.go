@@ -220,3 +220,5 @@ type Repository interface {
 	PurgeLoginAttempts(ctx context.Context, olderThan time.Time) (int64, error)
 	PurgeTombstones(ctx context.Context, olderThan time.Time) (int64, error)
 }
+
+var _ Repository = (*PGRepository)(nil)

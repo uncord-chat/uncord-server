@@ -85,3 +85,5 @@ type Repository interface {
 	// Count returns the total number of custom emoji.
 	Count(ctx context.Context) (int, error)
 }
+
+var _ Repository = (*PGRepository)(nil)

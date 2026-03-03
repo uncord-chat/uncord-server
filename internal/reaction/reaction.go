@@ -58,3 +58,5 @@ type Repository interface {
 	// string for standard emoji.
 	UserReactionsByMessages(ctx context.Context, messageIDs []uuid.UUID, userID uuid.UUID) (map[uuid.UUID]map[string]bool, error)
 }
+
+var _ Repository = (*PGRepository)(nil)

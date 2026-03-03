@@ -51,6 +51,8 @@ type Searcher interface {
 	Search(ctx context.Context, params Params) (*Result, error)
 }
 
+var _ Searcher = (*TypesenseSearcher)(nil)
+
 // Options groups optional query parameters from the handler.
 type Options struct {
 	ChannelID string

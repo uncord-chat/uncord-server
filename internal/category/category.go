@@ -82,3 +82,5 @@ type Repository interface {
 	Update(ctx context.Context, id uuid.UUID, params UpdateParams) (*Category, error)
 	Delete(ctx context.Context, id uuid.UUID) error
 }
+
+var _ Repository = (*PGRepository)(nil)

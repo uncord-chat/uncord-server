@@ -87,3 +87,5 @@ type Repository interface {
 	SetBannerKey(ctx context.Context, key string) (*Config, error)
 	ClearBannerKey(ctx context.Context) (*Config, error)
 }
+
+var _ Repository = (*PGRepository)(nil)

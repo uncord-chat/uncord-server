@@ -77,3 +77,5 @@ type Repository interface {
 	ListByChannel(ctx context.Context, channelID uuid.UUID) ([]Thread, error)
 	Update(ctx context.Context, id uuid.UUID, params UpdateParams) (*Thread, error)
 }
+
+var _ Repository = (*PGRepository)(nil)

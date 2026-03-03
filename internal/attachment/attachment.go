@@ -65,3 +65,5 @@ type Repository interface {
 	// thumbnail keys) so the caller can remove the files.
 	PurgeOrphans(ctx context.Context, olderThan time.Time) ([]string, error)
 }
+
+var _ Repository = (*PGRepository)(nil)

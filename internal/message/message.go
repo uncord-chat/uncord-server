@@ -95,3 +95,5 @@ type Repository interface {
 	Pin(ctx context.Context, id uuid.UUID) (*Message, error)
 	Unpin(ctx context.Context, id uuid.UUID) (*Message, error)
 }
+
+var _ Repository = (*PGRepository)(nil)

@@ -76,3 +76,8 @@ type Store interface {
 	ChannelInfo(ctx context.Context, channelID uuid.UUID) (ChannelInfo, error)
 	Overrides(ctx context.Context, targetType TargetType, targetID uuid.UUID) ([]Override, error)
 }
+
+var (
+	_ Store         = (*PGStore)(nil)
+	_ OverrideStore = (*PGStore)(nil)
+)

@@ -93,3 +93,5 @@ type Repository interface {
 	Delete(ctx context.Context, code string) error
 	Use(ctx context.Context, code string) (*Invite, error)
 }
+
+var _ Repository = (*PGRepository)(nil)

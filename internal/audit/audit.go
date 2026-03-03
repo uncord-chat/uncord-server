@@ -135,6 +135,8 @@ type Repository interface {
 	List(ctx context.Context, params ListParams) ([]Entry, error)
 }
 
+var _ Repository = (*PGRepository)(nil)
+
 // Logger provides a fire-and-forget interface for recording audit entries. Write failures are logged but never returned
 // to the caller, so audit logging cannot disrupt the primary request flow.
 type Logger struct {

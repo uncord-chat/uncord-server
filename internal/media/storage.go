@@ -33,6 +33,8 @@ type StorageProvider interface {
 	URL(key string) string
 }
 
+var _ StorageProvider = (*LocalStorage)(nil)
+
 // AllowedContentTypes maps MIME types that are accepted for upload. Executables are intentionally excluded.
 var AllowedContentTypes = map[string]bool{
 	// Images

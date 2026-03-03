@@ -44,3 +44,5 @@ type Repository interface {
 	Ack(ctx context.Context, userID, channelID, messageID uuid.UUID) (*ReadState, error)
 	DeleteByChannel(ctx context.Context, channelID uuid.UUID) error
 }
+
+var _ Repository = (*PGRepository)(nil)
