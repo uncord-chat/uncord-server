@@ -25,7 +25,7 @@ func Connect(ctx context.Context, rawURL string, dialTimeout time.Duration) (*re
 
 	opts, err := redis.ParseURL(parsed.String())
 	if err != nil {
-		return nil, fmt.Errorf("connect to valkey: parse URL: %w", err)
+		return nil, fmt.Errorf("connect to valkey: parse redis options: %w", err)
 	}
 	opts.DialTimeout = dialTimeout
 
