@@ -375,11 +375,11 @@ func (c *Config) validate() error {
 		errs = append(errs, fmt.Errorf("JWT_REFRESH_TTL must be at least 1s"))
 	}
 
-	if c.Argon2Memory == 0 {
-		errs = append(errs, fmt.Errorf("ARGON2_MEMORY must be greater than 0"))
+	if c.Argon2Memory < 15360 {
+		errs = append(errs, fmt.Errorf("ARGON2_MEMORY must be at least 15360 (15 MiB)"))
 	}
-	if c.Argon2Iterations == 0 {
-		errs = append(errs, fmt.Errorf("ARGON2_ITERATIONS must be greater than 0"))
+	if c.Argon2Iterations < 2 {
+		errs = append(errs, fmt.Errorf("ARGON2_ITERATIONS must be at least 2"))
 	}
 	if c.Argon2Parallelism == 0 {
 		errs = append(errs, fmt.Errorf("ARGON2_PARALLELISM must be greater than 0"))
@@ -422,11 +422,18 @@ func (c *Config) validate() error {
 		errs = append(errs, fmt.Errorf("RATE_LIMIT_UPLOAD_WINDOW_SECONDS must be at least 1"))
 	}
 
+	if c.ServerEnv != "development" && c.TypesenseAPIKey.Expose() == "change-me-in-production" {
+		errs = append(errs, fmt.Errorf("TYPESENSE_API_KEY must be changed from the default value in production"))
+	}
+
 	if c.MaxChannels < 1 {
 		errs = append(errs, fmt.Errorf("MAX_CHANNELS must be at least 1"))
 	}
 	if c.MaxCategories < 1 {
 		errs = append(errs, fmt.Errorf("MAX_CATEGORIES must be at least 1"))
+	}
+	if c.MaxRoles < 1 {
+		errs = append(errs, fmt.Errorf("MAX_ROLES must be at least 1"))
 	}
 	if c.MaxMessageLength < 1 {
 		errs = append(errs, fmt.Errorf("MAX_MESSAGE_LENGTH must be at least 1"))

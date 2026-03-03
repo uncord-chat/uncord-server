@@ -46,9 +46,10 @@ func TestLoadDefaults(t *testing.T) {
 		t.Setenv(k, "")
 	}
 
-	// JWT_SECRET and SERVER_SECRET are required by validation
+	// Required secrets for validation to pass.
 	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
 	t.Setenv("SERVER_SECRET", testServerSecret)
+	t.Setenv("TYPESENSE_API_KEY", "test-typesense-key")
 
 	cfg, err := Load()
 	if err != nil {
@@ -492,6 +493,7 @@ func TestIsDevelopment(t *testing.T) {
 func TestLoadSMTPOverrides(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
 	t.Setenv("SERVER_SECRET", testServerSecret)
+	t.Setenv("TYPESENSE_API_KEY", "test-typesense-key")
 	t.Setenv("SMTP_HOST", "mail.example.com")
 	t.Setenv("SMTP_PORT", "465")
 	t.Setenv("SMTP_USERNAME", "user@example.com")
@@ -646,6 +648,7 @@ func TestLoadDevelopmentOverrides(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
 			t.Setenv("SERVER_SECRET", testServerSecret)
+			t.Setenv("TYPESENSE_API_KEY", "test-typesense-key")
 			t.Setenv("SERVER_ENV", tt.serverEnv)
 			t.Setenv("SERVER_PORT", tt.serverPort)
 			t.Setenv("SMTP_HOST", tt.smtpHost)
@@ -720,6 +723,7 @@ func TestLoadValidationServerSecretWrongLength(t *testing.T) {
 func TestLoadDeletionTombstoneUsernamesDefault(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
 	t.Setenv("SERVER_SECRET", testServerSecret)
+	t.Setenv("TYPESENSE_API_KEY", "test-typesense-key")
 
 	cfg, err := Load()
 	if err != nil {
@@ -733,6 +737,7 @@ func TestLoadDeletionTombstoneUsernamesDefault(t *testing.T) {
 func TestLoadDeletionTombstoneUsernamesOverride(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
 	t.Setenv("SERVER_SECRET", testServerSecret)
+	t.Setenv("TYPESENSE_API_KEY", "test-typesense-key")
 	t.Setenv("DELETION_TOMBSTONE_USERNAMES", "false")
 
 	cfg, err := Load()
@@ -887,6 +892,7 @@ func TestLoadValidationAttachmentOrphanTTL(t *testing.T) {
 func TestLoadGatewayOverrides(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret-for-defaults-minimum-32")
 	t.Setenv("SERVER_SECRET", testServerSecret)
+	t.Setenv("TYPESENSE_API_KEY", "test-typesense-key")
 	t.Setenv("GATEWAY_HEARTBEAT_INTERVAL_MS", "30000")
 	t.Setenv("GATEWAY_SESSION_TTL_SECONDS", "600")
 	t.Setenv("GATEWAY_REPLAY_BUFFER_SIZE", "500")
