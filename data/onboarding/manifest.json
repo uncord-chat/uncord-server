@@ -1,1 +1,18 @@
-{"documents": []}
+{
+  "documents": [
+    {
+      "slug": "rules",
+      "title": "Server Rules",
+      "file": "rules.html",
+      "position": 0,
+      "required": true
+    },
+    {
+      "slug": "code-of-conduct",
+      "title": "Code of Conduct",
+      "file": "code-of-conduct.html",
+      "position": 1,
+      "required": false
+    }
+  ]
+}
