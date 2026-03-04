@@ -62,8 +62,8 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.ServerName != "My Community" {
 		t.Errorf("ServerName = %q, want %q", cfg.ServerName, "My Community")
 	}
-	if cfg.ServerPort != 8080 {
-		t.Errorf("ServerPort = %d, want 8080", cfg.ServerPort)
+	if cfg.ServerPort != 9800 {
+		t.Errorf("ServerPort = %d, want 9800", cfg.ServerPort)
 	}
 	if cfg.ServerEnv != "production" {
 		t.Errorf("ServerEnv = %q, want %q", cfg.ServerEnv, "production")
@@ -621,7 +621,7 @@ func TestLoadDevelopmentOverrides(t *testing.T) {
 			wantPort:      1025,
 			wantUsername:  "",
 			wantPassword:  "",
-			wantServerURL: "http://localhost:8080",
+			wantServerURL: "http://localhost:9800",
 		},
 		{
 			name:          "development mode uses configured port in ServerURL",
@@ -654,7 +654,7 @@ func TestLoadDevelopmentOverrides(t *testing.T) {
 			wantPort:      1025,
 			wantUsername:  "",
 			wantPassword:  "",
-			wantServerURL: "http://localhost:8080",
+			wantServerURL: "http://localhost:9800",
 		},
 	}
 	for _, tt := range tests {
@@ -799,7 +799,7 @@ func TestLoadValidationDeletionTombstoneRetentionNegative(t *testing.T) {
 
 	cfg := &Config{
 		JWTSecret:                       NewSecret("test-secret-for-defaults-minimum-32"),
-		ServerPort:                      8080,
+		ServerPort:                      9800,
 		DatabaseMaxConn:                 25,
 		DatabaseMinConn:                 5,
 		JWTAccessTTL:                    15 * time.Minute,

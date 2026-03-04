@@ -2,7 +2,7 @@ services:
   uncord:
     build: .
     ports:
-      - "8080:8080"
+      - "9800:9800"
     depends_on:
       postgres:
         condition: service_healthy
@@ -15,7 +15,7 @@ services:
       - media_data:/data/uncord/media
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/v1/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:9800/api/v1/health"]
       interval: 10s
       timeout: 5s
       retries: 3

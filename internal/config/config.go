@@ -172,7 +172,7 @@ func Load() (*Config, error) {
 		ServerName:           envStr("SERVER_NAME", "My Community"),
 		ServerDescription:    envStr("SERVER_DESCRIPTION", ""),
 		ServerURL:            envStr("SERVER_URL", "https://chat.example.com"),
-		ServerPort:           p.int("SERVER_PORT", 8080),
+		ServerPort:           p.int("SERVER_PORT", 9800),
 		ServerEnv:            envStr("SERVER_ENV", "production"),
 		LogHealthRequests:    p.bool("LOG_HEALTH_REQUESTS", true),
 		RequestTimeout:       p.duration("REQUEST_TIMEOUT", 30*time.Second),

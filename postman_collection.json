@@ -17,7 +17,7 @@
 	"variable": [
 		{
 			"key": "base_url",
-			"value": "http://localhost:8080/api/v1"
+			"value": "http://localhost:9800/api/v1"
 		},
 		{
 			"key": "token",
@@ -313,12 +313,12 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "http://localhost:8080/verify-email?token={{verify_token}}",
+							"raw": "http://localhost:9800/verify-email?token={{verify_token}}",
 							"protocol": "http",
 							"host": [
 								"localhost"
 							],
-							"port": "8080",
+							"port": "9800",
 							"path": [
 								"verify-email"
 							],
@@ -2722,7 +2722,7 @@
 		},
 		{
 			"name": "Gateway",
-			"description": "WebSocket gateway for real-time events. Connect via `ws://localhost:8080/api/v1/gateway`. After the upgrade, the server sends a Hello frame (op 10) with the heartbeat interval. The client must respond with Identify (op 2, with a JWT token) or Resume (op 6) within 30 seconds.",
+			"description": "WebSocket gateway for real-time events. Connect via `ws://localhost:9800/api/v1/gateway`. After the upgrade, the server sends a Hello frame (op 10) with the heartbeat interval. The client must respond with Identify (op 2, with a JWT token) or Resume (op 6) within 30 seconds.",
 			"item": [
 				{
 					"name": "Gateway WebSocket",
@@ -3081,12 +3081,12 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "http://localhost:8080/api/v1/dm/{{dm_channel_id}}",
+							"raw": "http://localhost:9800/api/v1/dm/{{dm_channel_id}}",
 							"protocol": "http",
 							"host": [
 								"localhost"
 							],
-							"port": "8080",
+							"port": "9800",
 							"path": [
 								"api",
 								"v1",
@@ -3111,12 +3111,12 @@
 							"raw": "{\n  \"user_id\": \"{{user_id}}\"\n}"
 						},
 						"url": {
-							"raw": "http://localhost:8080/api/v1/dm/{{dm_channel_id}}/participants",
+							"raw": "http://localhost:9800/api/v1/dm/{{dm_channel_id}}/participants",
 							"protocol": "http",
 							"host": [
 								"localhost"
 							],
-							"port": "8080",
+							"port": "9800",
 							"path": [
 								"api",
 								"v1",
@@ -3133,12 +3133,12 @@
 						"method": "DELETE",
 						"header": [],
 						"url": {
-							"raw": "http://localhost:8080/api/v1/dm/{{dm_channel_id}}/participants/{{user_id}}",
+							"raw": "http://localhost:9800/api/v1/dm/{{dm_channel_id}}/participants/{{user_id}}",
 							"protocol": "http",
 							"host": [
 								"localhost"
 							],
-							"port": "8080",
+							"port": "9800",
 							"path": [
 								"api",
 								"v1",
@@ -3161,12 +3161,12 @@
 							}
 						],
 						"url": {
-							"raw": "http://localhost:8080/api/v1/dm/{{dm_channel_id}}/messages",
+							"raw": "http://localhost:9800/api/v1/dm/{{dm_channel_id}}/messages",
 							"protocol": "http",
 							"host": [
 								"localhost"
 							],
-							"port": "8080",
+							"port": "9800",
 							"path": [
 								"api",
 								"v1",
@@ -3210,12 +3210,12 @@
 							"raw": "{\n  \"content\": \"base64-encoded-ciphertext-here\",\n  \"message_keys\": [\n    {\"device_id\": \"device-uuid-here\", \"encrypted_key\": \"base64-encoded-key-here\"}\n  ]\n}"
 						},
 						"url": {
-							"raw": "http://localhost:8080/api/v1/dm/{{dm_channel_id}}/messages",
+							"raw": "http://localhost:9800/api/v1/dm/{{dm_channel_id}}/messages",
 							"protocol": "http",
 							"host": [
 								"localhost"
 							],
-							"port": "8080",
+							"port": "9800",
 							"path": [
 								"api",
 								"v1",
