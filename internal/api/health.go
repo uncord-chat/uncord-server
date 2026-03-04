@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+
+	"github.com/uncord-chat/uncord-server/internal/httputil"
 )
 
 // Pinger checks connectivity to a backing service.
@@ -47,16 +49,18 @@ func (h *HealthHandler) Health(c fiber.Ctx) error {
 	}
 
 	overall := "ok"
-	status := fiber.StatusOK
 	if pgStatus != "ok" || vkStatus != "ok" {
 		overall = "degraded"
-		status = fiber.StatusServiceUnavailable
 	}
 
-	// Bypass httputil.Success: health checks return a flat JSON body without the standard envelope.
-	return c.Status(status).JSON(healthResponse{
+	resp := healthResponse{
 		Status:   overall,
 		Postgres: pgStatus,
 		Valkey:   vkStatus,
-	})
+	}
+
+	if overall != "ok" {
+		return httputil.SuccessStatus(c, fiber.StatusServiceUnavailable, resp)
+	}
+	return httputil.Success(c, resp)
 }
