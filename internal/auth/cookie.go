@@ -42,9 +42,10 @@ func cookieName(cfg *config.Config, suffix string) string {
 // 256 bits of entropy.
 const csrfTokenBytes = 32
 
-// SetAuthCookies sets the access token, refresh token, and CSRF token cookies on the response. The access and CSRF
-// cookies are scoped to /api so they are sent with every API request. The refresh cookie is scoped to the refresh
-// endpoint to prevent it from being sent unnecessarily.
+// SetAuthCookies sets the access token, refresh token, and CSRF token cookies on the response. The access cookie is
+// scoped to /api so it is sent with every API request. The refresh cookie is scoped to the refresh endpoint to prevent
+// it from being sent unnecessarily. The CSRF cookie uses Path=/ so client-side JS can read it via document.cookie for
+// the double-submit header.
 func SetAuthCookies(c fiber.Ctx, cfg *config.Config, accessToken, refreshToken string) {
 	secure := !cfg.IsDevelopment()
 
@@ -72,7 +73,7 @@ func SetAuthCookies(c fiber.Ctx, cfg *config.Config, accessToken, refreshToken s
 	c.Cookie(&fiber.Cookie{
 		Name:     CSRFCookieName(cfg),
 		Value:    csrfToken,
-		Path:     "/api",
+		Path:     "/",
 		MaxAge:   int(cfg.JWTAccessTTL / time.Second),
 		HTTPOnly: false,
 		Secure:   secure,
@@ -107,7 +108,7 @@ func ClearAuthCookies(c fiber.Ctx, cfg *config.Config) {
 	c.Cookie(&fiber.Cookie{
 		Name:     CSRFCookieName(cfg),
 		Value:    "",
-		Path:     "/api",
+		Path:     "/",
 		MaxAge:   -1,
 		HTTPOnly: false,
 		Secure:   secure,

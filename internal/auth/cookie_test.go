@@ -133,8 +133,8 @@ func TestSetAuthCookiesProduction(t *testing.T) {
 	if !csrf.Secure {
 		t.Error("CSRF cookie should be Secure in production")
 	}
-	if csrf.Path != "/api" {
-		t.Errorf("CSRF cookie path = %q, want %q", csrf.Path, "/api")
+	if csrf.Path != "/" {
+		t.Errorf("CSRF cookie path = %q, want %q", csrf.Path, "/")
 	}
 }
 

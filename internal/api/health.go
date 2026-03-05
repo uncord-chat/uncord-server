@@ -25,8 +25,7 @@ func NewHealthHandler(db, valkey Pinger) *HealthHandler {
 	return &HealthHandler{db: db, valkey: valkey}
 }
 
-// healthResponse is the JSON structure returned by the health endpoint. The response is not wrapped in the standard
-// success/error envelope so that monitoring systems receive a simple, predictable JSON body.
+// healthResponse is the JSON structure returned by the health endpoint, wrapped in the standard data envelope.
 type healthResponse struct {
 	Status   string `json:"status"`
 	Postgres string `json:"postgres"`
