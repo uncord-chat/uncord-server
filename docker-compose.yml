@@ -11,8 +11,11 @@ services:
       typesense:
         condition: service_healthy
     env_file: .env
+    environment:
+      DATA_DIR: /data/uncord/data
     volumes:
       - media_data:/data/uncord/media
+      - ./data:/data/uncord/data:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:9800/api/v1/health"]
