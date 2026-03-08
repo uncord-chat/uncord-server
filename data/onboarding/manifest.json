@@ -12,7 +12,7 @@
       "title": "Code of Conduct",
       "file": "code-of-conduct.md",
       "position": 1,
-      "required": false
+      "required": true
     }
   ]
 }
