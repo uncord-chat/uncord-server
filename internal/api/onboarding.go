@@ -260,19 +260,6 @@ func (h *OnboardingHandler) GetOnboardingStatus(c fiber.Ctx) error {
 		return err
 	}
 
-	status, err := h.members.GetStatus(c, userID)
-	if err != nil {
-		if !errors.Is(err, member.ErrNotFound) {
-			h.log.Error().Err(err).Str("handler", "onboarding").Msg("get member status failed")
-			return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
-		}
-		return httputil.Success(c, models.OnboardingStatusResponse{Step: models.OnboardingStepJoinServer})
-	}
-
-	if status != models.MemberStatusPending {
-		return httputil.Success(c, models.OnboardingStatusResponse{Step: models.OnboardingStepComplete})
-	}
-
 	cfg, err := h.onboarding.Get(c)
 	if err != nil {
 		h.log.Error().Err(err).Str("handler", "onboarding").Msg("get onboarding config for status failed")
@@ -288,6 +275,37 @@ func (h *OnboardingHandler) GetOnboardingStatus(c fiber.Ctx) error {
 		if !u.EmailVerified {
 			return httputil.Success(c, models.OnboardingStatusResponse{Step: models.OnboardingStepVerifyEmail})
 		}
+	}
+
+	status, err := h.members.GetStatus(c, userID)
+	if err != nil {
+		if !errors.Is(err, member.ErrNotFound) {
+			h.log.Error().Err(err).Str("handler", "onboarding").Msg("get member status failed")
+			return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
+		}
+		return httputil.Success(c, models.OnboardingStatusResponse{Step: models.OnboardingStepJoinServer})
+	}
+
+	if status != models.MemberStatusPending {
+		return httputil.Success(c, models.OnboardingStatusResponse{Step: models.OnboardingStepComplete})
+	}
+
+	// When no documents require acceptance, skip the accept_documents step entirely and activate the member. This
+	// eliminates a pointless round trip where the client would receive accept_documents, find nothing to display,
+	// and immediately POST /onboarding/accept with an empty slug list.
+	if len(h.documents.RequiredSlugs()) == 0 {
+		m, err := h.members.Activate(c, userID, cfg.AutoRoles)
+		if err != nil {
+			if errors.Is(err, member.ErrNotPending) {
+				return httputil.Success(c, models.OnboardingStatusResponse{Step: models.OnboardingStepComplete})
+			}
+			return h.mapOnboardingError(c, err)
+		}
+		result := m.ToModel()
+		if h.gateway != nil {
+			h.gateway.Enqueue(events.MemberAdd, result)
+		}
+		return httputil.Success(c, models.OnboardingStatusResponse{Step: models.OnboardingStepComplete})
 	}
 
 	return httputil.Success(c, models.OnboardingStatusResponse{Step: models.OnboardingStepAcceptDocuments})
