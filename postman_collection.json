@@ -2441,6 +2441,24 @@
 					}
 				},
 				{
+					"name": "Get Acceptance",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/onboarding/acceptance",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"onboarding",
+								"acceptance"
+							]
+						},
+						"description": "Returns the document acceptance records for the authenticated user, including slug and acceptance timestamp."
+					}
+				},
+				{
 					"name": "Accept Onboarding",
 					"request": {
 						"method": "POST",

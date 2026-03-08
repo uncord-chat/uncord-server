@@ -813,6 +813,14 @@ func (r *fakeOnboardingRepo) Update(context.Context, onboarding.UpdateParams) (*
 	return r.cfg, nil
 }
 
+func (r *fakeOnboardingRepo) RecordAcceptances(context.Context, uuid.UUID, []string) error {
+	return nil
+}
+
+func (r *fakeOnboardingRepo) GetAcceptances(context.Context, uuid.UUID) ([]onboarding.Acceptance, error) {
+	return nil, nil
+}
+
 func TestAssembleReadyWithOnboarding(t *testing.T) {
 	t.Parallel()
 	_, rdb := newTestRedis(t)

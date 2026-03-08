@@ -402,6 +402,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 	// Onboarding routes
 	onboardingHandler := api.NewOnboardingHandler(s.onboardingRepo, s.documentStore, s.memberRepo, s.userRepo, s.serverRepo, s.gatewayPublisher, s.auditLogger, log.Logger)
 	app.Get("/api/v1/onboarding/status", requireAuth, requireCSRF, onboardingHandler.GetOnboardingStatus)
+	app.Get("/api/v1/onboarding/acceptance", requireAuth, requireCSRF, onboardingHandler.GetAcceptance)
 	app.Get("/api/v1/onboarding", requireAuth, requireCSRF, onboardingHandler.GetOnboarding)
 	app.Patch("/api/v1/onboarding", requireAuth, requireCSRF, requireVerifiedEmail, requireActiveMember, onboardingHandler.UpdateOnboarding)
 	app.Post("/api/v1/onboarding/accept", requireAuth, requireCSRF, requireVerifiedEmail, onboardingHandler.AcceptOnboarding)

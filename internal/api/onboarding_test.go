@@ -54,6 +54,14 @@ func (r *stubOnboardingRepo) Update(context.Context, onboarding.UpdateParams) (*
 	panic("Update not used in status tests")
 }
 
+func (r *stubOnboardingRepo) RecordAcceptances(context.Context, uuid.UUID, []string) error {
+	return nil
+}
+
+func (r *stubOnboardingRepo) GetAcceptances(context.Context, uuid.UUID) ([]onboarding.Acceptance, error) {
+	return nil, nil
+}
+
 // stubUserRepo implements user.Repository for GetOnboardingStatus tests. Only GetByID is functional; calling any other
 // method panics via the embedded nil interface.
 type stubUserRepo struct {

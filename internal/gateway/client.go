@@ -22,7 +22,6 @@ const (
 
 	// writeWait is the time allowed to write a message to the peer.
 	writeWait = 10 * time.Second
-
 )
 
 // Client represents a single WebSocket connection. Each client runs two goroutines (readPump and writePump) and

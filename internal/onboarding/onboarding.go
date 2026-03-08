@@ -9,6 +9,12 @@ import (
 	"github.com/uncord-chat/uncord-protocol/models"
 )
 
+// Acceptance records a single document acceptance for a user.
+type Acceptance struct {
+	Slug       string
+	AcceptedAt time.Time
+}
+
 // Sentinel errors for the onboarding package.
 var (
 	ErrNotFound            = errors.New("onboarding config not found")
@@ -70,6 +76,8 @@ type UpdateParams struct {
 type Repository interface {
 	Get(ctx context.Context) (*Config, error)
 	Update(ctx context.Context, params UpdateParams) (*Config, error)
+	RecordAcceptances(ctx context.Context, userID uuid.UUID, slugs []string) error
+	GetAcceptances(ctx context.Context, userID uuid.UUID) ([]Acceptance, error)
 }
 
 var _ Repository = (*PGRepository)(nil)

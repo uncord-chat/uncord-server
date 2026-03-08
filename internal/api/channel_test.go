@@ -260,6 +260,14 @@ func (f *fakeOnboardingRepo) Update(context.Context, onboarding.UpdateParams) (*
 	return f.cfg, nil
 }
 
+func (f *fakeOnboardingRepo) RecordAcceptances(context.Context, uuid.UUID, []string) error {
+	return nil
+}
+
+func (f *fakeOnboardingRepo) GetAcceptances(context.Context, uuid.UUID) ([]onboarding.Acceptance, error) {
+	return nil, nil
+}
+
 func seedChannel(repo *fakeChannelRepo) *channel.Channel {
 	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	ch := channel.Channel{

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -76,6 +77,55 @@ func (r *PGRepository) Update(ctx context.Context, params UpdateParams) (*Config
 		return nil, fmt.Errorf("update onboarding config: %w", err)
 	}
 	return cfg, nil
+}
+
+// RecordAcceptances inserts document acceptance records for a user. Existing acceptances for the same slug are left
+// unchanged (ON CONFLICT DO NOTHING), preserving the original accepted_at timestamp.
+func (r *PGRepository) RecordAcceptances(ctx context.Context, userID uuid.UUID, slugs []string) error {
+	if len(slugs) == 0 {
+		return nil
+	}
+
+	const query = `INSERT INTO document_acceptances (user_id, slug) VALUES (@user_id, @slug) ON CONFLICT DO NOTHING`
+
+	batch := &pgx.Batch{}
+	for _, slug := range slugs {
+		batch.Queue(query, pgx.NamedArgs{"user_id": userID, "slug": slug})
+	}
+
+	results := r.db.SendBatch(ctx, batch)
+	defer results.Close()
+
+	for range slugs {
+		if _, err := results.Exec(); err != nil {
+			return fmt.Errorf("record document acceptance: %w", err)
+		}
+	}
+	return nil
+}
+
+// GetAcceptances returns all document acceptance records for a user, ordered by acceptance time.
+func (r *PGRepository) GetAcceptances(ctx context.Context, userID uuid.UUID) ([]Acceptance, error) {
+	const query = `SELECT slug, accepted_at FROM document_acceptances WHERE user_id = @user_id ORDER BY accepted_at`
+
+	rows, err := r.db.Query(ctx, query, pgx.NamedArgs{"user_id": userID})
+	if err != nil {
+		return nil, fmt.Errorf("query document acceptances: %w", err)
+	}
+	defer rows.Close()
+
+	var acceptances []Acceptance
+	for rows.Next() {
+		var a Acceptance
+		if err := rows.Scan(&a.Slug, &a.AcceptedAt); err != nil {
+			return nil, fmt.Errorf("scan document acceptance: %w", err)
+		}
+		acceptances = append(acceptances, a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate document acceptances: %w", err)
+	}
+	return acceptances, nil
 }
 
 // scanConfig scans a single row into a Config struct.

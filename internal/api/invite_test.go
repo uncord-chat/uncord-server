@@ -120,6 +120,14 @@ func (r *fakeInviteOnboardingRepo) Update(context.Context, onboarding.UpdatePara
 	return r.cfg, nil
 }
 
+func (r *fakeInviteOnboardingRepo) RecordAcceptances(context.Context, uuid.UUID, []string) error {
+	return nil
+}
+
+func (r *fakeInviteOnboardingRepo) GetAcceptances(context.Context, uuid.UUID) ([]onboarding.Acceptance, error) {
+	return nil, nil
+}
+
 // fakeInviteUserRepo implements user.Repository for invite handler tests. Only GetByID is used.
 type fakeInviteUserRepo struct {
 	users map[uuid.UUID]*user.User

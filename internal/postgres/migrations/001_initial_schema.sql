@@ -550,6 +550,13 @@ CREATE TABLE onboarding_config (
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON onboarding_config
     FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
 
+CREATE TABLE document_acceptances (
+    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    slug        TEXT NOT NULL,
+    accepted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, slug)
+);
+
 -- Anti-Abuse
 -- Retention: user_ip_log and device_fingerprints grow with user activity. The application does not currently purge
 -- these tables. Operators should implement an external retention policy if they grow beyond acceptable bounds.

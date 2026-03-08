@@ -191,6 +191,11 @@ func (h *OnboardingHandler) AcceptOnboarding(c fiber.Ctx) error {
 		}
 	}
 
+	if err := h.onboarding.RecordAcceptances(c, userID, body.AcceptedDocumentSlugs); err != nil {
+		h.log.Error().Err(err).Str("handler", "onboarding").Msg("record document acceptances failed")
+		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
+	}
+
 	m, err := h.members.Activate(c, userID, cfg.AutoRoles)
 	if err != nil {
 		return h.mapOnboardingError(c, err)
@@ -202,6 +207,31 @@ func (h *OnboardingHandler) AcceptOnboarding(c fiber.Ctx) error {
 	}
 
 	return httputil.Success(c, result)
+}
+
+// GetAcceptance handles GET /api/v1/onboarding/acceptance. Returns the document acceptance records for the
+// authenticated user.
+func (h *OnboardingHandler) GetAcceptance(c fiber.Ctx) error {
+	userID, err := httputil.UserID(c)
+	if err != nil {
+		return err
+	}
+
+	acceptances, err := h.onboarding.GetAcceptances(c, userID)
+	if err != nil {
+		h.log.Error().Err(err).Str("handler", "onboarding").Msg("get document acceptances failed")
+		return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
+	}
+
+	docs := make([]models.DocumentAcceptance, len(acceptances))
+	for i, a := range acceptances {
+		docs[i] = models.DocumentAcceptance{
+			Slug:       a.Slug,
+			AcceptedAt: a.AcceptedAt.Format(time.RFC3339),
+		}
+	}
+
+	return httputil.Success(c, models.OnboardingAcceptanceResponse{AcceptedDocuments: docs})
 }
 
 // JoinServer handles POST /api/v1/server/join. Allows users to join the server without an invite when open_join is
