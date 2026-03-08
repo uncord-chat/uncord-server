@@ -11,21 +11,21 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/microcosm-cc/bluemonday"
 	"github.com/uncord-chat/uncord-protocol/models"
 )
 
 // Sentinel errors for document loading.
 var (
 	ErrManifestInvalid  = errors.New("manifest.json is malformed")
-	ErrDocumentNotFound = errors.New("document HTML file not found")
+	ErrDocumentNotFound = errors.New("document file not found")
 	ErrDuplicateSlug    = errors.New("duplicate document slug")
 	ErrInvalidSlug      = errors.New("invalid document slug")
 )
 
 var slugPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
-// Document holds a single onboarding document loaded from the filesystem. The Content field contains sanitised HTML.
+// Document holds a single onboarding document loaded from the filesystem. The Content field contains raw Markdown; the
+// client is responsible for rendering it.
 type Document struct {
 	Slug     string
 	Title    string
@@ -62,9 +62,9 @@ func EmptyDocumentStore() *DocumentStore {
 	}
 }
 
-// LoadDocuments reads manifest.json from dir, loads each referenced HTML file, sanitises the content, and returns an
-// immutable DocumentStore. If manifest.json does not exist, an empty store is returned (valid state for servers without
-// onboarding documents). A malformed manifest is a hard error that prevents startup.
+// LoadDocuments reads manifest.json from dir, loads each referenced Markdown file, and returns an immutable
+// DocumentStore. If manifest.json does not exist, an empty store is returned (valid state for servers without onboarding
+// documents). A malformed manifest is a hard error that prevents startup.
 func LoadDocuments(dir string) (*DocumentStore, error) {
 	manifestPath := filepath.Join(dir, "manifest.json")
 	data, err := os.ReadFile(manifestPath)
@@ -80,7 +80,6 @@ func LoadDocuments(dir string) (*DocumentStore, error) {
 		return nil, fmt.Errorf("%w: %w", ErrManifestInvalid, err)
 	}
 
-	policy := bluemonday.UGCPolicy()
 	docsDir := filepath.Join(dir, "documents")
 	seen := make(map[string]struct{}, len(mf.Documents))
 	docs := make([]Document, 0, len(mf.Documents))
@@ -100,12 +99,10 @@ func LoadDocuments(dir string) (*DocumentStore, error) {
 			return nil, fmt.Errorf("read document %s: %w", entry.File, err)
 		}
 
-		sanitised := policy.Sanitize(string(raw)) //nolint:misspell // bluemonday API uses American English spelling.
-
 		doc := Document{
 			Slug:     entry.Slug,
 			Title:    entry.Title,
-			Content:  sanitised,
+			Content:  string(raw),
 			Position: entry.Position,
 			Required: entry.Required,
 		}

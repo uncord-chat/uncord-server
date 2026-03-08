@@ -15,12 +15,12 @@ func TestLoadDocumentsValidManifest(t *testing.T) {
 	}
 
 	manifest := `{"documents": [
-		{"slug": "rules", "title": "Server Rules", "file": "rules.html", "position": 0, "required": true},
-		{"slug": "privacy", "title": "Privacy Policy", "file": "privacy.html", "position": 1, "required": false}
+		{"slug": "rules", "title": "Server Rules", "file": "rules.md", "position": 0, "required": true},
+		{"slug": "privacy", "title": "Privacy Policy", "file": "privacy.md", "position": 1, "required": false}
 	]}`
 	writeFile(t, filepath.Join(dir, "manifest.json"), manifest)
-	writeFile(t, filepath.Join(docsDir, "rules.html"), "<h1>Rules</h1><p>Be nice.</p>")
-	writeFile(t, filepath.Join(docsDir, "privacy.html"), "<h1>Privacy</h1><p>We respect your privacy.</p>")
+	writeFile(t, filepath.Join(docsDir, "rules.md"), "# Rules\n\nBe nice.")
+	writeFile(t, filepath.Join(docsDir, "privacy.md"), "# Privacy\n\nWe respect your privacy.")
 
 	store, err := LoadDocuments(dir)
 	if err != nil {
@@ -93,12 +93,12 @@ func TestLoadDocumentsDuplicateSlug(t *testing.T) {
 	}
 
 	manifest := `{"documents": [
-		{"slug": "rules", "title": "Rules", "file": "rules.html", "position": 0, "required": true},
-		{"slug": "rules", "title": "Rules Again", "file": "rules2.html", "position": 1, "required": false}
+		{"slug": "rules", "title": "Rules", "file": "rules.md", "position": 0, "required": true},
+		{"slug": "rules", "title": "Rules Again", "file": "rules2.md", "position": 1, "required": false}
 	]}`
 	writeFile(t, filepath.Join(dir, "manifest.json"), manifest)
-	writeFile(t, filepath.Join(docsDir, "rules.html"), "<p>rules</p>")
-	writeFile(t, filepath.Join(docsDir, "rules2.html"), "<p>rules2</p>")
+	writeFile(t, filepath.Join(docsDir, "rules.md"), "rules")
+	writeFile(t, filepath.Join(docsDir, "rules2.md"), "rules2")
 
 	_, err := LoadDocuments(dir)
 	if err == nil {
@@ -109,7 +109,7 @@ func TestLoadDocumentsDuplicateSlug(t *testing.T) {
 	}
 }
 
-func TestLoadDocumentsMissingHTMLFile(t *testing.T) {
+func TestLoadDocumentsMissingFile(t *testing.T) {
 	dir := t.TempDir()
 	docsDir := filepath.Join(dir, "documents")
 	if err := os.MkdirAll(docsDir, 0o755); err != nil {
@@ -117,7 +117,7 @@ func TestLoadDocumentsMissingHTMLFile(t *testing.T) {
 	}
 
 	manifest := `{"documents": [
-		{"slug": "rules", "title": "Rules", "file": "missing.html", "position": 0, "required": true}
+		{"slug": "rules", "title": "Rules", "file": "missing.md", "position": 0, "required": true}
 	]}`
 	writeFile(t, filepath.Join(dir, "manifest.json"), manifest)
 
@@ -136,8 +136,8 @@ func TestLoadDocumentsPathTraversalRejection(t *testing.T) {
 		file string
 	}{
 		{"dot dot", "../etc/passwd"},
-		{"forward slash", "sub/file.html"},
-		{"backslash", `sub\file.html`},
+		{"forward slash", "sub/file.md"},
+		{"backslash", `sub\file.md`},
 	}
 
 	for _, tt := range tests {
@@ -154,20 +154,19 @@ func TestLoadDocumentsPathTraversalRejection(t *testing.T) {
 	}
 }
 
-func TestLoadDocumentsHTMLSanitisation(t *testing.T) {
+func TestLoadDocumentsPreservesRawMarkdown(t *testing.T) {
 	dir := t.TempDir()
 	docsDir := filepath.Join(dir, "documents")
 	if err := os.MkdirAll(docsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
+	source := "# Rules\n\nBe **nice**.\n\n- Item one\n- Item two\n"
 	manifest := `{"documents": [
-		{"slug": "rules", "title": "Rules", "file": "rules.html", "position": 0, "required": true}
+		{"slug": "rules", "title": "Rules", "file": "rules.md", "position": 0, "required": true}
 	]}`
 	writeFile(t, filepath.Join(dir, "manifest.json"), manifest)
-
-	malicious := `<h1>Rules</h1><script>alert('xss')</script><p onclick="steal()">Be nice.</p><a href="javascript:void(0)">Link</a>`
-	writeFile(t, filepath.Join(docsDir, "rules.html"), malicious)
+	writeFile(t, filepath.Join(docsDir, "rules.md"), source)
 
 	store, err := LoadDocuments(dir)
 	if err != nil {
@@ -178,22 +177,8 @@ func TestLoadDocumentsHTMLSanitisation(t *testing.T) {
 	if len(docs) != 1 {
 		t.Fatalf("len(Documents()) = %d, want 1", len(docs))
 	}
-
-	content := docs[0].Content
-	if contains(content, "<script>") {
-		t.Errorf("sanitised content still contains <script>: %s", content)
-	}
-	if contains(content, "onclick") {
-		t.Errorf("sanitised content still contains onclick: %s", content)
-	}
-	if contains(content, "javascript:") {
-		t.Errorf("sanitised content still contains javascript: URI: %s", content)
-	}
-	if !contains(content, "<h1>Rules</h1>") {
-		t.Errorf("sanitised content should preserve <h1>: %s", content)
-	}
-	if !contains(content, "Be nice.") {
-		t.Errorf("sanitised content should preserve text: %s", content)
+	if docs[0].Content != source {
+		t.Errorf("Content = %q, want %q", docs[0].Content, source)
 	}
 }
 
@@ -216,9 +201,9 @@ func TestLoadDocumentsInvalidSlug(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			manifest := `{"documents": [{"slug": "` + tt.slug + `", "title": "Test", "file": "test.html", "position": 0, "required": false}]}`
+			manifest := `{"documents": [{"slug": "` + tt.slug + `", "title": "Test", "file": "test.md", "position": 0, "required": false}]}`
 			writeFile(t, filepath.Join(dir, "manifest.json"), manifest)
-			writeFile(t, filepath.Join(docsDir, "test.html"), "<p>test</p>")
+			writeFile(t, filepath.Join(docsDir, "test.md"), "test")
 
 			_, err := LoadDocuments(dir)
 			if err == nil {
@@ -238,9 +223,9 @@ func TestLoadDocumentsEmptyTitle(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	manifest := `{"documents": [{"slug": "rules", "title": "   ", "file": "rules.html", "position": 0, "required": false}]}`
+	manifest := `{"documents": [{"slug": "rules", "title": "   ", "file": "rules.md", "position": 0, "required": false}]}`
 	writeFile(t, filepath.Join(dir, "manifest.json"), manifest)
-	writeFile(t, filepath.Join(docsDir, "rules.html"), "<p>rules</p>")
+	writeFile(t, filepath.Join(docsDir, "rules.md"), "rules")
 
 	_, err := LoadDocuments(dir)
 	if err == nil {
@@ -269,10 +254,10 @@ func TestToModels(t *testing.T) {
 	}
 
 	manifest := `{"documents": [
-		{"slug": "rules", "title": "Server Rules", "file": "rules.html", "position": 0, "required": true}
+		{"slug": "rules", "title": "Server Rules", "file": "rules.md", "position": 0, "required": true}
 	]}`
 	writeFile(t, filepath.Join(dir, "manifest.json"), manifest)
-	writeFile(t, filepath.Join(docsDir, "rules.html"), "<p>Be nice.</p>")
+	writeFile(t, filepath.Join(docsDir, "rules.md"), "Be nice.")
 
 	store, err := LoadDocuments(dir)
 	if err != nil {
@@ -302,12 +287,12 @@ func TestDocumentsSortedByPosition(t *testing.T) {
 	}
 
 	manifest := `{"documents": [
-		{"slug": "second", "title": "Second", "file": "b.html", "position": 5, "required": false},
-		{"slug": "first", "title": "First", "file": "a.html", "position": 1, "required": false}
+		{"slug": "second", "title": "Second", "file": "b.md", "position": 5, "required": false},
+		{"slug": "first", "title": "First", "file": "a.md", "position": 1, "required": false}
 	]}`
 	writeFile(t, filepath.Join(dir, "manifest.json"), manifest)
-	writeFile(t, filepath.Join(docsDir, "a.html"), "<p>a</p>")
-	writeFile(t, filepath.Join(docsDir, "b.html"), "<p>b</p>")
+	writeFile(t, filepath.Join(docsDir, "a.md"), "a")
+	writeFile(t, filepath.Join(docsDir, "b.md"), "b")
 
 	store, err := LoadDocuments(dir)
 	if err != nil {
@@ -328,17 +313,4 @@ func writeFile(t *testing.T, path, content string) {
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && containsHelper(s, substr)
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

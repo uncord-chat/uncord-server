@@ -74,11 +74,11 @@ func testDocumentStore(t *testing.T) *onboarding.DocumentStore {
 	if err := os.Mkdir(docsDir, 0o755); err != nil {
 		t.Fatalf("create documents dir: %v", err)
 	}
-	manifest := `{"documents":[{"slug":"rules","title":"Rules","file":"rules.html","position":1,"required":true}]}`
+	manifest := `{"documents":[{"slug":"rules","title":"Rules","file":"rules.md","position":1,"required":true}]}`
 	if err := os.WriteFile(filepath.Join(dir, "manifest.json"), []byte(manifest), 0o644); err != nil {
 		t.Fatalf("write manifest: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(docsDir, "rules.html"), []byte("<p>Follow the rules.</p>"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(docsDir, "rules.md"), []byte("Follow the rules."), 0o644); err != nil {
 		t.Fatalf("write document: %v", err)
 	}
 	store, err := onboarding.LoadDocuments(dir)

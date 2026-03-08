@@ -3,14 +3,14 @@
     {
       "slug": "rules",
       "title": "Server Rules",
-      "file": "rules.html",
+      "file": "rules.md",
       "position": 0,
       "required": true
     },
     {
       "slug": "code-of-conduct",
       "title": "Code of Conduct",
-      "file": "code-of-conduct.html",
+      "file": "code-of-conduct.md",
       "position": 1,
       "required": false
     }
