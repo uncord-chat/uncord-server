@@ -46,14 +46,20 @@ const csrfTokenBytes = 32
 // scoped to /api so it is sent with every API request. The refresh cookie is scoped to the refresh endpoint to prevent
 // it from being sent unnecessarily. The CSRF cookie uses Path=/ so client-side JS can read it via document.cookie for
 // the double-submit header.
+//
+// The access and CSRF cookies use JWTRefreshTTL for MaxAge rather than JWTAccessTTL. The JWT exp claim still controls
+// token validity; the longer cookie lifetime ensures the browser keeps sending expired access tokens instead of
+// silently dropping them. This allows the RequireAuth middleware to distinguish an expired token (TOKEN_EXPIRED) from
+// a missing session (UNAUTHORISED), giving clients the signal they need to attempt a refresh or abandon the session.
 func SetAuthCookies(c fiber.Ctx, cfg *config.Config, accessToken, refreshToken string) {
 	secure := !cfg.IsDevelopment()
+	cookieMaxAge := int(cfg.JWTRefreshTTL / time.Second)
 
 	c.Cookie(&fiber.Cookie{
 		Name:     AccessCookieName(cfg),
 		Value:    accessToken,
 		Path:     "/api",
-		MaxAge:   int(cfg.JWTAccessTTL / time.Second),
+		MaxAge:   cookieMaxAge,
 		HTTPOnly: true,
 		Secure:   secure,
 		SameSite: fiber.CookieSameSiteLaxMode,
@@ -74,7 +80,7 @@ func SetAuthCookies(c fiber.Ctx, cfg *config.Config, accessToken, refreshToken s
 		Name:     CSRFCookieName(cfg),
 		Value:    csrfToken,
 		Path:     "/",
-		MaxAge:   int(cfg.JWTAccessTTL / time.Second),
+		MaxAge:   cookieMaxAge,
 		HTTPOnly: false,
 		Secure:   secure,
 		SameSite: fiber.CookieSameSiteLaxMode,

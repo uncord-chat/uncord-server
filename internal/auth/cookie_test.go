@@ -96,8 +96,8 @@ func TestSetAuthCookiesProduction(t *testing.T) {
 	if access.Path != "/api" {
 		t.Errorf("access cookie path = %q, want %q", access.Path, "/api")
 	}
-	if access.MaxAge != int(cfg.JWTAccessTTL/time.Second) {
-		t.Errorf("access cookie MaxAge = %d, want %d", access.MaxAge, int(cfg.JWTAccessTTL/time.Second))
+	if access.MaxAge != int(cfg.JWTRefreshTTL/time.Second) {
+		t.Errorf("access cookie MaxAge = %d, want %d", access.MaxAge, int(cfg.JWTRefreshTTL/time.Second))
 	}
 
 	refresh := cookieMap["__Host-refresh_token"]
