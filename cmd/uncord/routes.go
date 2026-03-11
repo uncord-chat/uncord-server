@@ -27,6 +27,19 @@ func (s *server) authLimiter() fiber.Handler {
 	})
 }
 
+// gatewayTicketLimiter returns a per-user rate limiter for the gateway-ticket
+// endpoint. This is separate from authLimiter because gateway tickets are
+// requested on every page load (right after a session refresh), and sharing
+// the strict auth bucket would cause 429s during normal development.
+func (s *server) gatewayTicketLimiter() fiber.Handler {
+	return limiter.New(limiter.Config{
+		Max:          s.cfg.RateLimitTicketCount,
+		Expiration:   time.Duration(s.cfg.RateLimitTicketWindowSeconds) * time.Second,
+		KeyGenerator: userKeyGenerator,
+		LimitReached: rateLimitReached,
+	})
+}
+
 // uploadLimiter returns a per-user rate limiter scoped to file upload endpoints.
 func (s *server) uploadLimiter() fiber.Handler {
 	return limiter.New(limiter.Config{
@@ -91,7 +104,11 @@ func (s *server) registerRoutes(app *fiber.App) {
 	authGroup.Post("/mfa/verify", authHandler.MFAVerify)
 	authGroup.Post("/verify-password", requireAuth, requireCSRF, authHandler.VerifyPassword)
 	authGroup.Post("/logout", requireAuth, requireCSRF, authHandler.Logout)
-	authGroup.Post("/gateway-ticket", requireAuth, requireCSRF, authHandler.GatewayTicket)
+
+	// Gateway ticket uses its own rate limiter (per-user, separate from the
+	// strict auth bucket) because it fires on every page load right after
+	// session refresh.
+	app.Post("/api/v1/auth/gateway-ticket", s.gatewayTicketLimiter(), requireAuth, requireCSRF, authHandler.GatewayTicket)
 
 	// === USER PROFILE ROUTES ===
 

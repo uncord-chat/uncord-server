@@ -105,6 +105,8 @@ type Config struct {
 	RateLimitMsgWindowSeconds       int // Per-channel message rate limit window in seconds. Default: 5.
 	RateLimitMsgGlobalCount         int // Global message rate limit per user across all channels. Default: 30.
 	RateLimitMsgGlobalWindowSeconds int // Global message rate limit window in seconds. Default: 60.
+	RateLimitTicketCount            int // Gateway ticket rate limit per user. Default: 10.
+	RateLimitTicketWindowSeconds    int // Gateway ticket rate limit window in seconds. Default: 60.
 
 	// Upload Limits
 	MaxUploadSizeMB    int
@@ -239,6 +241,8 @@ func Load() (*Config, error) {
 		RateLimitMsgWindowSeconds:       p.int("RATE_LIMIT_MSG_WINDOW_SECONDS", 5),
 		RateLimitMsgGlobalCount:         p.int("RATE_LIMIT_MSG_GLOBAL_COUNT", 30),
 		RateLimitMsgGlobalWindowSeconds: p.int("RATE_LIMIT_MSG_GLOBAL_WINDOW_SECONDS", 60),
+		RateLimitTicketCount:            p.int("RATE_LIMIT_TICKET_COUNT", 10),
+		RateLimitTicketWindowSeconds:    p.int("RATE_LIMIT_TICKET_WINDOW_SECONDS", 60),
 
 		MaxUploadSizeMB:    p.int("MAX_UPLOAD_SIZE_MB", 100),
 		MaxAvatarSizeMB:    p.int("MAX_AVATAR_SIZE_MB", 8),
