@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -67,7 +68,7 @@ func TestUnknownRouteReturns404(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			resp, err := app.Test(httptest.NewRequest(http.MethodGet, tt.path, nil))
+			resp, err := app.Test(httptest.NewRequestWithContext(context.Background(), http.MethodGet, tt.path, nil))
 			if err != nil {
 				t.Fatalf("app.Test() error = %v", err)
 			}
@@ -126,7 +127,7 @@ func TestErrorHandler_NonFiberError(t *testing.T) {
 		return errors.New("database connection lost")
 	})
 
-	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/boom", nil))
+	resp, err := app.Test(httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/boom", nil))
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
 	}

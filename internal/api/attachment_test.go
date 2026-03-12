@@ -78,7 +78,7 @@ func multipartFileReq(t *testing.T, url, filename string, content []byte) *http.
 		t.Fatalf("close multipart writer: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, url, &buf)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, url, &buf)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	return req
 }
@@ -213,7 +213,7 @@ func TestUpload_MissingFile(t *testing.T) {
 	userID := uuid.New()
 	app := testUploadApp(t, repo, storage, 10*1024*1024, userID)
 
-	req := httptest.NewRequest(http.MethodPost, "/channels/"+channelID.String()+"/attachments", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/channels/"+channelID.String()+"/attachments", nil)
 	req.Header.Set("Content-Type", "multipart/form-data")
 
 	resp, err := app.Test(req, testTimeout)

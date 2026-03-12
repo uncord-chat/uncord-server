@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,7 +17,7 @@ func TestUpgradeRejectsNonWebSocket(t *testing.T) {
 	app := fiber.New()
 	app.Get("/api/v1/gateway", handler.Upgrade)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/gateway", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/gateway", nil)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)

@@ -298,7 +298,7 @@ func parseSuccess(t *testing.T, body []byte) successEnvelope {
 }
 
 func jsonReq(method, url, body string) *http.Request {
-	req := httptest.NewRequest(method, url, strings.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), method, url, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	return req
 }

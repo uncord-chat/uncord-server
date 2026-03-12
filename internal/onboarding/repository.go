@@ -94,7 +94,7 @@ func (r *PGRepository) RecordAcceptances(ctx context.Context, userID uuid.UUID, 
 	}
 
 	results := r.db.SendBatch(ctx, batch)
-	defer results.Close()
+	defer func() { _ = results.Close() }()
 
 	for range slugs {
 		if _, err := results.Exec(); err != nil {

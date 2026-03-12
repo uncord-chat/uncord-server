@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"image"
 	"image/color" //nolint:misspell // stdlib package name
@@ -53,7 +54,7 @@ func multipartPutReq(t *testing.T, url, filename string, content []byte) *http.R
 		t.Fatalf("close multipart writer: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPut, url, &buf)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, url, &buf)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	return req
 }
@@ -205,7 +206,7 @@ func TestUploadUserAvatar_MissingFile(t *testing.T) {
 	storage := newFakeStorageForUpload()
 	app := testUserAvatarApp(t, repo, storage, u.ID)
 
-	req := httptest.NewRequest(http.MethodPut, "/avatar", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/avatar", nil)
 	req.Header.Set("Content-Type", "multipart/form-data")
 
 	resp := doReq(t, app, req)

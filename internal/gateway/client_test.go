@@ -67,7 +67,9 @@ func TestIdentifyTimeout(t *testing.T) {
 	}
 
 	// Do NOT send Identify. Wait for the server to close the connection due to the identify timeout.
-	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	if err := conn.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatalf("set read deadline: %v", err)
+	}
 	_, _, err = conn.ReadMessage()
 	if err == nil {
 		t.Fatal("expected connection to be closed by identify timeout, but read succeeded")
