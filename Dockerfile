@@ -1,5 +1,8 @@
-# Build stage
-FROM golang:1.26-alpine AS build
+# Build stage: always runs on the host platform, cross-compiles via GOARCH.
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
+
+ARG TARGETARCH
+ARG VERSION=dev
 
 RUN apk add --no-cache git ca-certificates
 
@@ -25,8 +28,7 @@ RUN go mod download
 
 COPY . .
 
-ARG VERSION=dev
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath \
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -trimpath \
     -ldflags="-s -w -X main.version=${VERSION} -X main.commit=$(git rev-parse --short HEAD) -X main.date=$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
     -o /bin/uncord ./cmd/uncord
 
