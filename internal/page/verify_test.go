@@ -254,7 +254,7 @@ func TestVerifyEmail_MissingToken(t *testing.T) {
 	t.Parallel()
 	app := testVerifyHandler(t)
 
-	resp := doReq(t, app, httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/verify-email", nil))
+	resp := doReq(t, app, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/verify-email", nil))
 	body := readBody(t, resp)
 
 	if resp.StatusCode != fiber.StatusBadRequest {
@@ -273,7 +273,7 @@ func TestVerifyEmail_InvalidToken(t *testing.T) {
 	t.Parallel()
 	app := testVerifyHandler(t)
 
-	resp := doReq(t, app, httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/verify-email?token=bad-token", nil))
+	resp := doReq(t, app, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/verify-email?token=bad-token", nil))
 	body := readBody(t, resp)
 
 	if resp.StatusCode != fiber.StatusBadRequest {
@@ -292,7 +292,7 @@ func TestVerifyEmail_Success(t *testing.T) {
 	t.Parallel()
 	app := testVerifyHandler(t)
 
-	resp := doReq(t, app, httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/verify-email?token=valid-token", nil))
+	resp := doReq(t, app, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/verify-email?token=valid-token", nil))
 	body := readBody(t, resp)
 
 	if resp.StatusCode != fiber.StatusOK {

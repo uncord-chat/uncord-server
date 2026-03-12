@@ -221,7 +221,7 @@ func TestParseUUIDParam(t *testing.T) {
 			return Success(c, map[string]string{"id": id.String()})
 		})
 
-		req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/items/550e8400-e29b-41d4-a716-446655440000", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/items/550e8400-e29b-41d4-a716-446655440000", nil)
 		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("app.Test() error: %v", err)
@@ -244,7 +244,7 @@ func TestParseUUIDParam(t *testing.T) {
 			return Success(c, map[string]string{"id": id.String()})
 		})
 
-		req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/items/not-a-uuid", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/items/not-a-uuid", nil)
 		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("app.Test() error: %v", err)
@@ -283,7 +283,7 @@ func TestParseIntQuery(t *testing.T) {
 			return Success(c, map[string]int{"limit": v})
 		})
 
-		req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/items", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/items", nil)
 		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("app.Test() error: %v", err)
@@ -316,7 +316,7 @@ func TestParseIntQuery(t *testing.T) {
 			return Success(c, map[string]int{"limit": v})
 		})
 
-		req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/items?limit=25", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/items?limit=25", nil)
 		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("app.Test() error: %v", err)
@@ -349,7 +349,7 @@ func TestParseIntQuery(t *testing.T) {
 			return Success(c, map[string]int{"limit": v})
 		})
 
-		req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/items?limit=abc", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/items?limit=abc", nil)
 		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("app.Test() error: %v", err)
@@ -378,7 +378,7 @@ func TestParseIntQuery(t *testing.T) {
 func doRequest(t *testing.T, app *fiber.App, path string) *http.Response {
 	t.Helper()
 
-	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, path, nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, path, nil)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("app.Test() error: %v", err)
