@@ -7,9 +7,11 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
+	"github.com/uncord-chat/uncord-protocol/events"
 	"github.com/uncord-chat/uncord-protocol/models"
 
 	"github.com/uncord-chat/uncord-server/internal/audit"
+	"github.com/uncord-chat/uncord-server/internal/gateway"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 	"github.com/uncord-chat/uncord-server/internal/server"
 )
@@ -17,13 +19,14 @@ import (
 // ServerHandler serves server configuration endpoints.
 type ServerHandler struct {
 	servers     server.Repository
+	gateway     *gateway.Publisher
 	auditLogger *audit.Logger
 	log         zerolog.Logger
 }
 
 // NewServerHandler creates a new server handler.
-func NewServerHandler(servers server.Repository, auditLogger *audit.Logger, logger zerolog.Logger) *ServerHandler {
-	return &ServerHandler{servers: servers, auditLogger: auditLogger, log: logger}
+func NewServerHandler(servers server.Repository, gw *gateway.Publisher, auditLogger *audit.Logger, logger zerolog.Logger) *ServerHandler {
+	return &ServerHandler{servers: servers, gateway: gw, auditLogger: auditLogger, log: logger}
 }
 
 // Get handles GET /api/v1/server.
@@ -84,7 +87,12 @@ func (h *ServerHandler) Update(c fiber.Ctx) error {
 		})
 	}
 
-	return httputil.Success(c, cfg.ToModel())
+	result := cfg.ToModel()
+	if h.gateway != nil {
+		h.gateway.Enqueue(events.ServerUpdate, result)
+	}
+
+	return httputil.Success(c, result)
 }
 
 // mapServerError converts server-layer errors to appropriate HTTP responses.

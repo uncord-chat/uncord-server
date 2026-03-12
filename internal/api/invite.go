@@ -9,9 +9,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
+	"github.com/uncord-chat/uncord-protocol/events"
 	"github.com/uncord-chat/uncord-protocol/models"
 
 	"github.com/uncord-chat/uncord-server/internal/audit"
+	"github.com/uncord-chat/uncord-server/internal/gateway"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 	"github.com/uncord-chat/uncord-server/internal/invite"
 	"github.com/uncord-chat/uncord-server/internal/member"
@@ -25,13 +27,14 @@ type InviteHandler struct {
 	onboarding  onboarding.Repository
 	members     member.Repository
 	users       user.Repository
+	gateway     *gateway.Publisher
 	auditLogger *audit.Logger
 	log         zerolog.Logger
 }
 
 // NewInviteHandler creates a new invite handler.
-func NewInviteHandler(invites invite.Repository, onboardingRepo onboarding.Repository, members member.Repository, users user.Repository, auditLogger *audit.Logger, logger zerolog.Logger) *InviteHandler {
-	return &InviteHandler{invites: invites, onboarding: onboardingRepo, members: members, users: users, auditLogger: auditLogger, log: logger}
+func NewInviteHandler(invites invite.Repository, onboardingRepo onboarding.Repository, members member.Repository, users user.Repository, gw *gateway.Publisher, auditLogger *audit.Logger, logger zerolog.Logger) *InviteHandler {
+	return &InviteHandler{invites: invites, onboarding: onboardingRepo, members: members, users: users, gateway: gw, auditLogger: auditLogger, log: logger}
 }
 
 // CreateInvite handles POST /api/v1/server/invites.
@@ -74,7 +77,12 @@ func (h *InviteHandler) CreateInvite(c fiber.Ctx) error {
 		})
 	}
 
-	return httputil.SuccessStatus(c, fiber.StatusCreated, toInviteModel(inv))
+	result := toInviteModel(inv)
+	if h.gateway != nil {
+		h.gateway.Enqueue(events.InviteCreate, result)
+	}
+
+	return httputil.SuccessStatus(c, fiber.StatusCreated, result)
 }
 
 // ListInvites handles GET /api/v1/server/invites.
@@ -125,6 +133,10 @@ func (h *InviteHandler) DeleteInvite(c fiber.Ctx) error {
 			TargetType: audit.Ptr("invite"),
 			Changes:    audit.MarshalChanges(map[string]string{"code": code}),
 		})
+	}
+
+	if h.gateway != nil {
+		h.gateway.Enqueue(events.InviteDelete, models.InviteDeleteData{Code: code})
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)
@@ -193,7 +205,15 @@ func (h *InviteHandler) JoinViaInvite(c fiber.Ctx) error {
 
 	m, err := h.members.CreatePending(c, userID)
 	if err != nil {
-		return h.mapInviteError(c, err)
+		if !errors.Is(err, member.ErrAlreadyMember) {
+			return h.mapInviteError(c, err)
+		}
+		existing, fetchErr := h.members.GetByUserIDAnyStatus(c, userID)
+		if fetchErr != nil {
+			h.log.Error().Err(fetchErr).Str("handler", "invite").Msg("fetch existing member after duplicate join failed")
+			return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
+		}
+		return httputil.Success(c, existing.ToModel())
 	}
 
 	return httputil.Success(c, m.ToModel())

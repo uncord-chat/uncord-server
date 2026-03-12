@@ -9,7 +9,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	apierrors "github.com/uncord-chat/uncord-protocol/errors"
+	"github.com/uncord-chat/uncord-protocol/events"
 
+	"github.com/uncord-chat/uncord-server/internal/gateway"
 	"github.com/uncord-chat/uncord-server/internal/httputil"
 	"github.com/uncord-chat/uncord-server/internal/media"
 	"github.com/uncord-chat/uncord-server/internal/server"
@@ -21,6 +23,7 @@ type ImageUploadHandler struct {
 	users          user.Repository
 	servers        server.Repository
 	storage        media.StorageProvider
+	gateway        *gateway.Publisher
 	maxAvatarBytes int64
 	maxAvatarDim   int
 	maxBannerW     int
@@ -33,6 +36,7 @@ func NewImageUploadHandler(
 	users user.Repository,
 	servers server.Repository,
 	storage media.StorageProvider,
+	gw *gateway.Publisher,
 	maxAvatarBytes int64,
 	maxAvatarDim int,
 	maxBannerW, maxBannerH int,
@@ -42,6 +46,7 @@ func NewImageUploadHandler(
 		users:          users,
 		servers:        servers,
 		storage:        storage,
+		gateway:        gw,
 		maxAvatarBytes: maxAvatarBytes,
 		maxAvatarDim:   maxAvatarDim,
 		maxBannerW:     maxBannerW,
@@ -216,7 +221,12 @@ func (h *ImageUploadHandler) UploadServerIcon(c fiber.Ctx) error {
 		}
 	}
 
-	return httputil.Success(c, updated.ToModel())
+	result := updated.ToModel()
+	if h.gateway != nil {
+		h.gateway.Enqueue(events.ServerUpdate, result)
+	}
+
+	return httputil.Success(c, result)
 }
 
 // DeleteServerIcon handles DELETE /api/v1/server/icon.
@@ -239,7 +249,12 @@ func (h *ImageUploadHandler) DeleteServerIcon(c fiber.Ctx) error {
 		h.log.Warn().Err(delErr).Str("key", oldKey).Msg("Failed to delete server icon file")
 	}
 
-	return httputil.Success(c, updated.ToModel())
+	result := updated.ToModel()
+	if h.gateway != nil {
+		h.gateway.Enqueue(events.ServerUpdate, result)
+	}
+
+	return httputil.Success(c, result)
 }
 
 // UploadServerBanner handles PUT /api/v1/server/banner.
@@ -273,7 +288,12 @@ func (h *ImageUploadHandler) UploadServerBanner(c fiber.Ctx) error {
 		}
 	}
 
-	return httputil.Success(c, updated.ToModel())
+	result := updated.ToModel()
+	if h.gateway != nil {
+		h.gateway.Enqueue(events.ServerUpdate, result)
+	}
+
+	return httputil.Success(c, result)
 }
 
 // DeleteServerBanner handles DELETE /api/v1/server/banner.
@@ -296,7 +316,12 @@ func (h *ImageUploadHandler) DeleteServerBanner(c fiber.Ctx) error {
 		h.log.Warn().Err(delErr).Str("key", oldKey).Msg("Failed to delete server banner file")
 	}
 
-	return httputil.Success(c, updated.ToModel())
+	result := updated.ToModel()
+	if h.gateway != nil {
+		h.gateway.Enqueue(events.ServerUpdate, result)
+	}
+
+	return httputil.Success(c, result)
 }
 
 // readAndResize extracts the multipart file, validates size and content type, decodes and resizes the image, and

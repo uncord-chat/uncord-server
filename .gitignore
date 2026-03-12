@@ -24,3 +24,6 @@ Thumbs.db
 
 # Docker volumes
 media_data/
+
+# Local overrides
+docker-compose.override.yml

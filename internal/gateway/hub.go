@@ -271,6 +271,13 @@ func (h *Hub) handleIdentify(client *Client, token string) {
 		return
 	}
 
+	// Set presence before assembling READY so the connecting user's own status is included in the presence snapshot.
+	if h.presence != nil {
+		if pErr := h.presence.Set(ctx, userID, presence.StatusOnline); pErr != nil {
+			h.log.Warn().Err(pErr).Stringer("user_id", userID).Msg("Failed to set initial presence")
+		}
+	}
+
 	readyData, err := h.assembleReady(ctx, userID)
 	if err != nil {
 		h.log.Error().Err(err).Stringer("user_id", userID).Msg("Failed to assemble READY payload")
@@ -309,12 +316,9 @@ func (h *Hub) handleIdentify(client *Client, token string) {
 	}
 	client.enqueue(frame)
 
+	// Broadcast the presence change to other connected clients.
 	if h.presence != nil {
-		if pErr := h.presence.Set(ctx, userID, presence.StatusOnline); pErr != nil {
-			h.log.Warn().Err(pErr).Stringer("user_id", userID).Msg("Failed to set initial presence")
-		} else {
-			h.publishPresence(ctx, userID, presence.StatusOnline)
-		}
+		h.publishPresence(ctx, userID, presence.StatusOnline)
 	}
 
 	h.log.Info().Stringer("user_id", userID).Str("session_id", sessionID).Msg("Client identified")

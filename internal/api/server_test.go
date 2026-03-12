@@ -93,7 +93,7 @@ func seedServerConfig() *fakeServerRepo {
 
 func testServerApp(t *testing.T, repo server.Repository, userID uuid.UUID) *fiber.App {
 	t.Helper()
-	handler := NewServerHandler(repo, nil, zerolog.Nop())
+	handler := NewServerHandler(repo, nil, nil, zerolog.Nop())
 	app := fiber.New()
 
 	app.Use(fakeAuth(userID))
@@ -105,7 +105,7 @@ func testServerApp(t *testing.T, repo server.Repository, userID uuid.UUID) *fibe
 
 func testPublicServerInfoApp(t *testing.T, repo server.Repository) *fiber.App {
 	t.Helper()
-	handler := NewServerHandler(repo, nil, zerolog.Nop())
+	handler := NewServerHandler(repo, nil, nil, zerolog.Nop())
 	app := fiber.New()
 	app.Get("/", handler.GetPublicInfo)
 	return app

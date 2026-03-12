@@ -56,6 +56,7 @@ import (
 	"github.com/uncord-chat/uncord-server/internal/readstate"
 	"github.com/uncord-chat/uncord-server/internal/role"
 	servercfg "github.com/uncord-chat/uncord-server/internal/server"
+	"github.com/uncord-chat/uncord-server/internal/settingsync"
 	"github.com/uncord-chat/uncord-server/internal/thread"
 	"github.com/uncord-chat/uncord-server/internal/typesense"
 	"github.com/uncord-chat/uncord-server/internal/user"
@@ -101,6 +102,7 @@ type server struct {
 	gatewayPublisher *gateway.Publisher
 	gatewayHub       *gateway.Hub
 	presenceStore    *presence.Store
+	settingSyncRepo  settingsync.Repository
 	auditRepo        audit.Repository
 	auditLogger      *audit.Logger
 	verifyPageTmpl   *template.Template
@@ -314,6 +316,7 @@ func run() error {
 	typesenseIndexer := typesense.NewIndexer(cfg.TypesenseURL, cfg.TypesenseAPIKey.Expose(), cfg.TypesenseTimeout)
 	gatewayPub := gateway.NewPublisher(rdb, log.Logger, cfg.GatewayPublishWorkers, cfg.GatewayPublishQueueSize, cfg.GatewayPublishTimeout)
 	presenceStore := presence.NewStore(rdb)
+	settingSyncRepo := settingsync.NewPGRepository(db)
 	auditRepo := audit.NewPGRepository(db)
 	auditLogger := audit.NewLogger(auditRepo, log.Logger)
 	startPurgeGoroutine(attachmentRepo, storage)
@@ -388,6 +391,7 @@ func run() error {
 		gatewayPublisher: gatewayPub,
 		gatewayHub:       gatewayHub,
 		presenceStore:    presenceStore,
+		settingSyncRepo:  settingSyncRepo,
 		auditRepo:        auditRepo,
 		auditLogger:      auditLogger,
 		verifyPageTmpl:   verifyPageTmpl,

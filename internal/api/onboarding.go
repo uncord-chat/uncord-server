@@ -276,7 +276,17 @@ func (h *OnboardingHandler) JoinServer(c fiber.Ctx) error {
 
 	m, err := h.members.CreatePending(c, userID)
 	if err != nil {
-		return h.mapOnboardingError(c, err)
+		if !errors.Is(err, member.ErrAlreadyMember) {
+			return h.mapOnboardingError(c, err)
+		}
+		// Idempotent: the user already has a membership record (active or pending). Return it instead of a conflict
+		// error. This eliminates spurious 409 responses caused by concurrent onboarding calls racing to join.
+		existing, fetchErr := h.members.GetByUserIDAnyStatus(c, userID)
+		if fetchErr != nil {
+			h.log.Error().Err(fetchErr).Str("handler", "onboarding").Msg("fetch existing member after duplicate join failed")
+			return httputil.Fail(c, fiber.StatusInternalServerError, apierrors.InternalError, "An internal error occurred")
+		}
+		return httputil.Success(c, existing.ToModel())
 	}
 
 	return httputil.Success(c, m.ToModel())

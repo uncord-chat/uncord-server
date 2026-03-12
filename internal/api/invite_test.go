@@ -319,7 +319,7 @@ func seedInvite(repo *fakeInviteRepo, code string, channelID uuid.UUID) *invite.
 
 func testInviteApp(t *testing.T, inviteRepo *fakeInviteRepo, onboardingRepo *fakeInviteOnboardingRepo, memberRepo *fakeInviteMemberRepo, userRepo *fakeInviteUserRepo, callerID uuid.UUID) *fiber.App {
 	t.Helper()
-	handler := NewInviteHandler(inviteRepo, onboardingRepo, memberRepo, userRepo, nil, zerolog.Nop())
+	handler := NewInviteHandler(inviteRepo, onboardingRepo, memberRepo, userRepo, nil, nil, zerolog.Nop())
 	app := fiber.New()
 	app.Use(fakeAuth(callerID))
 
@@ -726,14 +726,10 @@ func TestJoinViaInvite_AlreadyMember(t *testing.T) {
 	app := testInviteApp(t, repo, newFakeInviteOnboardingRepo(), memberRepo, userRepo, callerID)
 
 	resp := doReq(t, app, jsonReq(http.MethodPost, "/invites/abc123/join", ""))
-	body := readBody(t, resp)
 
-	if resp.StatusCode != fiber.StatusConflict {
-		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusConflict)
-	}
-	env := parseError(t, body)
-	if env.Error.Code != string(apierrors.AlreadyMember) {
-		t.Errorf("error code = %q, want %q", env.Error.Code, apierrors.AlreadyMember)
+	// Idempotent: returns the existing membership instead of 409.
+	if resp.StatusCode != fiber.StatusOK {
+		t.Errorf("status = %d, want %d", resp.StatusCode, fiber.StatusOK)
 	}
 }
 

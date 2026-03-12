@@ -122,7 +122,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 
 	// User image upload/delete routes (authenticated + verified email)
 	imageHandler := api.NewImageUploadHandler(
-		s.userRepo, s.serverRepo, s.storage,
+		s.userRepo, s.serverRepo, s.storage, s.gatewayPublisher,
 		s.cfg.MaxAvatarSizeBytes(), s.cfg.MaxAvatarDimension,
 		s.cfg.MaxBannerWidth, s.cfg.MaxBannerHeight, log.Logger)
 	userUploadLimiter := s.uploadLimiter()
@@ -130,6 +130,14 @@ func (s *server) registerRoutes(app *fiber.App) {
 	userGroup.Delete("/@me/avatar", imageHandler.DeleteUserAvatar)
 	userGroup.Put("/@me/banner", userUploadLimiter, imageHandler.UploadUserBanner)
 	userGroup.Delete("/@me/banner", imageHandler.DeleteUserBanner)
+
+	// === SETTINGS SYNC ROUTES ===
+
+	// Encrypted settings sync (under /api/v1/users/@me/synced-settings, authenticated + verified)
+	settingSyncHandler := api.NewSettingSyncHandler(s.settingSyncRepo, log.Logger)
+	userGroup.Get("/@me/synced-settings", settingSyncHandler.Get)
+	userGroup.Put("/@me/synced-settings", settingSyncHandler.Put)
+	userGroup.Delete("/@me/synced-settings", settingSyncHandler.Delete)
 
 	// === MFA ROUTES ===
 
@@ -174,7 +182,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 	// === SERVER CONFIG ROUTES ===
 
 	// Server config routes (authenticated + verified email)
-	serverHandler := api.NewServerHandler(s.serverRepo, s.auditLogger, log.Logger)
+	serverHandler := api.NewServerHandler(s.serverRepo, s.gatewayPublisher, s.auditLogger, log.Logger)
 	app.Get("/api/v1/server/info", serverHandler.GetPublicInfo)
 	serverUploadLimiter := s.uploadLimiter()
 	serverGroup := app.Group("/api/v1/server", requireAuth, requireCSRF, requireVerifiedEmail)
@@ -398,7 +406,7 @@ func (s *server) registerRoutes(app *fiber.App) {
 	// === INVITE ROUTES ===
 
 	// Invite management routes (under /api/v1/server, require active membership)
-	inviteHandler := api.NewInviteHandler(s.inviteRepo, s.onboardingRepo, s.memberRepo, s.userRepo, s.auditLogger, log.Logger)
+	inviteHandler := api.NewInviteHandler(s.inviteRepo, s.onboardingRepo, s.memberRepo, s.userRepo, s.gatewayPublisher, s.auditLogger, log.Logger)
 	serverGroup.Post("/invites", requireActiveMember,
 		permission.RequireServerPermission(s.permResolver, permissions.CreateInvites),
 		inviteHandler.CreateInvite)

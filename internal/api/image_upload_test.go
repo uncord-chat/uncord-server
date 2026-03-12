@@ -75,7 +75,7 @@ func seedImageUser(repo *fakeRepo) *user.User {
 func testUserAvatarApp(t *testing.T, repo user.Repository, storage *fakeStorageForUpload, userID uuid.UUID) *fiber.App {
 	t.Helper()
 	srvRepo := &fakeServerRepo{cfg: seedServerConfig().cfg}
-	handler := NewImageUploadHandler(repo, srvRepo, storage, 10*1024*1024, 1080, 1920, 480, zerolog.Nop())
+	handler := NewImageUploadHandler(repo, srvRepo, storage, nil, 10*1024*1024, 1080, 1920, 480, zerolog.Nop())
 	app := fiber.New(fiber.Config{BodyLimit: 11 * 1024 * 1024})
 	app.Use(fakeAuth(userID))
 	app.Put("/avatar", handler.UploadUserAvatar)
@@ -88,7 +88,7 @@ func testUserAvatarApp(t *testing.T, repo user.Repository, storage *fakeStorageF
 func testServerImageApp(t *testing.T, srvRepo server.Repository, storage *fakeStorageForUpload, userID uuid.UUID) *fiber.App {
 	t.Helper()
 	userRepo := newFakeRepo()
-	handler := NewImageUploadHandler(userRepo, srvRepo, storage, 10*1024*1024, 1080, 1920, 480, zerolog.Nop())
+	handler := NewImageUploadHandler(userRepo, srvRepo, storage, nil, 10*1024*1024, 1080, 1920, 480, zerolog.Nop())
 	app := fiber.New(fiber.Config{BodyLimit: 11 * 1024 * 1024})
 	app.Use(fakeAuth(userID))
 	app.Put("/icon", handler.UploadServerIcon)
@@ -178,7 +178,7 @@ func TestUploadUserAvatar_FileTooLarge(t *testing.T) {
 	storage := newFakeStorageForUpload()
 
 	srvRepo := &fakeServerRepo{cfg: seedServerConfig().cfg}
-	handler := NewImageUploadHandler(repo, srvRepo, storage, 100, 1080, 1920, 480, zerolog.Nop())
+	handler := NewImageUploadHandler(repo, srvRepo, storage, nil, 100, 1080, 1920, 480, zerolog.Nop())
 	app := fiber.New(fiber.Config{BodyLimit: 1024 * 1024})
 	app.Use(fakeAuth(u.ID))
 	app.Put("/avatar", handler.UploadUserAvatar)

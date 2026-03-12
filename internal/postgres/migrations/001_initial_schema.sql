@@ -357,6 +357,24 @@ CREATE TRIGGER set_updated_at BEFORE UPDATE ON user_devices
 CREATE UNIQUE INDEX idx_user_devices_user_device ON user_devices (user_id, device_id);
 CREATE INDEX idx_user_devices_user ON user_devices (user_id);
 
+-- User synced settings: stores an encrypted blob of the user's synced settings. The server treats the blob as opaque;
+-- encryption and decryption are performed client-side.
+CREATE TABLE user_synced_settings (
+    user_id        UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    encrypted_blob BYTEA        NOT NULL,
+    salt           BYTEA        NOT NULL,
+    nonce          BYTEA        NOT NULL,
+    blob_version   INTEGER      NOT NULL DEFAULT 1,
+    updated_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_synced_settings_salt_length CHECK (octet_length(salt) = 16),
+    CONSTRAINT chk_synced_settings_nonce_length CHECK (octet_length(nonce) = 12),
+    CONSTRAINT chk_synced_settings_blob_max_size CHECK (octet_length(encrypted_blob) <= 65536)
+);
+
+CREATE TRIGGER set_user_synced_settings_updated_at
+    BEFORE UPDATE ON user_synced_settings
+    FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
+
 -- E2EE: Signed Pre-Keys
 
 CREATE TABLE e2ee_signed_pre_keys (
@@ -693,6 +711,7 @@ DROP TABLE IF EXISTS custom_emoji CASCADE;
 DROP TABLE IF EXISTS dm_message_keys CASCADE;
 DROP TABLE IF EXISTS e2ee_one_time_pre_keys CASCADE;
 DROP TABLE IF EXISTS e2ee_signed_pre_keys CASCADE;
+DROP TABLE IF EXISTS user_synced_settings CASCADE;
 DROP TABLE IF EXISTS user_devices CASCADE;
 DROP TABLE IF EXISTS dm_participants CASCADE;
 DROP TABLE IF EXISTS dm_channels CASCADE;
