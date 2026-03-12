@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -41,7 +42,7 @@ func TestStartTyping_Success(t *testing.T) {
 	app := testTypingApp(t, userID)
 
 	channelID := uuid.New()
-	req := httptest.NewRequest(http.MethodPost, "/channels/"+channelID.String()+"/typing", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodPost, "/channels/"+channelID.String()+"/typing", nil)
 	req.Header.Set("Content-Type", "application/json")
 	resp := doReq(t, app, req)
 
@@ -55,7 +56,7 @@ func TestStartTyping_InvalidChannelID(t *testing.T) {
 	userID := uuid.New()
 	app := testTypingApp(t, userID)
 
-	req := httptest.NewRequest(http.MethodPost, "/channels/not-a-uuid/typing", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodPost, "/channels/not-a-uuid/typing", nil)
 	req.Header.Set("Content-Type", "application/json")
 	resp := doReq(t, app, req)
 
@@ -69,7 +70,7 @@ func TestStartTyping_Unauthenticated(t *testing.T) {
 	app := testTypingApp(t, uuid.Nil)
 
 	channelID := uuid.New()
-	req := httptest.NewRequest(http.MethodPost, "/channels/"+channelID.String()+"/typing", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodPost, "/channels/"+channelID.String()+"/typing", nil)
 	req.Header.Set("Content-Type", "application/json")
 	resp := doReq(t, app, req)
 
@@ -85,11 +86,11 @@ func TestStartTyping_Dedup(t *testing.T) {
 
 	channelID := uuid.New()
 	url := "/channels/" + channelID.String() + "/typing"
-	req1 := httptest.NewRequest(http.MethodPost, url, nil)
+	req1 := httptest.NewRequestWithContext(context.Background(),http.MethodPost, url, nil)
 	req1.Header.Set("Content-Type", "application/json")
 	resp1 := doReq(t, app, req1)
 
-	req2 := httptest.NewRequest(http.MethodPost, url, nil)
+	req2 := httptest.NewRequestWithContext(context.Background(),http.MethodPost, url, nil)
 	req2.Header.Set("Content-Type", "application/json")
 	resp2 := doReq(t, app, req2)
 
@@ -110,12 +111,12 @@ func TestStopTyping_Success(t *testing.T) {
 	url := "/channels/" + channelID.String() + "/typing"
 
 	// Start typing first.
-	startReq := httptest.NewRequest(http.MethodPost, url, nil)
+	startReq := httptest.NewRequestWithContext(context.Background(),http.MethodPost, url, nil)
 	startReq.Header.Set("Content-Type", "application/json")
 	doReq(t, app, startReq)
 
 	// Stop typing.
-	stopReq := httptest.NewRequest(http.MethodDelete, url, nil)
+	stopReq := httptest.NewRequestWithContext(context.Background(),http.MethodDelete, url, nil)
 	resp := doReq(t, app, stopReq)
 
 	if resp.StatusCode != fiber.StatusNoContent {
@@ -129,7 +130,7 @@ func TestStopTyping_NotTyping(t *testing.T) {
 	app := testTypingApp(t, userID)
 
 	channelID := uuid.New()
-	req := httptest.NewRequest(http.MethodDelete, "/channels/"+channelID.String()+"/typing", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodDelete, "/channels/"+channelID.String()+"/typing", nil)
 	resp := doReq(t, app, req)
 
 	if resp.StatusCode != fiber.StatusNoContent {
@@ -142,7 +143,7 @@ func TestStopTyping_InvalidChannelID(t *testing.T) {
 	userID := uuid.New()
 	app := testTypingApp(t, userID)
 
-	req := httptest.NewRequest(http.MethodDelete, "/channels/not-a-uuid/typing", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodDelete, "/channels/not-a-uuid/typing", nil)
 	resp := doReq(t, app, req)
 
 	if resp.StatusCode != fiber.StatusBadRequest {
@@ -155,7 +156,7 @@ func TestStopTyping_Unauthenticated(t *testing.T) {
 	app := testTypingApp(t, uuid.Nil)
 
 	channelID := uuid.New()
-	req := httptest.NewRequest(http.MethodDelete, "/channels/"+channelID.String()+"/typing", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodDelete, "/channels/"+channelID.String()+"/typing", nil)
 	resp := doReq(t, app, req)
 
 	if resp.StatusCode != fiber.StatusUnauthorized {

@@ -162,7 +162,7 @@ func TestRequireActiveMember(t *testing.T) {
 				return c.SendStatus(http.StatusOK)
 			})
 
-			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/test", nil)
 			resp, err := app.Test(req)
 			if err != nil {
 				t.Fatalf("app.Test: %v", err)

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -133,7 +134,7 @@ func TestRequireCSRF(t *testing.T) {
 				app.Patch("/test", csrfMW, handler)
 			}
 
-			req := httptest.NewRequest(tt.method, "/test", nil)
+			req := httptest.NewRequestWithContext(context.Background(),tt.method, "/test", nil)
 			if tt.setCookie != "" {
 				req.AddCookie(&http.Cookie{Name: CSRFCookieName(cfg), Value: tt.setCookie})
 			}

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -25,7 +26,7 @@ func TestRequireAuthNoCredentials(t *testing.T) {
 		return c.SendStatus(200)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/test", nil)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
@@ -50,7 +51,7 @@ func TestRequireAuthBadFormat(t *testing.T) {
 		return c.SendStatus(200)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/test", nil)
 	req.Header.Set("Authorization", "Basic dXNlcjpwYXNz")
 	resp, err := app.Test(req)
 	if err != nil {
@@ -77,7 +78,7 @@ func TestRequireAuthExpiredToken(t *testing.T) {
 		t.Fatalf("NewAccessToken() error = %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenStr)
 	resp, err := app.Test(req)
 	if err != nil {
@@ -126,7 +127,7 @@ func TestRequireAuthValidHeader(t *testing.T) {
 		t.Fatalf("NewAccessToken() error = %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenStr)
 	resp, err := app.Test(req)
 	if err != nil {
@@ -154,7 +155,7 @@ func TestRequireAuthWrongSignature(t *testing.T) {
 
 	tokenStr, _ := NewAccessToken(uuid.New(), "wrong-secret", 15*time.Minute, testIssuer, false)
 
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenStr)
 	resp, err := app.Test(req)
 	if err != nil {
@@ -191,7 +192,7 @@ func TestRequireAuthCookieFallback(t *testing.T) {
 		t.Fatalf("NewAccessToken() error = %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/test", nil)
 	req.AddCookie(&http.Cookie{Name: AccessCookieName(testCfg), Value: tokenStr})
 	resp, err := app.Test(req)
 	if err != nil {
@@ -230,7 +231,7 @@ func TestRequireAuthHeaderPrecedence(t *testing.T) {
 	headerToken, _ := NewAccessToken(headerUserID, secret, 15*time.Minute, testIssuer, true)
 	cookieToken, _ := NewAccessToken(cookieUserID, secret, 15*time.Minute, testIssuer, true)
 
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+headerToken)
 	req.AddCookie(&http.Cookie{Name: AccessCookieName(testCfg), Value: cookieToken})
 	resp, err := app.Test(req)
@@ -264,7 +265,7 @@ func TestRequireAuthExpiredCookie(t *testing.T) {
 		t.Fatalf("NewAccessToken() error = %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/test", nil)
 	req.AddCookie(&http.Cookie{Name: AccessCookieName(testCfg), Value: tokenStr})
 	resp, err := app.Test(req)
 	if err != nil {
@@ -349,7 +350,7 @@ func TestRequireVerifiedEmail(t *testing.T) {
 				return c.SendStatus(http.StatusOK)
 			})
 
-			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/test", nil)
 			resp, err := app.Test(req)
 			if err != nil {
 				t.Fatalf("app.Test: %v", err)

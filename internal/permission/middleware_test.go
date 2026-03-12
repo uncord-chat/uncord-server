@@ -1,6 +1,7 @@
 package permission
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -39,7 +40,7 @@ func TestMiddlewareAllowed(t *testing.T) {
 		return c.SendStatus(200)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/channels/"+channelID.String()+"/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/channels/"+channelID.String()+"/test", nil)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
@@ -74,7 +75,7 @@ func TestMiddlewareDenied(t *testing.T) {
 		return c.SendStatus(200)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/channels/"+channelID.String()+"/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/channels/"+channelID.String()+"/test", nil)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
@@ -101,7 +102,7 @@ func TestMiddlewareNoAuth(t *testing.T) {
 		return c.SendStatus(200)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/channels/"+uuid.New().String()+"/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/channels/"+uuid.New().String()+"/test", nil)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
@@ -126,7 +127,7 @@ func TestMiddlewareInvalidChannelID(t *testing.T) {
 		return c.SendStatus(200)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/channels/not-a-uuid/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/channels/not-a-uuid/test", nil)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
@@ -152,7 +153,7 @@ func TestMiddlewareMissingChannelID(t *testing.T) {
 		return c.SendStatus(200)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/test", nil)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
@@ -181,7 +182,7 @@ func TestMiddlewareResolverError(t *testing.T) {
 		return c.SendStatus(200)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/channels/"+channelID.String()+"/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/channels/"+channelID.String()+"/test", nil)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
@@ -213,7 +214,7 @@ func TestServerMiddlewareAllowed(t *testing.T) {
 		return c.SendStatus(200)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/server", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/server", nil)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
@@ -243,7 +244,7 @@ func TestServerMiddlewareDenied(t *testing.T) {
 		return c.SendStatus(200)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/server", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/server", nil)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
@@ -269,7 +270,7 @@ func TestServerMiddlewareNoAuth(t *testing.T) {
 		return c.SendStatus(200)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/server", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/server", nil)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)
@@ -294,7 +295,7 @@ func TestServerMiddlewareResolverError(t *testing.T) {
 		return c.SendStatus(200)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/server", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/server", nil)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("app.Test() error = %v", err)

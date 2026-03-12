@@ -2,6 +2,7 @@ package httputil
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -49,7 +50,7 @@ func TestRequestLogger(t *testing.T) {
 				return c.SendStatus(tt.status)
 			})
 
-			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/test", nil)
 			resp, err := app.Test(req)
 			if err != nil {
 				t.Fatalf("app.Test() error: %v", err)

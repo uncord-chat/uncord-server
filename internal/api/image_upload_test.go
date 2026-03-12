@@ -268,7 +268,7 @@ func TestDeleteUserAvatar_Success(t *testing.T) {
 	readBody(t, resp)
 
 	// Delete
-	delReq := httptest.NewRequest(http.MethodDelete, "/avatar", nil)
+	delReq := httptest.NewRequestWithContext(context.Background(),http.MethodDelete, "/avatar", nil)
 	delResp := doReq(t, app, delReq)
 	body := readBody(t, delResp)
 
@@ -299,7 +299,7 @@ func TestDeleteUserAvatar_Idempotent(t *testing.T) {
 	app := testUserAvatarApp(t, repo, storage, u.ID)
 
 	// Delete without uploading first (idempotent)
-	req := httptest.NewRequest(http.MethodDelete, "/avatar", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodDelete, "/avatar", nil)
 	resp := doReq(t, app, req)
 	body := readBody(t, resp)
 
@@ -348,7 +348,7 @@ func TestDeleteUserBanner_Idempotent(t *testing.T) {
 	storage := newFakeStorageForUpload()
 	app := testUserAvatarApp(t, repo, storage, u.ID)
 
-	req := httptest.NewRequest(http.MethodDelete, "/banner", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodDelete, "/banner", nil)
 	resp := doReq(t, app, req)
 	body := readBody(t, resp)
 
@@ -422,7 +422,7 @@ func TestDeleteServerIcon_Success(t *testing.T) {
 	readBody(t, resp)
 
 	// Delete
-	delReq := httptest.NewRequest(http.MethodDelete, "/icon", nil)
+	delReq := httptest.NewRequestWithContext(context.Background(),http.MethodDelete, "/icon", nil)
 	delResp := doReq(t, app, delReq)
 	body := readBody(t, delResp)
 
@@ -457,7 +457,7 @@ func TestDeleteServerIcon_Idempotent(t *testing.T) {
 	storage := newFakeStorageForUpload()
 	app := testServerImageApp(t, srvRepo, storage, uuid.New())
 
-	req := httptest.NewRequest(http.MethodDelete, "/icon", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodDelete, "/icon", nil)
 	resp := doReq(t, app, req)
 	body := readBody(t, resp)
 
@@ -513,7 +513,7 @@ func TestDeleteServerBanner_Idempotent(t *testing.T) {
 	storage := newFakeStorageForUpload()
 	app := testServerImageApp(t, srvRepo, storage, uuid.New())
 
-	req := httptest.NewRequest(http.MethodDelete, "/banner", nil)
+	req := httptest.NewRequestWithContext(context.Background(),http.MethodDelete, "/banner", nil)
 	resp := doReq(t, app, req)
 	body := readBody(t, resp)
 

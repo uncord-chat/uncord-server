@@ -180,7 +180,7 @@ func TestGetOnboardingStatus(t *testing.T) {
 			app.Use(fakeAuth(userID))
 			app.Get("/status", handler.GetOnboardingStatus)
 
-			req := httptest.NewRequest(http.MethodGet, "/status", nil)
+			req := httptest.NewRequestWithContext(context.Background(),http.MethodGet, "/status", nil)
 			resp := doReq(t, app, req)
 			body := readBody(t, resp)
 
